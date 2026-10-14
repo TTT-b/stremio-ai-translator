@@ -6,6 +6,7 @@ import { findLanguage } from '../config/languages';
 import { AppError, isAppError } from '../errors';
 import type { Logger } from '../logging/logger';
 import { selectSubtitle } from '../sources/select';
+import { makeTitleResolver } from '../sources/titles';
 import type { SourceSubtitleProvider, VideoRef } from '../sources/types';
 import { parseSubtitle } from '../subtitles/parse';
 import { serializeSubtitle } from '../subtitles/serialize';
@@ -19,6 +20,8 @@ export interface JobSpec {
   targetLanguage: string;
   /** OpenSubtitles file hash from Stremio, when present. */
   movieHash?: string;
+  /** Video file name from Stremio `extra.filename`; used for the text-search fallback. */
+  filename?: string;
 }
 
 export interface JobResult {
@@ -49,6 +52,8 @@ export interface JobManagerDeps {
   makeSource: (config: Config, logger: Logger) => SourceSubtitleProvider;
   makeProvider: (config: Config) => TranslationProvider;
   now?: () => number;
+  /** Used for title lookups (Kitsu, Cinemeta). Injectable for tests. */
+  fetchImpl?: typeof fetch;
   /** A failed job may be started again after this long. */
   retryFailedAfterMs?: number;
 }
@@ -62,11 +67,13 @@ export function isJobId(s: string): boolean {
 /** Deterministic job id: same request and settings -> same job -> shared work and cache. */
 export function jobIdFor(spec: JobSpec, model: string): string {
   return cacheKey({
-    imdb: spec.video.imdbId,
+    idKind: spec.video.idKind,
+    id: spec.video.externalId,
     season: spec.video.season,
     episode: spec.video.episode,
     lang: spec.targetLanguage,
     hash: spec.movieHash,
+    file: spec.filename,
     model,
     prompt: PROMPT_VERSION,
   }).slice(0, 32);
@@ -157,7 +164,8 @@ export class JobManager {
   private async schedule(job: Job): Promise<void> {
     const log = this.deps.logger.child({
       jobId: job.id.slice(0, 8),
-      imdbId: job.spec.video.imdbId,
+      idKind: job.spec.video.idKind,
+      videoId: job.spec.video.externalId,
       season: job.spec.video.season,
       episode: job.spec.video.episode,
       targetLanguage: job.spec.targetLanguage,
@@ -209,6 +217,12 @@ export class JobManager {
       video: job.spec.video,
       languages: [...new Set([lang.code, 'en'])],
       ...(job.spec.movieHash ? { movieHash: job.spec.movieHash } : {}),
+      resolveTitles: makeTitleResolver({
+        video: job.spec.video,
+        filename: job.spec.filename,
+        logger: log,
+        ...(this.deps.fetchImpl ? { fetchImpl: this.deps.fetchImpl } : {}),
+      }),
     });
     const selection = selectSubtitle(candidates, lang.code);
     if (selection.kind === 'none') throw new AppError('SOURCE_SUBTITLE_NOT_FOUND');

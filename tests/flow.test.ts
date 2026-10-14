@@ -108,15 +108,15 @@ afterEach(async () => {
 });
 
 describe('Stremio manifest', () => {
-  it('declares only subtitles for movie and series with tt prefix', async () => {
+  it('declares only subtitles, for movie/series/anime, with tt, kitsu and tmdb prefixes', async () => {
     current = await start({});
     const res = await current.get('/manifest.json');
     const m = await res.json();
     expect(res.status).toBe(200);
     expect(m).toMatchObject({
       resources: ['subtitles'],
-      types: ['movie', 'series'],
-      idPrefixes: ['tt'],
+      types: ['movie', 'series', 'anime'],
+      idPrefixes: ['tt', 'kitsu', 'tmdb'],
     });
     expect(m.id).toBeTruthy();
     expect(JSON.stringify(m)).not.toMatch(/api[-_]?key/i);
@@ -259,7 +259,7 @@ describe('subtitle request flow', () => {
 
   it('invalid ids return an empty list and unknown /sub ids a placeholder', async () => {
     current = await start({});
-    const bad = await current.get('/subtitles/movie/kitsu%3A123.json');
+    const bad = await current.get('/subtitles/movie/yt%3Aabc.json');
     expect(await bad.json()).toMatchObject({ subtitles: [] });
     const unknown = await current.get(`/sub/${'0'.repeat(32)}.srt`);
     expect(unknown.status).toBe(200);

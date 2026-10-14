@@ -21,6 +21,7 @@ import { loadConfig } from '../config/env';
 import { updateEnvFile } from '../config/envFile';
 import { OpenSubtitlesProvider } from '../sources/opensubtitles/provider';
 import { selectSubtitle } from '../sources/select';
+import { makeTitleResolver } from '../sources/titles';
 import { parseVideoId, type SourceSubtitleProvider } from '../sources/types';
 import { parseSubtitle } from '../subtitles/parse';
 import { serializeSubtitle } from '../subtitles/serialize';
@@ -132,6 +133,7 @@ export function createApp(deps: ServerDeps): express.Express {
     jobsDir: join(dataDir, 'jobs'),
     makeSource: (c, l) => makeSource(c, l),
     makeProvider: (c) => makeProvider(c),
+    ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
   });
   deps.onReady?.({ jobs, cache });
 
@@ -291,11 +293,19 @@ export function createApp(deps: ServerDeps): express.Express {
       if (hash !== undefined && !/^[0-9a-f]{16}$/i.test(hash)) {
         throw new AppError('STREMIO_REQUEST_INVALID', 'hash must be 16 hex characters');
       }
+      const filename =
+        typeof req.query.filename === 'string' ? req.query.filename.slice(0, 300) : undefined;
       const video = parseVideoId(type, id);
       const candidates = await makeSource(c, log).search({
         video,
         languages: [...new Set([c.targetLanguage, 'en'])],
         ...(hash ? { movieHash: hash } : {}),
+        resolveTitles: makeTitleResolver({
+          video,
+          filename,
+          logger: log,
+          ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+        }),
       });
       const selection = selectSubtitle(candidates, c.targetLanguage);
       res.json({

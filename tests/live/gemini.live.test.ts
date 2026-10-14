@@ -36,7 +36,7 @@ describe.skipIf(process.env.LIVE_TEST !== '1')('live providers', () => {
     });
     expect((await p.testConnection()).ok).toBe(true);
     const found = await p.search({
-      video: { type: 'movie', imdbId: 'tt0111161' },
+      video: { type: 'movie', idKind: 'imdb', externalId: 'tt0111161', imdbId: 'tt0111161' },
       languages: ['en'],
     });
     expect(found.length).toBeGreaterThan(0);

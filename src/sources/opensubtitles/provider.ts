@@ -1,11 +1,13 @@
 import { AppError } from '../../errors';
 import type { Logger } from '../../logging/logger';
 import type { ConnectionTestResult } from '../../translation/provider';
+import { normalizeTitle } from '../titles';
 import type {
   DownloadedSubtitle,
   SourceSubtitleProvider,
   SubtitleCandidate,
   SubtitleQuery,
+  TitleGuess,
 } from '../types';
 import {
   errorFromStatus,
@@ -42,6 +44,13 @@ interface RawSubtitle {
     machine_translated?: boolean;
     files?: { file_id?: number; file_name?: string }[];
     release?: string;
+    feature_details?: {
+      title?: string;
+      parent_title?: string;
+      movie_name?: string;
+      season_number?: number;
+      episode_number?: number;
+    };
   };
 }
 
@@ -134,26 +143,74 @@ export class OpenSubtitlesProvider implements SourceSubtitleProvider {
     }
   }
 
-  /** Build the search URL. Parameters must be lowercase and alphabetically sorted. */
-  buildSearchUrl(q: SubtitleQuery, useHash: boolean): string {
-    const p = new URLSearchParams();
-    const v = q.video;
-    if (useHash && q.movieHash) p.set('moviehash', q.movieHash);
-    if (v.type === 'series') {
-      p.set('episode_number', String(v.episode));
-      p.set('parent_imdb_id', v.imdbId.replace(/^tt/, ''));
-      p.set('season_number', String(v.season));
-      p.set('type', 'episode');
-    } else {
-      p.set('imdb_id', v.imdbId.replace(/^tt/, ''));
-      p.set('type', 'movie');
-    }
-    if (q.languages.length > 0) p.set('languages', [...q.languages].sort().join(','));
+  private finishUrl(p: URLSearchParams, languages: string[]): string {
+    if (languages.length > 0) p.set('languages', [...languages].sort().join(','));
+    // OpenSubtitles requires lowercase parameter names in alphabetical order.
     const sorted = new URLSearchParams([...p.entries()].sort(([a], [b]) => a.localeCompare(b)));
     return `${OPENSUBTITLES_BASE_URL}/subtitles?${sorted.toString()}`;
   }
 
-  private async searchOnce(url: string): Promise<SubtitleCandidate[]> {
+  /**
+   * Search URL by hash and/or provider ID (IMDb or TMDB). Returns undefined when there is
+   * nothing to search with (e.g. a Kitsu id with no file hash) - never sends empty ids.
+   */
+  buildSearchUrl(q: SubtitleQuery, useHash: boolean): string | undefined {
+    const p = new URLSearchParams();
+    const v = q.video;
+    const hash = useHash ? q.movieHash : undefined;
+    if (hash) p.set('moviehash', hash);
+
+    const idValue =
+      v.idKind === 'imdb' && v.imdbId
+        ? v.imdbId.replace(/^tt/, '')
+        : v.idKind === 'tmdb'
+          ? v.externalId
+          : undefined;
+    if (idValue && /^\d+$/.test(idValue)) {
+      const prefix = v.idKind === 'tmdb' ? 'tmdb' : 'imdb';
+      if (v.type === 'series' && v.episode !== undefined && v.season !== undefined) {
+        p.set('episode_number', String(v.episode));
+        p.set(`parent_${prefix}_id`, idValue);
+        p.set('season_number', String(v.season));
+        p.set('type', 'episode');
+      } else {
+        p.set(`${prefix}_id`, idValue);
+        if (v.type === 'movie') p.set('type', 'movie');
+      }
+    }
+    if (
+      !p.has('moviehash') &&
+      !p.has('imdb_id') &&
+      !p.has('tmdb_id') &&
+      !p.has('parent_imdb_id') &&
+      !p.has('parent_tmdb_id')
+    ) {
+      return undefined;
+    }
+    return this.finishUrl(p, q.languages);
+  }
+
+  /** Free-text search URL for a title guess. */
+  buildTextUrl(
+    guess: TitleGuess,
+    languages: string[],
+    opts: { withSeason: boolean; withEpisode: boolean },
+  ): string {
+    const p = new URLSearchParams();
+    p.set('query', normalizeTitle(guess.title));
+    if (guess.episode !== undefined && opts.withEpisode) {
+      p.set('episode_number', String(guess.episode));
+      p.set('type', 'episode');
+      if (opts.withSeason && guess.season !== undefined)
+        p.set('season_number', String(guess.season));
+    }
+    return this.finishUrl(p, languages);
+  }
+
+  private async searchOnce(
+    url: string,
+    accept?: (raw: RawSubtitle) => boolean,
+  ): Promise<SubtitleCandidate[]> {
     this.assertConfigured(false);
     const res = await this.request(url, { headers: this.headers() });
     if (!res.ok) throw errorFromStatus(res.status);
@@ -163,6 +220,7 @@ export class OpenSubtitlesProvider implements SourceSubtitleProvider {
     }
     const out: SubtitleCandidate[] = [];
     for (const item of body.data) {
+      if (!item || (accept && !accept(item))) continue;
       const a = item.attributes;
       const file = a?.files?.[0];
       if (!a || typeof a.language !== 'string' || typeof file?.file_id !== 'number') continue;
@@ -181,32 +239,99 @@ export class OpenSubtitlesProvider implements SourceSubtitleProvider {
   }
 
   /**
-   * Search order: moviehash first (best timing match), then IMDb ID (+ season/episode).
-   * If the requested languages give nothing, retry once without a language filter.
+   * Search ladder (each step only runs when the previous one found nothing):
+   *  1. moviehash (best timing match)
+   *  2. IMDb / TMDB id (+ season/episode)
+   *  3. same id search without a language filter
+   *  4. text search by title guesses (file name, then Kitsu/Cinemeta titles), keeping only
+   *     results that really belong to that title and episode
    */
   async search(query: SubtitleQuery): Promise<SubtitleCandidate[]> {
+    const v = query.video;
     const log = this.opts.logger.child({
       stage: 'SOURCE',
-      imdbId: query.video.imdbId,
-      season: query.video.season,
-      episode: query.video.episode,
+      idKind: v.idKind,
+      id: v.externalId,
+      season: v.season,
+      episode: v.episode,
     });
+
     if (query.movieHash) {
-      const byHash = await this.searchOnce(this.buildSearchUrl(query, true));
-      const hashed = byHash.filter((c) => c.hashMatch);
-      log.info(
-        { strategy: 'moviehash', results: byHash.length, hashMatches: hashed.length },
-        'search',
-      );
-      if (hashed.length > 0) return byHash;
+      const url = this.buildSearchUrl({ ...query, languages: query.languages }, true);
+      if (url) {
+        const byHash = await this.searchOnce(url);
+        const hashed = byHash.filter((c) => c.hashMatch);
+        log.info(
+          { strategy: 'moviehash', results: byHash.length, hashMatches: hashed.length },
+          'search',
+        );
+        if (hashed.length > 0) return byHash;
+      }
     }
-    let results = await this.searchOnce(this.buildSearchUrl(query, false));
-    log.info({ strategy: 'imdb', results: results.length }, 'search');
-    if (results.length === 0 && query.languages.length > 0) {
-      results = await this.searchOnce(this.buildSearchUrl({ ...query, languages: [] }, false));
-      log.info({ strategy: 'imdb-any-language', results: results.length }, 'search');
+
+    const hasProviderId = v.idKind === 'imdb' || v.idKind === 'tmdb';
+    const idUrl = hasProviderId ? this.buildSearchUrl(query, false) : undefined;
+    if (idUrl) {
+      let results = await this.searchOnce(idUrl);
+      log.info({ strategy: 'id', results: results.length }, 'search');
+      if (results.length === 0 && query.languages.length > 0) {
+        const anyUrl = this.buildSearchUrl({ ...query, languages: [] }, false);
+        if (anyUrl) results = await this.searchOnce(anyUrl);
+        log.info({ strategy: 'id-any-language', results: results.length }, 'search');
+      }
+      if (results.length > 0) return results;
+    } else {
+      log.info({ strategy: 'id' }, 'no usable id for this video, using text search');
     }
-    return results;
+
+    return this.searchByText(query, log);
+  }
+
+  private async searchByText(query: SubtitleQuery, log: Logger): Promise<SubtitleCandidate[]> {
+    if (!query.resolveTitles) return [];
+    const guesses = await query.resolveTitles();
+    for (const guess of guesses) {
+      const wanted = normalizeTitle(guess.title);
+      const belongsToTitle = (raw: RawSubtitle): boolean => {
+        const f = raw.attributes?.feature_details;
+        const hay = [f?.parent_title, f?.title, f?.movie_name, raw.attributes?.release]
+          .filter((s): s is string => typeof s === 'string')
+          .map(normalizeTitle);
+        return hay.some((h) => h.includes(wanted));
+      };
+      const isEpisode = (raw: RawSubtitle): boolean => {
+        if (guess.episode === undefined) return true;
+        const f = raw.attributes?.feature_details;
+        if (typeof f?.episode_number === 'number' && f.episode_number > 0) {
+          const seasonOk =
+            guess.season === undefined ||
+            typeof f.season_number !== 'number' ||
+            f.season_number === guess.season;
+          return f.episode_number === guess.episode && seasonOk;
+        }
+        const rel = raw.attributes?.release ?? '';
+        return new RegExp(`(?<!\\d)0*${guess.episode}(?!\\d)`).test(rel);
+      };
+
+      const attempts = [
+        { withSeason: true, withEpisode: true },
+        { withSeason: false, withEpisode: true },
+        { withSeason: false, withEpisode: false },
+      ];
+      const seen = new Set<string>();
+      for (const opts of attempts) {
+        const url = this.buildTextUrl(guess, query.languages, opts);
+        if (seen.has(url)) continue;
+        seen.add(url);
+        const found = await this.searchOnce(url, (r) => belongsToTitle(r) && isEpisode(r));
+        log.info(
+          { strategy: 'text', title: guess.title, ...opts, results: found.length },
+          'search',
+        );
+        if (found.length > 0) return found;
+      }
+    }
+    return [];
   }
 
   async download(candidate: SubtitleCandidate): Promise<DownloadedSubtitle> {

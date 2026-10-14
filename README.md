@@ -58,6 +58,22 @@ fails part-way resumes from the finished parts on the next attempt.
 
 Remove old cache entries with `npm run cache:cleanup`.
 
+## Anime and other ID types
+
+Stremio uses `kitsu:` and `tmdb:` ids for many titles, which OpenSubtitles does not index
+directly. Search order (each step runs only if the previous found nothing):
+
+1. File hash (`videoHash` from Stremio) - best sync
+2. IMDb or TMDB id (with season/episode)
+3. Text search by title: first the playing file's name (`filename` from Stremio), then the
+   title from Kitsu's public API (kitsu ids) or Stremio's Cinemeta (IMDb ids)
+
+Text results are filtered to the right show, season and episode, so a wrong episode is never
+served. A Kitsu entry without a "Season N" in its title is treated as season 1. Check what would
+be chosen (no download quota used):
+`http://127.0.0.1:7000/dev/source-search?type=series&id=kitsu:49294:3`
+(optional `&filename=...`).
+
 ## Using the config page
 
 - **Keys** show configured/missing (never the values).

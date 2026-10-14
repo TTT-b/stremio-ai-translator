@@ -4,6 +4,7 @@ import { findLanguage } from '../config/languages';
 import type { Config } from '../config/env';
 import type { JobManager } from '../jobs/manager';
 import type { Logger } from '../logging/logger';
+import { stripControlChars } from '../sources/titles';
 import { parseVideoId } from '../sources/types';
 
 export const MANIFEST: Manifest = {
@@ -13,8 +14,9 @@ export const MANIFEST: Manifest = {
   description:
     'Local add-on: serves an existing subtitle in your language from OpenSubtitles, or translates an English one with Gemini.',
   resources: ['subtitles'],
-  types: ['movie', 'series'],
-  idPrefixes: ['tt'],
+  types: ['movie', 'series', 'anime'],
+  // tt = IMDb, kitsu = Kitsu anime ids, tmdb = TMDB ids
+  idPrefixes: ['tt', 'kitsu', 'tmdb'],
   catalogs: [],
 };
 
@@ -37,10 +39,16 @@ export function createStremioRouter(deps: {
         extra.videoHash && /^[0-9a-f]{16}$/i.test(extra.videoHash)
           ? extra.videoHash.toLowerCase()
           : undefined;
+      // Plain text only: no control characters, bounded length (used for the text-search fallback).
+      const filename =
+        typeof extra.filename === 'string'
+          ? stripControlChars(extra.filename).trim().slice(0, 300)
+          : '';
       const job = deps.jobs.ensure({
         video,
         targetLanguage: lang.code,
         ...(hash ? { movieHash: hash } : {}),
+        ...(filename ? { filename } : {}),
       });
       log.info(
         {

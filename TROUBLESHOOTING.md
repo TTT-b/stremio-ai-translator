@@ -53,3 +53,11 @@ restart, reselect the subtitle. Turn it back off if it makes things worse.
 Large models can take 30-90 s per chunk. The add-on retries, and finished chunks are kept, so
 selecting the subtitle again continues where it stopped. To speed things up lower `CHUNK_SIZE`
 (for example 20) or raise `CHUNK_CONCURRENCY` (up to 6) in `.env`, then restart.
+
+## "No suitable source subtitle" for anime
+
+1. Open `http://127.0.0.1:7000/dev/source-search?type=series&id=kitsu:<id>:<episode>` (use the id
+   from the log line `subtitles requested`). `found=0` means OpenSubtitles has nothing matching.
+2. Check the log lines `strategy=text title=...` to see which titles were tried.
+3. A later season whose Kitsu title has no "Season N" is treated as season 1; if its subtitles are
+   filed under another season number they are skipped on purpose (to avoid a wrong episode).

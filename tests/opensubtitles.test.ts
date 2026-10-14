@@ -56,22 +56,47 @@ const cand = (over: Partial<SubtitleCandidate> = {}): SubtitleCandidate => ({
 });
 
 describe('parseVideoId', () => {
-  it('parses movies and episodes', () => {
-    expect(parseVideoId('movie', 'tt0111161')).toEqual({ type: 'movie', imdbId: 'tt0111161' });
+  it('parses IMDb movies and episodes', () => {
+    expect(parseVideoId('movie', 'tt0111161')).toEqual({
+      type: 'movie',
+      idKind: 'imdb',
+      externalId: 'tt0111161',
+      imdbId: 'tt0111161',
+    });
     expect(parseVideoId('series', 'tt0944947:2:5')).toEqual({
       type: 'series',
+      idKind: 'imdb',
+      externalId: 'tt0944947',
       imdbId: 'tt0944947',
       season: 2,
       episode: 5,
     });
   });
+  it('parses Kitsu and TMDB ids (no imdbId)', () => {
+    const k = parseVideoId('series', 'kitsu:49294:3');
+    expect(k).toEqual({ type: 'series', idKind: 'kitsu', externalId: '49294', episode: 3 });
+    expect(k.imdbId).toBeUndefined();
+    expect(parseVideoId('anime', 'kitsu:49294:3')).toMatchObject({ type: 'series', episode: 3 });
+    expect(parseVideoId('movie', 'kitsu:12')).toEqual({
+      type: 'movie',
+      idKind: 'kitsu',
+      externalId: '12',
+    });
+    expect(parseVideoId('movie', 'tmdb:603')).toMatchObject({ idKind: 'tmdb', externalId: '603' });
+    expect(parseVideoId('series', 'tmdb:1399:1:2')).toMatchObject({
+      idKind: 'tmdb',
+      season: 1,
+      episode: 2,
+    });
+  });
   it('rejects bad input', () => {
-    expect(() => parseVideoId('movie', 'kitsu:1')).toThrow(AppError);
+    expect(() => parseVideoId('movie', 'kitsu:abc')).toThrow(AppError);
+    expect(() => parseVideoId('movie', 'yt:xyz')).toThrow(AppError);
     expect(() => parseVideoId('series', 'tt0944947')).toThrow(AppError);
     expect(() => parseVideoId('tv', 'tt0944947')).toThrow(AppError);
+    expect(() => parseVideoId('series', 'tmdb:1399')).toThrow(AppError);
   });
 });
-
 describe('selectSubtitle', () => {
   it('serves a target-language subtitle directly', () => {
     const s = selectSubtitle(
@@ -151,7 +176,7 @@ describe('OpenSubtitlesProvider', () => {
   it('searches movies by IMDb id with sorted lowercase params and required headers', async () => {
     const { f, calls } = fakeFetch(() => json(searchBody));
     const out = await provider(f).search({
-      video: { type: 'movie', imdbId: 'tt0111161' },
+      video: { type: 'movie', idKind: 'imdb', externalId: 'tt0111161', imdbId: 'tt0111161' },
       languages: ['he', 'en'],
     });
     expect(out).toHaveLength(1);
@@ -169,7 +194,14 @@ describe('OpenSubtitlesProvider', () => {
   it('searches episodes via parent_imdb_id + season/episode', async () => {
     const { f, calls } = fakeFetch(() => json(searchBody));
     await provider(f).search({
-      video: { type: 'series', imdbId: 'tt0944947', season: 2, episode: 5 },
+      video: {
+        type: 'series',
+        idKind: 'imdb',
+        externalId: 'tt0944947',
+        imdbId: 'tt0944947',
+        season: 2,
+        episode: 5,
+      },
       languages: ['en'],
     });
     const url = new URL(calls[0]?.url as string);
@@ -185,7 +217,7 @@ describe('OpenSubtitlesProvider', () => {
   it('tries moviehash first and skips the IMDb search when a hash matches', async () => {
     const { f, calls } = fakeFetch(() => json(searchBody));
     await provider(f).search({
-      video: { type: 'movie', imdbId: 'tt0111161' },
+      video: { type: 'movie', idKind: 'imdb', externalId: 'tt0111161', imdbId: 'tt0111161' },
       languages: ['en'],
       movieHash: '8e245d9679d31e12',
     });
@@ -196,7 +228,7 @@ describe('OpenSubtitlesProvider', () => {
   it('falls back to IMDb, then to any language when nothing is found', async () => {
     const { f, calls } = fakeFetch(() => json({ data: [] }));
     const out = await provider(f).search({
-      video: { type: 'movie', imdbId: 'tt0111161' },
+      video: { type: 'movie', idKind: 'imdb', externalId: 'tt0111161', imdbId: 'tt0111161' },
       languages: ['he', 'en'],
       movieHash: '8e245d9679d31e12',
     });
@@ -206,7 +238,15 @@ describe('OpenSubtitlesProvider', () => {
   });
 
   it('maps HTTP errors to normalized codes', async () => {
-    const q = { video: { type: 'movie' as const, imdbId: 'tt0111161' }, languages: ['en'] };
+    const q = {
+      video: {
+        type: 'movie' as const,
+        idKind: 'imdb' as const,
+        externalId: 'tt0111161',
+        imdbId: 'tt0111161',
+      },
+      languages: ['en'],
+    };
     await expect(provider(fakeFetch(() => json({}, 403)).f).search(q)).rejects.toMatchObject({
       code: 'INVALID_API_KEY',
     });
