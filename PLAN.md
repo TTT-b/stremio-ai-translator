@@ -29,7 +29,7 @@ tests/                     Vitest, all external APIs mocked; tests/live is opt-i
 4. OpenSubtitles provider (search, moviehash, login, download, encoding). **Done**
 5. Cache, background jobs, "in progress" placeholder. **Done**
 6. Stremio integration. **Done** (real-player test is a manual step)
-7. Hardening, docs, optional Docker
+7. Hardening, docs, optional Docker. **Done** (Docker intentionally skipped: localhost-only)
 
 ## Source-subtitle strategy (phase 4)
 

@@ -4,9 +4,8 @@ A local add-on for Stremio desktop. When you play a movie or episode it offers a
 chosen language (Hebrew by default). If OpenSubtitles already has one, it is used directly;
 otherwise an English subtitle is translated by Google Gemini, validated, cached and served.
 
-> **Status: Phases 1-6 complete.** The add-on is installable in Stremio desktop. Phase 7
-> (hardening, final security review, optional Docker) is still open. The final check in the real
-> Stremio player has to be done by you (see "Install in Stremio").
+> **Status: Version 1 complete (phases 1-7).** Local, single-user add-on for Stremio desktop. The
+> final check in the real Stremio player has to be done by you (see "Install in Stremio").
 
 ## Requirements
 
@@ -76,10 +75,31 @@ be chosen (no download quota used):
 
 ## Using the config page
 
-- **Keys** show configured/missing (never the values).
-- **Settings**: target language and Gemini model (saved to `settings.json`).
+Open http://127.0.0.1:7000/ . The page has a dark, responsive layout (works on narrow windows).
+
+- **API keys**: badges show configured/missing (never the values). Paste new values and click
+  **Save keys**; they are written to `.env` and the page reloads.
+- **Settings**: target language and Gemini model (saved to `settings.json`). The default and
+  recommended model is `gemini-3.5-flash-lite`; `gemini-3.8-flash` is the alternative. Click
+  **Save settings**: a green "Settings saved" message appears at the bottom of the page (red if it
+  failed). A `GEMINI_MODEL` in `.env` that is not in the list is still shown and kept.
 - **Test Gemini / Test OpenSubtitles**: green check = works.
 - **Translate built-in sample**: runs the full translation pipeline on a 3-cue sample.
+- **Install**: the **Install in Stremio** button, the manifest URL with a Copy button, and a QR code.
+
+### QR code and its limitation
+
+The QR code encodes the manifest URL (`http://127.0.0.1:7000/manifest.json`). In Version 1 the
+server only listens on `127.0.0.1`, which always means "this device", so a phone or TV that scans
+it cannot reach the add-on. The page shows a yellow warning to that effect. Use the QR code only
+as a convenient way to copy the URL. Phones/TVs would need a network-reachable HTTPS address
+(see "Future: public deployment"); this is deliberately not done in Version 1 because the page
+has no login and holds your API keys.
+
+### After changing the translation code
+
+Old cached subtitles keep their old text. To force fresh translations delete the cache files:
+`Remove-Item data\cache\*.json` (`npm run cache:cleanup` only removes expired/corrupt entries).
 
 ## Test with your own file
 
@@ -110,6 +130,19 @@ dialogue.
 
 - Stremio desktop works with `http://127.0.0.1`. Stremio Web / other devices would need HTTPS (future).
 - The server only listens on `127.0.0.1` and rejects foreign Host/Origin headers.
+
+## Security review (Version 1)
+
+- Secrets live only in `.env` (gitignored); a scan of tracked files, git history, `logs/` and
+  `data/cache/` for your configured key values found nothing. Test files contain dummy keys only.
+- Strict CSP (nonce scripts/styles, no external sources); the QR code is an inline SVG.
+- `npm audit --omit=dev`: `path-to-regexp` is pinned to the patched 0.1.13 via `overrides` in
+  `package.json`. Remaining findings (`tmp` via `inquirer` via `stremio-addon-sdk`) are in the SDK's
+  interactive CLI scaffolding, which this add-on never loads (only `addonBuilder`/`getRouter` are
+  used). The suggested `npm audit fix --force` would downgrade the SDK to 0.7.1, so it is not applied.
+- **No Dockerfile** on purpose: the server is hard-wired to `127.0.0.1`, so a container would be
+  unreachable without exposing an unauthenticated page that holds API keys. Add it together with
+  authentication and HTTPS in a future version.
 
 ## Adding another translation provider
 

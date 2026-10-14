@@ -34,11 +34,6 @@ export function findLanguage(code: string): Language | undefined {
 }
 
 /** Models offered on the config page. The first is the default. */
-export const KNOWN_MODELS: readonly string[] = [
-  'gemma-4-31b-it',
-  'gemma-4-26b-a4b-it',
-  'gemini-3.5-flash-lite',
-  'gemini-3.8-flash',
-];
+export const KNOWN_MODELS: readonly string[] = ['gemini-3.5-flash-lite', 'gemini-3.8-flash'];
 
 export const DEFAULT_MODEL = KNOWN_MODELS[0] as string;
