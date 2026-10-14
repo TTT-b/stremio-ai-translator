@@ -91,6 +91,33 @@ describe('translateSubtitle', () => {
     expect(peak).toBe(2);
   });
 
+  it('resumes from stored chunks after a failure instead of starting over', async () => {
+    const store = new Map<string, { id: string; text: string }[]>();
+    const chunkStore = {
+      keyFor: (c: { cues: { index: number }[] }) => c.cues.map((x) => x.index).join(','),
+      get: (k: string) => store.get(k),
+      set: (k: string, v: { id: string; text: string }[]) => void store.set(k, v),
+    };
+    // chunkSize 1 -> 3 chunks, sequential. The second chunk fails hard on the first run.
+    const failing = new FakeProvider((req) => {
+      if (req.cues[0]?.id === '2') throw new AppError('INVALID_API_KEY');
+      return { translations: req.cues.map((c) => ({ id: c.id, text: `T:${c.text}` })) };
+    });
+    await expect(
+      translateSubtitle(source, failing, opts({ chunkSize: 1, concurrency: 1, chunkStore })),
+    ).rejects.toMatchObject({ code: 'INVALID_API_KEY' });
+    expect(store.size).toBe(1);
+
+    const healthy = new FakeProvider();
+    const r = await translateSubtitle(
+      source,
+      healthy,
+      opts({ chunkSize: 1, concurrency: 1, chunkStore }),
+    );
+    expect(healthy.calls).toBe(2); // chunk 1 restored from the store
+    expect(r.file.cues).toHaveLength(3);
+  });
+
   it('applies the RTL fix only when enabled', async () => {
     const r = await translateSubtitle(source, new FakeProvider(), opts({ rtlFix: true }));
     expect(r.file.cues[0]?.text.startsWith('‏')).toBe(true);

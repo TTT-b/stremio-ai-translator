@@ -1,5 +1,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { FileCache } from '../cache/fileCache';
+import { JobManager } from '../jobs/manager';
+import { createStremioRouter } from '../stremio/addon';
+import { IN_PROGRESS_MESSAGE, placeholderSrt } from '../stremio/placeholder';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { findLanguage, KNOWN_MODELS, LANGUAGES } from '../config/languages';
 import type { Config } from '../config/env';
@@ -39,7 +43,23 @@ export interface ServerDeps {
   envPath?: string;
   /** Called with the new config after keys are saved (so logging redaction stays current). */
   onConfigChange?: (config: Config) => void;
+  /** Where cache and job files live. Defaults to ./data */
+  dataDir?: string;
+  /** Test hook: receives the job manager and cache. */
+  onReady?: (ctx: { jobs: JobManager; cache: FileCache }) => void;
 }
+
+/** Browser origins Stremio apps are known to use for add-on requests. */
+const DEFAULT_STREMIO_ORIGINS = [
+  'https://app.strem.io',
+  'https://web.stremio.com',
+  'https://web.strem.io',
+  'http://127.0.0.1:11470',
+  'http://localhost:11470',
+];
+
+const isStremioPath = (p: string) =>
+  p === '/manifest.json' || p.startsWith('/subtitles/') || p.startsWith('/sub/');
 
 const keysSchema = z
   .object({
@@ -103,6 +123,18 @@ export function createApp(deps: ServerDeps): express.Express {
         timeoutMs: c.geminiTimeoutMs,
       }));
 
+  const dataDir = deps.dataDir ?? resolve(process.cwd(), 'data');
+  const cache = new FileCache(join(dataDir, 'cache'), envConfig.cacheTtlDays * 86_400_000, logger);
+  const jobs = new JobManager({
+    config: current,
+    logger,
+    cache,
+    jobsDir: join(dataDir, 'jobs'),
+    makeSource: (c, l) => makeSource(c, l),
+    makeProvider: (c) => makeProvider(c),
+  });
+  deps.onReady?.({ jobs, cache });
+
   const allowedHosts = new Set([`127.0.0.1:${envConfig.port}`, `localhost:${envConfig.port}`]);
   const allowedOrigins = new Set([...allowedHosts].map((h) => `http://${h}`));
 
@@ -116,7 +148,19 @@ export function createApp(deps: ServerDeps): express.Express {
       return;
     }
     const origin = req.headers.origin;
-    if (origin && !allowedOrigins.has(origin)) {
+    const stremioOrigins = new Set([
+      ...DEFAULT_STREMIO_ORIGINS,
+      ...envConfig.stremioAllowedOrigins,
+    ]);
+    const originOk =
+      !origin ||
+      allowedOrigins.has(origin) ||
+      (isStremioPath(req.path) && stremioOrigins.has(origin));
+    if (!originOk) {
+      logger.warn(
+        { stage: 'STREMIO', origin, path: req.path.split('/')[1] },
+        'request from unknown origin blocked',
+      );
       res.status(403).type('text/plain').send('Forbidden origin');
       return;
     }
@@ -151,7 +195,7 @@ export function createApp(deps: ServerDeps): express.Express {
         model: c.geminiModel,
         manifestUrl,
         installUrl: `stremio://127.0.0.1:${c.port}/manifest.json`,
-        stremioReady: false,
+        stremioReady: true,
         rtlFix: c.rtlFix,
       }),
     );
@@ -339,6 +383,49 @@ export function createApp(deps: ServerDeps): express.Express {
       }
     },
   );
+
+  // Serve a job's subtitle. Waits briefly for a running translation, then falls back to a placeholder.
+  app.get('/sub/:file', async (req, res) => {
+    const log = (res.locals.log as Logger).child({ stage: 'DELIVERY' });
+    const started = Date.now();
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'no-store');
+    const send = (body: string, state: string, jobId?: string) => {
+      res.type('application/x-subrip; charset=utf-8').send(body);
+      log.info(
+        {
+          state,
+          jobId: jobId?.slice(0, 8),
+          bytes: Buffer.byteLength(body),
+          durationMs: Date.now() - started,
+          httpStatus: 200,
+        },
+        'subtitle delivered',
+      );
+    };
+    const m = /^([0-9a-f]{32})\.srt$/.exec(req.params.file ?? '');
+    const job = m ? jobs.get(m[1] as string) : undefined;
+    if (!job) {
+      send(
+        placeholderSrt('Unknown subtitle request — reselect the subtitle in Stremio'),
+        'unknown',
+      );
+      return;
+    }
+    await jobs.waitFor(job, current().subWaitMs);
+    if (job.status === 'done' && job.result)
+      send(job.result.content, `ready:${job.result.via}`, job.id);
+    else if (job.status === 'failed' && job.error) {
+      send(
+        placeholderSrt(`Subtitle unavailable: ${job.error.userMessage}`),
+        `failed:${job.error.code}`,
+        job.id,
+      );
+    } else send(placeholderSrt(IN_PROGRESS_MESSAGE), 'in-progress', job.id);
+  });
+
+  // Stremio add-on protocol: /manifest.json and /subtitles/... (mounted last, after the UI routes).
+  app.use(createStremioRouter({ config: current, jobs, logger }));
 
   // Never leak internals: map every failure to a safe response.
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

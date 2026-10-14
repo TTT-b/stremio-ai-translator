@@ -47,3 +47,9 @@ subtitle's sync. Choose a different source release, or use Stremio's subtitle de
 
 Symptoms: periods or question marks at the wrong end of a line. Set `RTL_FIX=true` in `.env`,
 restart, reselect the subtitle. Turn it back off if it makes things worse.
+
+## Slow or timed-out translations
+
+Large models can take 30-90 s per chunk. The add-on retries, and finished chunks are kept, so
+selecting the subtitle again continues where it stopped. To speed things up lower `CHUNK_SIZE`
+(for example 20) or raise `CHUNK_CONCURRENCY` (up to 6) in `.env`, then restart.

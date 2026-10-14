@@ -26,9 +26,9 @@ tests/                     Vitest, all external APIs mocked; tests/live is opt-i
 1. Foundation - tooling, config validation, redacting logger, repo files. **Done**
 2. Subtitle + translation core, Gemini provider, dev route. **Done**
 3. Status page with Test buttons. **Done** -> stop and report
-4. OpenSubtitles provider (search, moviehash, login, download, encoding)
-5. Cache, background jobs, "in progress" placeholder
-6. Stremio integration and real-player test
+4. OpenSubtitles provider (search, moviehash, login, download, encoding). **Done**
+5. Cache, background jobs, "in progress" placeholder. **Done**
+6. Stremio integration. **Done** (real-player test is a manual step)
 7. Hardening, docs, optional Docker
 
 ## Source-subtitle strategy (phase 4)

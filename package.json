@@ -16,6 +16,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:live": "cross-env LIVE_TEST=1 vitest run tests/live",
+    "cache:cleanup": "tsx src/cli/cacheCleanup.ts",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test"
   },
   "dependencies": {

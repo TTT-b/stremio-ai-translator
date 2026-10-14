@@ -4,12 +4,9 @@ A local add-on for Stremio desktop. When you play a movie or episode it offers a
 chosen language (Hebrew by default). If OpenSubtitles already has one, it is used directly;
 otherwise an English subtitle is translated by Google Gemini, validated, cached and served.
 
-> **Status: Phases 1-4 complete** (foundation, translation core, config page, OpenSubtitles).
-> Not built yet: cache, background jobs, Stremio manifest/handler.
-> The config page (dark theme, key form, Test buttons) works today. Save API keys on the page; they
-> are written to the local `.env` file and never shown again.
-> Search without downloading: `http://127.0.0.1:7000/dev/source-search?type=movie&id=tt0111161`
-> (series: `type=series&id=tt0944947:1:2`).
+> **Status: Phases 1-6 complete.** The add-on is installable in Stremio desktop. Phase 7
+> (hardening, final security review, optional Docker) is still open. The final check in the real
+> Stremio player has to be done by you (see "Install in Stremio").
 
 ## Requirements
 
@@ -42,6 +39,24 @@ npm start        # or: npm run dev (auto-restarts on code changes)
 
 Open http://127.0.0.1:7000/ . Stop with Ctrl+C. Success looks like:
 `Open http://127.0.0.1:7000/ in your browser`.
+
+## Install in Stremio (desktop)
+
+1. Start the add-on (`npm start`) and keep the terminal open.
+2. Open http://127.0.0.1:7000/ and click **Install in Stremio**. Stremio asks to install the
+   add-on; confirm. (Manual alternative: Stremio -> Add-ons -> paste
+   `http://127.0.0.1:7000/manifest.json`.)
+3. Play any movie or episode, open the subtitles menu and choose the entry with your language
+   labelled by this add-on.
+4. If it says **"Translation in progress - reselect this subtitle in a minute"**, wait a minute and
+   select the subtitle again. A full episode usually takes 1-5 minutes the first time; repeats are
+   instant (cache in the `data` folder).
+
+How it works: the subtitle list answers immediately with a local link. Opening the link waits up to
+`SUB_WAIT_MS` (15 s) for the job; if it is not done you get the placeholder. A translation that
+fails part-way resumes from the finished parts on the next attempt.
+
+Remove old cache entries with `npm run cache:cleanup`.
 
 ## Using the config page
 

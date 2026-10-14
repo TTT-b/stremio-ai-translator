@@ -37,12 +37,16 @@ const envSchema = z.object({
   LOG_LEVEL: optionalString
     .transform((v) => (v || 'info').toLowerCase())
     .pipe(z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])),
-  CHUNK_SIZE: intRange(60, 5, 200),
-  CHUNK_CONCURRENCY: intRange(2, 1, 6),
+  CHUNK_SIZE: intRange(30, 1, 200),
+  CHUNK_CONCURRENCY: intRange(3, 1, 6),
   CHUNK_MAX_RETRIES: intRange(2, 0, 5),
-  GEMINI_TIMEOUT_MS: intRange(90000, 5000, 600000),
+  GEMINI_TIMEOUT_MS: intRange(120000, 5000, 600000),
   RTL_FIX: boolish,
   LOG_DIALOGUE: boolish,
+  CACHE_TTL_DAYS: intRange(90, 1, 3650),
+  SUB_WAIT_MS: intRange(15000, 0, 60000),
+  MAX_CONCURRENT_JOBS: intRange(2, 1, 8),
+  STREMIO_ALLOWED_ORIGINS: optionalString,
 });
 
 export interface Config {
@@ -62,6 +66,12 @@ export interface Config {
   geminiTimeoutMs: number;
   rtlFix: boolean;
   logDialogue: boolean;
+  cacheTtlDays: number;
+  /** How long /sub/<job>.srt waits for a running translation before sending the placeholder. */
+  subWaitMs: number;
+  maxConcurrentJobs: number;
+  /** Extra browser Origins allowed to call the Stremio routes. */
+  stremioAllowedOrigins: string[];
 }
 
 /**
@@ -93,6 +103,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     geminiTimeoutMs: e.GEMINI_TIMEOUT_MS,
     rtlFix: e.RTL_FIX,
     logDialogue: e.LOG_DIALOGUE,
+    cacheTtlDays: e.CACHE_TTL_DAYS,
+    subWaitMs: e.SUB_WAIT_MS,
+    maxConcurrentJobs: e.MAX_CONCURRENT_JOBS,
+    stremioAllowedOrigins: e.STREMIO_ALLOWED_ORIGINS.split(',')
+      .map((s) => s.trim())
+      .filter((s) => /^https?:\/\/[^/\s]+$/.test(s)),
   };
 }
 

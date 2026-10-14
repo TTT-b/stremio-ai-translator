@@ -7,7 +7,16 @@ import { assertSameStructure, findChunkProblems } from '../subtitles/validate';
 import type { TokenUsage, TranslationProvider } from './provider';
 import { withRetry } from './retry';
 
+/** Persists validated chunk translations so a failed job resumes instead of restarting. */
+export interface ChunkStore {
+  get(key: string): ChunkCue[] | undefined;
+  set(key: string, translations: ChunkCue[]): void;
+  /** Key for one chunk: must include everything that can change its translation. */
+  keyFor(chunk: Chunk): string;
+}
+
 export interface PipelineOptions {
+  chunkStore?: ChunkStore;
   targetLanguageCode: string;
   targetLanguageName: string;
   chunkSize: number;
@@ -43,6 +52,15 @@ async function translateOneChunk(
   const attempts = opts.maxValidationRetries + 1;
   let lastProblems: string[] = [];
 
+  const storeKey = opts.chunkStore?.keyFor(chunk);
+  if (opts.chunkStore && storeKey) {
+    const stored = opts.chunkStore.get(storeKey);
+    if (stored && findChunkProblems(chunk.cues, stored).length === 0) {
+      log.info({ cues: chunk.cues.length, resumed: true }, 'chunk restored from cache');
+      return { translations: stored, usage };
+    }
+  }
+
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const started = Date.now();
     try {
@@ -76,6 +94,13 @@ async function translateOneChunk(
 
       const problems = findChunkProblems(chunk.cues, result.translations);
       if (problems.length === 0) {
+        if (opts.chunkStore && storeKey) {
+          try {
+            opts.chunkStore.set(storeKey, result.translations);
+          } catch {
+            /* cache problems must not fail the translation */
+          }
+        }
         log.info(
           { durationMs: Date.now() - started, cues: chunk.cues.length, tokens: usage },
           'chunk translated',
