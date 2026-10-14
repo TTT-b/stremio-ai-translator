@@ -1,0 +1,44 @@
+{
+  "name": "stremio-ai-subtitle-translator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local Stremio add-on that translates subtitles with Gemini",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:live": "cross-env LIVE_TEST=1 vitest run tests/live",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@google/genai": "^2.29.1",
+    "chardet": "^2.2.0",
+    "dotenv": "^18.0.7",
+    "express": "^4.22.3",
+    "iconv-lite": "^0.7.3",
+    "pino": "^10.4.0",
+    "stremio-addon-sdk": "^1.6.10",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/express": "^4.17.25",
+    "@types/node": "^26.6.5",
+    "cross-env": "^10.1.0",
+    "eslint": "^9.39.5",
+    "pino-pretty": "^13.2.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.4"
+  }
+}

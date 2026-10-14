@@ -1,0 +1,10 @@
+WEBVTT
+
+NOTE a comment
+
+00:01.000 --> 00:03.000 align:start
+Hello there.
+
+intro
+00:03.500 --> 00:05.250
+<i>How are you today?</i>
