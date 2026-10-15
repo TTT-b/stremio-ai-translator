@@ -137,9 +137,23 @@ describe('validation', () => {
 });
 
 describe('rtl fix', () => {
-  it('prefixes non-empty lines with RLM once', () => {
+  const RLM = '‏';
+
+  it('marks start and end of every line with RLM, once', () => {
     const once = applyRtlFix('שלום!\nמה נשמע?');
-    expect(once).toBe('‏שלום!\n‏מה נשמע?');
+    expect(once).toBe(`${RLM}שלום!${RLM}\n${RLM}מה נשמע?${RLM}`);
     expect(applyRtlFix(once)).toBe(once);
+  });
+
+  it('puts the trailing mark before closing tags', () => {
+    expect(applyRtlFix('<i>שלום.</i>')).toBe(`${RLM}<i>שלום.${RLM}</i>`);
+  });
+
+  it('keeps leading dashes and ellipsis inside the marked line', () => {
+    expect(applyRtlFix('- מה?\n- כלום...')).toBe(`${RLM}- מה?${RLM}\n${RLM}- כלום...${RLM}`);
+  });
+
+  it('leaves empty lines alone', () => {
+    expect(applyRtlFix('א\n\nב')).toBe(`${RLM}א${RLM}\n\n${RLM}ב${RLM}`);
   });
 });

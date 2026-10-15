@@ -1,169 +1,152 @@
 # AI Subtitle Translator for Stremio
 
-A local add-on for Stremio desktop. When you play a movie or episode it offers a subtitle in your
-chosen language (Hebrew by default). If OpenSubtitles already has one, it is used directly;
-otherwise an English subtitle is translated by Google Gemini, validated, cached and served.
+A real-time AI subtitle translator for [Stremio](https://www.stremio.com/). When you play a movie
+or episode it offers a subtitle in your language (Hebrew by default). If OpenSubtitles already has
+one it is used directly; otherwise a source subtitle is downloaded, translated by Google Gemini,
+validated, cached and served to the player.
 
-> **Status: Version 1 complete (phases 1-7).** Local, single-user add-on for Stremio desktop. The
-> final check in the real Stremio player has to be done by you (see "Install in Stremio").
+> **Version 1 is a local, single-user app.** It runs on your own computer at `127.0.0.1` and is
+> designed for Stremio desktop.
+
+## Key features
+
+- **Real-time translation** - subtitles are translated on demand while you watch; later plays are
+  instant from the cache.
+- **Smart source lookup** - search by file hash, then IMDb/TMDB id, then title text; anime
+  (`kitsu:` / `tmdb:` ids) is supported and results are filtered to the right season and episode.
+- **RTL punctuation fix for Hebrew** (and Arabic/Persian) - per-line Unicode marks keep `. , ? !`
+  on the correct side of the line, including two-line subtitles and `<i>` tags.
+- **Natural punctuation** - the prompt mirrors the source, so translations do not get a period on
+  every fragment.
+- **Responsive local GUI** - a dark, mobile-friendly config page for keys, language, model,
+  connection tests, and install (button, copyable URL, QR code).
+- **Caching and resilience** - file cache, background jobs with an "in progress" placeholder, and
+  chunked translation that resumes after failures.
+- **Validation** - deterministic code owns parsing, timestamps and IDs; the AI only translates text.
 
 ## Requirements
 
-- Windows 11 (macOS/Linux work the same), Node.js 22 or newer (`node -v`).
-- A Gemini API key and an OpenSubtitles.com account with an API consumer key.
+- Node.js 22 or newer (`node -v`)
+- A [Gemini API key](https://aistudio.google.com/apikey)
+- A free [OpenSubtitles.com](https://www.opensubtitles.com) account and an API consumer key
+  (create one at https://www.opensubtitles.com/en/consumers)
+- Stremio desktop
 
-## Get the keys
-
-1. **Gemini**: https://aistudio.google.com/apikey -> "Create API key". Copy it.
-2. **OpenSubtitles**: create a free account at https://www.opensubtitles.com, then create an API
-   consumer at https://www.opensubtitles.com/en/consumers and copy the key. The add-on also logs in
-   with your account username and password (required for downloads).
-
-## Setup (PowerShell, in `E:\stremio-addon`)
+## Setup
 
 ```powershell
 npm install
-Copy-Item .env.example .env
-notepad .env
+Copy-Item .env.example .env     # macOS/Linux: cp .env.example .env
+notepad .env                    # fill in the keys, save, close
+npm start
 ```
 
-Fill in `GEMINI_API_KEY`, `OPENSUBTITLES_API_KEY`, `OPENSUBTITLES_USERNAME`,
-`OPENSUBTITLES_PASSWORD`; save and close. Keys stay in this file only.
+In `.env` set `GEMINI_API_KEY`, `OPENSUBTITLES_API_KEY`, `OPENSUBTITLES_USERNAME` and
+`OPENSUBTITLES_PASSWORD` (the account login is required for downloads). Every option is explained
+in [`.env.example`](.env.example). You can also paste the keys on the config page instead.
+Set `RTL_FIX=true` for Hebrew/Arabic if punctuation looks wrong in your player.
 
-## Start / stop
+Then open http://127.0.0.1:7000/ . Success looks like
+`Open http://127.0.0.1:7000/ in your browser` in the terminal. Stop with Ctrl+C.
 
-```powershell
-npm start        # or: npm run dev (auto-restarts on code changes)
-```
+> ## Security: never share your keys
+>
+> **Never upload, commit or share your `.env` file or your API keys.** `.env`, `settings.json`,
+> `data/` and `logs/` are listed in `.gitignore` - keep it that way. If a key ever leaks, revoke
+> it at the provider and create a new one. Keys are never shown on the config page, written to
+> logs, or put in URLs.
 
-Open http://127.0.0.1:7000/ . Stop with Ctrl+C. Success looks like:
-`Open http://127.0.0.1:7000/ in your browser`.
+## Install in Stremio
 
-## Install in Stremio (desktop)
+1. Keep `npm start` running.
+2. Open http://127.0.0.1:7000/ and click **Install in Stremio** (manual alternative: Stremio ->
+   Add-ons -> paste `http://127.0.0.1:7000/manifest.json`).
+3. Play a movie or episode, open the subtitles menu and pick the entry labelled by this add-on.
+4. If it says **"Translation in progress - reselect this subtitle in a minute"**, wait and select
+   it again. A full episode usually takes 1-5 minutes the first time.
 
-1. Start the add-on (`npm start`) and keep the terminal open.
-2. Open http://127.0.0.1:7000/ and click **Install in Stremio**. Stremio asks to install the
-   add-on; confirm. (Manual alternative: Stremio -> Add-ons -> paste
-   `http://127.0.0.1:7000/manifest.json`.)
-3. Play any movie or episode, open the subtitles menu and choose the entry with your language
-   labelled by this add-on.
-4. If it says **"Translation in progress - reselect this subtitle in a minute"**, wait a minute and
-   select the subtitle again. A full episode usually takes 1-5 minutes the first time; repeats are
-   instant (cache in the `data` folder).
+The subtitle list answers immediately with a local link. Opening it waits up to `SUB_WAIT_MS`
+(15 s) for the job and otherwise shows the placeholder. A translation that fails part-way resumes
+from the finished parts on the next attempt.
 
-How it works: the subtitle list answers immediately with a local link. Opening the link waits up to
-`SUB_WAIT_MS` (15 s) for the job; if it is not done you get the placeholder. A translation that
-fails part-way resumes from the finished parts on the next attempt.
+## Config page
 
-Remove old cache entries with `npm run cache:cleanup`.
+- **API keys** show configured/missing (never the values); **Save keys** writes them to `.env`.
+- **Settings**: target language and Gemini model (saved to `settings.json`). Recommended and
+  default model: `gemini-3.5-flash-lite`; alternative: `gemini-3.8-flash`. A green "Settings saved"
+  message confirms the save.
+- **Test Gemini / Test OpenSubtitles** and **Translate built-in sample** verify your setup.
+- **Install** shows the install button, manifest URL and a QR code.
+
+**QR code limitation:** the server only listens on `127.0.0.1`, which means "this device", so a
+phone or TV that scans the QR code cannot reach the add-on. Version 1 is deliberately local
+because the page has no login and holds your API keys. The yellow warning on the page says the same.
 
 ## Anime and other ID types
 
-Stremio uses `kitsu:` and `tmdb:` ids for many titles, which OpenSubtitles does not index
-directly. Search order (each step runs only if the previous found nothing):
+Search order (each step runs only if the previous found nothing):
 
 1. File hash (`videoHash` from Stremio) - best sync
 2. IMDb or TMDB id (with season/episode)
-3. Text search by title: first the playing file's name (`filename` from Stremio), then the
-   title from Kitsu's public API (kitsu ids) or Stremio's Cinemeta (IMDb ids)
+3. Text search by title: the playing file's name, then the title from Kitsu (kitsu ids) or
+   Cinemeta (IMDb ids)
 
-Text results are filtered to the right show, season and episode, so a wrong episode is never
-served. A Kitsu entry without a "Season N" in its title is treated as season 1. Check what would
-be chosen (no download quota used):
-`http://127.0.0.1:7000/dev/source-search?type=series&id=kitsu:49294:3`
-(optional `&filename=...`).
+Preview what would be chosen (no download quota used):
+`http://127.0.0.1:7000/dev/source-search?type=series&id=kitsu:49294:3` (optional `&filename=...`).
 
-## Using the config page
+## Commands
 
-Open http://127.0.0.1:7000/ . The page has a dark, responsive layout (works on narrow windows).
+| Command                 | Purpose                                                 |
+| ----------------------- | ------------------------------------------------------- |
+| `npm start`             | run the add-on (`npm run dev` restarts on code changes) |
+| `npm run check`         | format check + lint + type-check + tests                |
+| `npm test`              | tests (free; all external APIs mocked)                  |
+| `npm run test:live`     | one tiny real request per provider (uses your keys)     |
+| `npm run cache:cleanup` | remove expired/corrupt cache entries                    |
 
-- **API keys**: badges show configured/missing (never the values). Paste new values and click
-  **Save keys**; they are written to `.env` and the page reloads.
-- **Settings**: target language and Gemini model (saved to `settings.json`). The default and
-  recommended model is `gemini-3.5-flash-lite`; `gemini-3.8-flash` is the alternative. Click
-  **Save settings**: a green "Settings saved" message appears at the bottom of the page (red if it
-  failed). A `GEMINI_MODEL` in `.env` that is not in the list is still shown and kept.
-- **Test Gemini / Test OpenSubtitles**: green check = works.
-- **Translate built-in sample**: runs the full translation pipeline on a 3-cue sample.
-- **Install**: the **Install in Stremio** button, the manifest URL with a Copy button, and a QR code.
+To force fresh translations (for example after changing prompts) delete the cache:
+`Remove-Item data\cache\*.json`.
 
-### QR code and its limitation
-
-The QR code encodes the manifest URL (`http://127.0.0.1:7000/manifest.json`). In Version 1 the
-server only listens on `127.0.0.1`, which always means "this device", so a phone or TV that scans
-it cannot reach the add-on. The page shows a yellow warning to that effect. Use the QR code only
-as a convenient way to copy the URL. Phones/TVs would need a network-reachable HTTPS address
-(see "Future: public deployment"); this is deliberately not done in Version 1 because the page
-has no login and holds your API keys.
-
-### After changing the translation code
-
-Old cached subtitles keep their old text. To force fresh translations delete the cache files:
-`Remove-Item data\cache\*.json` (`npm run cache:cleanup` only removes expired/corrupt entries).
-
-## Test with your own file
+Translate a file of your own:
 
 ```powershell
 curl.exe -X POST --data-binary "@my.srt" "http://127.0.0.1:7000/dev/translate?lang=he" -o out.srt
 ```
 
-## Commands
-
-| Command             | Purpose                                             |
-| ------------------- | --------------------------------------------------- |
-| `npm run check`     | format check + lint + type-check + tests            |
-| `npm test`          | tests (free; all external APIs mocked)              |
-| `npm run test:live` | one tiny real request per provider (uses your keys) |
-
-## Configuration (`.env`)
-
-See `.env.example` for every option. Missing or invalid values stop startup with a message that
-names the variable (never its value). API keys may be empty so the config page can still open.
-
 ## Privacy
 
 Subtitle dialogue is sent to Google Gemini for translation. Provider quotas, billing and free-tier
-data-use terms are controlled by Google and OpenSubtitles. Logs never contain keys or (by default)
-dialogue.
+data-use terms are controlled by Google and OpenSubtitles, not by this add-on. Logs never contain
+keys or (by default) dialogue.
 
-## Notes
+## Security notes
 
-- Stremio desktop works with `http://127.0.0.1`. Stremio Web / other devices would need HTTPS (future).
-- The server only listens on `127.0.0.1` and rejects foreign Host/Origin headers.
+- Binds to `127.0.0.1` only; rejects foreign `Host`/`Origin` headers; strict CSP; no CORS.
+- Secrets live only in `.env`; a scan of tracked files, git history, logs and cache found none.
+- `path-to-regexp` is pinned to the patched 0.1.13 via `overrides`. Remaining `npm audit` findings
+  (`tmp` via the Stremio SDK's interactive CLI scaffolding) are code this add-on never loads; the
+  suggested `npm audit fix --force` would downgrade the SDK, so it is not applied.
+- No Dockerfile on purpose: the server is hard-wired to localhost, and exposing an unauthenticated
+  page that holds API keys is unsafe.
 
-## Security review (Version 1)
-
-- Secrets live only in `.env` (gitignored); a scan of tracked files, git history, `logs/` and
-  `data/cache/` for your configured key values found nothing. Test files contain dummy keys only.
-- Strict CSP (nonce scripts/styles, no external sources); the QR code is an inline SVG.
-- `npm audit --omit=dev`: `path-to-regexp` is pinned to the patched 0.1.13 via `overrides` in
-  `package.json`. Remaining findings (`tmp` via `inquirer` via `stremio-addon-sdk`) are in the SDK's
-  interactive CLI scaffolding, which this add-on never loads (only `addonBuilder`/`getRouter` are
-  used). The suggested `npm audit fix --force` would downgrade the SDK to 0.7.1, so it is not applied.
-- **No Dockerfile** on purpose: the server is hard-wired to `127.0.0.1`, so a container would be
-  unreachable without exposing an unauthenticated page that holds API keys. Add it together with
-  authentication and HTTPS in a future version.
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if something does not work.
 
 ## Adding another translation provider
 
 Implement `TranslationProvider` (`src/translation/provider.ts`): `testConnection`,
 `translateChunk`, `getProviderName`, `getModelInformation`, `normalizeError` (map errors to
-`AppError` codes; mark transient ones retryable). Then return it from `createProvider` in
-`src/web/server.ts` / `src/index.ts`. The pipeline, validation and cache do not change.
+`AppError` codes; mark transient ones retryable), then return it from `createProvider`. The
+pipeline, validation and cache do not change.
+
+## Roadmap (not implemented)
+
+Public deployment: HTTPS hosting, per-user bring-your-own-key with keys encrypted at rest, opaque
+config ID in the manifest URL, authentication, rate limiting, SSRF hardening and quotas.
 
 ## Documentation used
 
-- Stremio add-on SDK, subtitles handler: https://github.com/Stremio/stremio-addon-sdk/blob/master/docs/api/requests/defineSubtitlesHandler.md
-- Gemini models: https://ai.google.dev/gemini-api/docs/models
-- Gemini structured output: https://ai.google.dev/gemini-api/docs/structured-output
-- Gemini JS SDK (`@google/genai`): https://github.com/googleapis/js-genai
-- OpenSubtitles REST API: https://opensubtitles.stoplight.io/docs/opensubtitles-api
-  (the docs site could not be fetched automatically; endpoints used - `POST /login`,
-  `GET /subtitles`, `POST /download` with `Api-Key` + `User-Agent` headers - follow the public API
-  and community wrappers, and are verified by `npm run test:live` in phase 4)
-
-## Future: public deployment (not implemented)
-
-HTTPS hosting; per-user bring-your-own-key with keys encrypted at rest (AES-GCM, master secret
-from env); opaque config ID in the manifest URL; config deletion; rate limiting; SSRF hardening
-for downloads; abuse controls and quotas.
+- [Stremio subtitles handler](https://github.com/Stremio/stremio-addon-sdk/blob/master/docs/api/requests/defineSubtitlesHandler.md)
+- [Gemini models](https://ai.google.dev/gemini-api/docs/models) and
+  [structured output](https://ai.google.dev/gemini-api/docs/structured-output)
+- [`@google/genai`](https://github.com/googleapis/js-genai)
+- [OpenSubtitles REST API](https://opensubtitles.stoplight.io/docs/opensubtitles-api)
