@@ -143,6 +143,10 @@ pipeline, validation and cache do not change.
 Public deployment: HTTPS hosting, per-user bring-your-own-key with keys encrypted at rest, opaque
 config ID in the manifest URL, authentication, rate limiting, SSRF hardening and quotas.
 
+## License
+
+[MIT](LICENSE)
+
 ## Documentation used
 
 - [Stremio subtitles handler](https://github.com/Stremio/stremio-addon-sdk/blob/master/docs/api/requests/defineSubtitlesHandler.md)
