@@ -18,8 +18,8 @@ validated, cached and served to the player.
   on the correct side of the line, including two-line subtitles and `<i>` tags.
 - **Natural punctuation** - the prompt mirrors the source, so translations do not get a period on
   every fragment.
-- **Responsive local GUI** - a dark, mobile-friendly config page for keys, language, model,
-  connection tests, and install (button, copyable URL, QR code).
+- **Responsive local GUI** - a dark, card-based config page (Tailwind CSS) for keys, language,
+  model, connection tests, and install (button and copyable URL).
 - **Caching and resilience** - file cache, background jobs with an "in progress" placeholder, and
   chunked translation that resumes after failures.
 - **Validation** - deterministic code owns parsing, timestamps and IDs; the AI only translates text.
@@ -76,11 +76,12 @@ from the finished parts on the next attempt.
   default model: `gemini-3.5-flash-lite`; alternative: `gemini-3.8-flash`. A green "Settings saved"
   message confirms the save.
 - **Test Gemini / Test OpenSubtitles** and **Translate built-in sample** verify your setup.
-- **Install** shows the install button, manifest URL and a QR code.
+- **Installation** shows the install button and the manifest URL. Saving shows a toast message.
 
-**QR code limitation:** the server only listens on `127.0.0.1`, which means "this device", so a
-phone or TV that scans the QR code cannot reach the add-on. Version 1 is deliberately local
-because the page has no login and holds your API keys. The yellow warning on the page says the same.
+The page makes no third-party requests: Tailwind CSS is built locally into
+`src/web/tailwind.generated.css` and inlined (`npm start` rebuilds it automatically; run
+`npm run build:css` after editing `src/web/html.ts`). The server only listens on `127.0.0.1`, so the
+manifest URL works on this computer only.
 
 ## Anime and other ID types
 
@@ -121,7 +122,8 @@ keys or (by default) dialogue.
 
 ## Security notes
 
-- Binds to `127.0.0.1` only; rejects foreign `Host`/`Origin` headers; strict CSP; no CORS.
+- Binds to `127.0.0.1` only; rejects foreign `Host`/`Origin` headers; strict CSP (`default-src 'none'`, nonce-only
+  scripts and styles, no external sources); no CORS.
 - Secrets live only in `.env`; a scan of tracked files, git history, logs and cache found none.
 - `path-to-regexp` is pinned to the patched 0.1.13 via `overrides`. Remaining `npm audit` findings
   (`tmp` via the Stremio SDK's interactive CLI scaffolding) are code this add-on never loads; the

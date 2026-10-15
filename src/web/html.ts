@@ -1,4 +1,4 @@
-import QRCode from 'qrcode';
+import { readFileSync } from 'node:fs';
 import { DEFAULT_MODEL } from '../config/languages';
 
 export function escapeHtml(value: unknown): string {
@@ -27,26 +27,34 @@ export interface StatusPageData {
   rtlFix: boolean;
 }
 
-/** Inline SVG QR code, rendered server-side so the strict CSP needs no image or script sources. */
-function qrSvg(text: string): string {
-  const qr = QRCode.create(text, { errorCorrectionLevel: 'M' });
-  const n = qr.modules.size;
-  const data = qr.modules.data;
-  let path = '';
-  for (let y = 0; y < n; y++) {
-    for (let x = 0; x < n; x++) {
-      if (data[y * n + x]) path += `M${x + 4} ${y + 4}h1v1h-1z`;
-    }
-  }
-  const size = n + 8;
-  return `<svg class="qr" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" role="img" aria-label="QR code for the manifest URL" shape-rendering="crispEdges"><rect width="${size}" height="${size}" fill="#fff"/><path d="${path}" fill="#0b0f17"/></svg>`;
-}
+/** Locally built Tailwind CSS (npm run build:css), inlined so the page loads nothing external. */
+const CSS = readFileSync(new URL('./tailwind.generated.css', import.meta.url), 'utf8').replace(
+  /<\/style/gi,
+  '<\\/style',
+);
 
-const isLoopback = (url: string): boolean =>
-  /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])[:/]/i.test(url);
+const card =
+  'rounded-2xl border border-slate-700/60 bg-slate-900/70 p-6 shadow-xl shadow-black/30 backdrop-blur';
+const field =
+  'w-full rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 py-2.5 text-slate-100 placeholder-slate-500 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/30';
+const labelCls = 'mb-1.5 block text-sm font-medium text-slate-300';
+const btn =
+  'rounded-xl border border-slate-600 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-indigo-400 hover:bg-slate-700 active:translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400';
+const btnPrimary =
+  'rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:-translate-y-0.5 hover:shadow-indigo-500/40 active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300';
+const result = 'text-sm font-medium';
 
 const badge = (ok: boolean, yes = 'configured', no = 'missing') =>
-  `<span class="badge ${ok ? 'ok' : 'bad'}">${ok ? yes : no}</span>`;
+  `<span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+    ok
+      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+      : 'border-rose-500/40 bg-rose-500/10 text-rose-300'
+  }"><span class="h-1.5 w-1.5 rounded-full ${ok ? 'bg-emerald-400' : 'bg-rose-400'}"></span>${ok ? yes : no}</span>`;
+
+const heading = (title: string, hint = '') =>
+  `<div class="mb-4"><h2 class="text-lg font-semibold text-white">${title}</h2>${
+    hint ? `<p class="text-sm text-slate-400">${hint}</p>` : ''
+  }</div>`;
 
 export function renderStatusPage(d: StatusPageData): string {
   const langOptions = d.languages
@@ -64,118 +72,91 @@ export function renderStatusPage(d: StatusPageData): string {
     .join('');
 
   const install = d.stremioReady
-    ? `<p><a class="btn primary" href="${escapeHtml(d.installUrl)}">Install in Stremio</a></p>
-       <p class="row"><input id="manifest" readonly value="${escapeHtml(d.manifestUrl)}" aria-label="Manifest URL">
-       <button type="button" id="copy">Copy</button></p>
-       <div class="qrbox">${qrSvg(d.manifestUrl)}
-       <div><strong>Scan to install</strong>
-       <p class="muted">Scan with a phone or TV camera to open the manifest URL.</p>
-       ${
-         isLoopback(d.manifestUrl)
-           ? `<p class="warn">This address (<code>${escapeHtml(d.manifestUrl)}</code>) only works on this computer. A phone or TV needs this computer's network address instead, and the add-on must be reachable from it.</p>`
-           : ''
-       }</div></div>`
-    : `<p class="muted">The Stremio add-on endpoint is not enabled yet (built in a later phase).
-       The install link will be: <code>${escapeHtml(d.installUrl)}</code></p>`;
+    ? `<a class="group inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 px-6 py-4 text-lg font-bold text-white shadow-xl shadow-indigo-500/30 transition duration-200 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl hover:shadow-fuchsia-500/40 active:scale-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300 sm:w-auto" href="${escapeHtml(d.installUrl)}">
+         <span>Install in Stremio</span><span class="transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true">&rarr;</span></a>
+       <p class="mt-5 text-sm text-slate-400">Or paste this address in Stremio &rarr; Add-ons:</p>
+       <div class="mt-2 flex flex-col gap-2 sm:flex-row">
+         <input id="manifest" readonly class="${field} font-mono text-sm" value="${escapeHtml(d.manifestUrl)}" aria-label="Manifest URL">
+         <button type="button" id="copy" class="${btn}">Copy</button>
+       </div>
+       <p class="mt-3 text-xs text-amber-300/90">This address only works on this computer.</p>`
+    : `<p class="text-sm text-slate-400">The Stremio add-on endpoint is not enabled yet.
+       The install link will be: <code class="rounded bg-slate-800 px-1.5 py-0.5">${escapeHtml(d.installUrl)}</code></p>`;
 
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="en" class="dark"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>AI Subtitle Translator</title>
-<style nonce="${escapeHtml(d.nonce)}">
- :root{--bg:#0b0f17;--card:#141a26;--border:#273045;--text:#e8edf5;--muted:#93a0b5;--accent:#6ea8ff;--accent-2:#4c82f7;--ok:#3ccf7a;--bad:#ff7b72;--field:#0e1420;--shadow:0 8px 28px rgba(0,0,0,.35)}
- *{box-sizing:border-box}
- body{margin:0;background:radial-gradient(1200px 500px at 50% -200px,#1b2740 0,var(--bg) 70%) no-repeat,var(--bg);color:var(--text);font:16px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;color-scheme:dark}
- main{max-width:760px;margin:0 auto;padding:2.5rem 1rem 5rem}
- header{margin-bottom:1.5rem}
- h1{font-size:1.8rem;letter-spacing:-.02em;margin:0 0 .25rem}
- h2{font-size:1.05rem;margin:0 0 1rem}
- .sub{color:var(--muted);margin:0}
- section{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.3rem 1.5rem;margin:1.1rem 0;box-shadow:var(--shadow)}
- .muted{color:var(--muted);font-size:.92rem} code{background:#1c2536;padding:.1rem .4rem;border-radius:6px;word-break:break-all;font-size:.9em}
- .badge{display:inline-block;padding:.05rem .65rem;border-radius:999px;font-size:.8rem;font-weight:600;border:1px solid}
- .badge.ok{color:var(--ok);border-color:var(--ok);background:rgba(60,207,122,.1)} .badge.bad{color:var(--bad);border-color:var(--bad);background:rgba(255,123,114,.1)}
- .status{list-style:none;padding:0;margin:0 0 1rem;display:grid;gap:.4rem}
- .status li{display:flex;justify-content:space-between;gap:1rem;padding:.5rem .8rem;background:var(--field);border:1px solid var(--border);border-radius:10px}
- .grid{display:grid;grid-template-columns:1fr 1fr;gap:0 1rem}
- @media(max-width:560px){.grid{grid-template-columns:1fr} section{padding:1.1rem}}
- label{display:block;margin:.8rem 0 .3rem;font-weight:600;font-size:.92rem}
- input,select{width:100%;padding:.65rem .8rem;background:var(--field);color:var(--text);border:1px solid var(--border);border-radius:10px;font:inherit;transition:border-color .15s,box-shadow .15s}
- input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(110,168,255,.25)}
- button:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
- ::placeholder{color:#5f6c82}
- button,.btn{font:inherit;font-weight:600;padding:.6rem 1.1rem;border-radius:10px;border:1px solid var(--border);background:#1c2536;color:var(--text);cursor:pointer;text-decoration:none;display:inline-block;transition:background .15s,border-color .15s,transform .05s}
- button:hover,.btn:hover{border-color:var(--accent)} button:active{transform:translateY(1px)}
- .primary{background:linear-gradient(180deg,var(--accent-2),#3a6fe0);border-color:var(--accent-2);color:#fff}
- .actions{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin:1rem 0 .25rem}
- .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap} .row input{flex:1;min-width:200px}
- .result{font-weight:600} .result.ok{color:var(--ok)} .result.bad{color:var(--bad)}
- .test{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin:.5rem 0}
- pre{background:var(--field);border:1px solid var(--border);padding:.8rem;border-radius:10px;white-space:pre-wrap;max-height:260px;overflow:auto}
- .qrbox{display:flex;gap:1.2rem;align-items:center;flex-wrap:wrap;margin-top:1rem;padding:1rem;background:var(--field);border:1px solid var(--border);border-radius:12px}
- .qr{width:168px;height:168px;border-radius:10px;flex:none}
- .qrbox p{margin:.3rem 0}
- .warn{color:#ffd479;font-size:.9rem}
- section h2::before{content:'';display:inline-block;width:.55rem;height:.55rem;margin-right:.55rem;border-radius:3px;background:linear-gradient(135deg,var(--accent),#a78bfa);vertical-align:.05rem}
- #toast{position:fixed;left:50%;bottom:1.5rem;transform:translate(-50%,2rem);opacity:0;pointer-events:none;padding:.75rem 1.2rem;border-radius:12px;font-weight:600;box-shadow:var(--shadow);transition:opacity .25s,transform .25s;background:#12301f;border:1px solid var(--ok);color:#b9f5d0;max-width:90vw}
- #toast.bad{background:#35161a;border-color:var(--bad);color:#ffc9c4}
- #toast.show{opacity:1;transform:translate(-50%,0)}
- @media(prefers-reduced-motion:reduce){*{transition:none!important}}
-</style></head><body><main>
-<header><h1>AI Subtitle Translator</h1>
-<p class="sub">Local add-on for Stremio &middot; runs only on this computer</p></header>
+<style nonce="${escapeHtml(d.nonce)}">${CSS}</style></head>
+<body class="min-h-screen bg-[radial-gradient(900px_450px_at_50%_-120px,rgba(99,102,241,.28),transparent)] font-sans text-slate-200 antialiased">
+<main class="mx-auto max-w-3xl px-4 pb-24 pt-12">
+<header class="mb-8 text-center sm:text-left">
+  <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300">Local &middot; runs only on this computer</div>
+  <h1 class="bg-gradient-to-r from-white to-indigo-300 bg-clip-text text-3xl font-extrabold tracking-tight text-transparent sm:text-4xl">AI Subtitle Translator</h1>
+  <p class="mt-2 text-slate-400">Translate Stremio subtitles with Gemini, on demand.</p>
+</header>
 
-<section><h2>API keys</h2>
-<ul class="status">
-<li><span>Gemini API key</span>${badge(d.geminiConfigured)}</li>
-<li><span>OpenSubtitles API key</span>${badge(d.openSubtitlesKeyConfigured)}</li>
-<li><span>OpenSubtitles login${d.openSubtitlesUsername ? ` (<code>${escapeHtml(d.openSubtitlesUsername)}</code>)` : ''}</span>${badge(d.openSubtitlesLoginConfigured)}</li>
+<div class="space-y-6">
+
+<section class="${card}">${heading('API keys', 'Stored in the local .env file and never shown again.')}
+<ul class="mb-5 grid gap-2">
+<li class="flex items-center justify-between gap-3 rounded-xl border border-slate-700/60 bg-slate-950/50 px-3.5 py-2.5"><span class="text-sm">Gemini API key</span>${badge(d.geminiConfigured)}</li>
+<li class="flex items-center justify-between gap-3 rounded-xl border border-slate-700/60 bg-slate-950/50 px-3.5 py-2.5"><span class="text-sm">OpenSubtitles API key</span>${badge(d.openSubtitlesKeyConfigured)}</li>
+<li class="flex items-center justify-between gap-3 rounded-xl border border-slate-700/60 bg-slate-950/50 px-3.5 py-2.5"><span class="text-sm">OpenSubtitles login${d.openSubtitlesUsername ? ` (<span class="font-mono">${escapeHtml(d.openSubtitlesUsername)}</span>)` : ''}</span>${badge(d.openSubtitlesLoginConfigured)}</li>
 </ul>
-<form id="keys" autocomplete="off"><div class="grid">
-<div><label for="k-gemini">Gemini API key</label>
-<input id="k-gemini" type="password" autocomplete="off" placeholder="${d.geminiConfigured ? 'saved - leave empty to keep' : 'paste key'}"></div>
-<div><label for="k-os">OpenSubtitles API key</label>
-<input id="k-os" type="password" autocomplete="off" placeholder="${d.openSubtitlesKeyConfigured ? 'saved - leave empty to keep' : 'paste key'}"></div>
-<div><label for="k-user">OpenSubtitles username</label>
-<input id="k-user" type="text" autocomplete="off" placeholder="${d.openSubtitlesUsername ? 'saved - leave empty to keep' : 'your opensubtitles.com username'}"></div>
-<div><label for="k-pass">OpenSubtitles password</label>
-<input id="k-pass" type="password" autocomplete="off" placeholder="${d.openSubtitlesLoginConfigured ? 'saved - leave empty to keep' : 'your opensubtitles.com password'}"></div>
+<form id="keys" autocomplete="off">
+<div class="grid gap-4 sm:grid-cols-2">
+<div><label class="${labelCls}" for="k-gemini">Gemini API key</label>
+<input class="${field}" id="k-gemini" type="password" autocomplete="off" placeholder="${d.geminiConfigured ? 'saved - leave empty to keep' : 'paste key'}"></div>
+<div><label class="${labelCls}" for="k-os">OpenSubtitles API key</label>
+<input class="${field}" id="k-os" type="password" autocomplete="off" placeholder="${d.openSubtitlesKeyConfigured ? 'saved - leave empty to keep' : 'paste key'}"></div>
+<div><label class="${labelCls}" for="k-user">OpenSubtitles username</label>
+<input class="${field}" id="k-user" type="text" autocomplete="off" placeholder="${d.openSubtitlesUsername ? 'saved - leave empty to keep' : 'your opensubtitles.com username'}"></div>
+<div><label class="${labelCls}" for="k-pass">OpenSubtitles password</label>
+<input class="${field}" id="k-pass" type="password" autocomplete="off" placeholder="${d.openSubtitlesLoginConfigured ? 'saved - leave empty to keep' : 'your opensubtitles.com password'}"></div>
 </div>
-<div class="actions"><button type="submit" class="primary">Save keys</button><span class="result" id="keys-result"></span></div>
+<div class="mt-5 flex flex-wrap items-center gap-3"><button type="submit" class="${btnPrimary}">Save keys</button><span class="${result}" id="keys-result"></span></div>
 </form>
-<p class="muted">Keys are written to the local <code>.env</code> file and are never displayed again.</p>
 </section>
 
-<section><h2>Settings</h2>
-<div class="grid">
-<div><label for="lang">Target language</label><select id="lang">${langOptions}</select></div>
-<div><label for="model">Gemini model</label><select id="model">${modelOptions}</select></div>
+<section class="${card}">${heading('Preferences', `RTL punctuation fix: ${d.rtlFix ? 'on' : 'off'} (set RTL_FIX in .env).`)}
+<div class="grid gap-4 sm:grid-cols-2">
+<div><label class="${labelCls}" for="lang">Target language</label><select class="${field}" id="lang">${langOptions}</select></div>
+<div><label class="${labelCls}" for="model">Gemini model</label><select class="${field}" id="model">${modelOptions}</select></div>
 </div>
-<div class="actions"><button type="button" id="save" class="primary">Save settings</button><span class="result" id="save-result"></span></div>
-<p class="muted">RTL punctuation fix: ${d.rtlFix ? 'on' : 'off'} (set RTL_FIX in .env).</p>
+<div class="mt-5 flex flex-wrap items-center gap-3"><button type="button" id="save" class="${btnPrimary}">Save settings</button><span class="${result}" id="save-result"></span></div>
 </section>
 
-<section><h2>Test connections</h2>
-<div class="test"><button type="button" data-test="gemini">Test Gemini</button><span class="result" id="r-gemini"></span></div>
-<div class="test"><button type="button" data-test="opensubtitles">Test OpenSubtitles</button><span class="result" id="r-opensubtitles"></span></div>
-<div class="test"><button type="button" id="sample">Translate built-in sample</button><span class="result" id="r-sample"></span></div>
-<pre id="sample-out" hidden></pre>
+<section class="${card}">${heading('Test connections')}
+<div class="space-y-3">
+<div class="flex flex-wrap items-center gap-3"><button type="button" class="${btn}" data-test="gemini">Test Gemini</button><span class="${result}" id="r-gemini"></span></div>
+<div class="flex flex-wrap items-center gap-3"><button type="button" class="${btn}" data-test="opensubtitles">Test OpenSubtitles</button><span class="${result}" id="r-opensubtitles"></span></div>
+<div class="flex flex-wrap items-center gap-3"><button type="button" class="${btn}" id="sample">Translate built-in sample</button><span class="${result}" id="r-sample"></span></div>
+</div>
+<pre id="sample-out" hidden class="mt-4 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-slate-700 bg-slate-950/70 p-3 text-sm"></pre>
 </section>
 
-<section><h2>Install</h2>${install}</section>
+<section class="${card} border-indigo-400/30">${heading('Installation', 'Keep this program running while you watch.')}${install}</section>
 
-<section><h2>Notice</h2>
-<p class="muted">Subtitle text is sent to Google Gemini for translation. API quotas, billing and
+<p class="px-1 text-center text-xs text-slate-500">Subtitle text is sent to Google Gemini for translation. API quotas, billing and
 free-tier data-use terms are controlled by the providers (Google, OpenSubtitles), not by this add-on.</p>
-</section>
+</div>
 </main>
-<div id="toast" role="status" aria-live="polite"></div>
+<div id="toast" role="status" aria-live="polite" class="pointer-events-none fixed bottom-6 left-1/2 max-w-[90vw] -translate-x-1/2 translate-y-8 rounded-xl border px-5 py-3 text-sm font-semibold opacity-0 shadow-2xl transition duration-300"></div>
 <script nonce="${escapeHtml(d.nonce)}">
 const post = (url, body) => fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}).then(r => r.json());
+const TONE = {ok:'text-emerald-400', bad:'text-rose-400'};
 let toastTimer;
-const toast = (ok, msg) => { const t = document.getElementById('toast'); t.textContent = (ok ? '\\u2714 ' : '\\u2716 ') + msg; t.className = 'show' + (ok ? '' : ' bad'); clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = ok ? '' : 'bad'; }, 3500); };
-const show = (id, ok, msg) => { const el = document.getElementById(id); el.textContent = (ok ? '\\u2714 ' : '\\u2716 ') + msg; el.className = 'result ' + (ok ? 'ok' : 'bad'); };
+const toast = (ok, msg) => {
+  const t = document.getElementById('toast');
+  t.textContent = (ok ? '\\u2714 ' : '\\u2716 ') + msg;
+  t.className = 'pointer-events-none fixed bottom-6 left-1/2 max-w-[90vw] -translate-x-1/2 rounded-xl border px-5 py-3 text-sm font-semibold shadow-2xl transition duration-300 translate-y-0 opacity-100 ' +
+    (ok ? 'border-emerald-500/50 bg-emerald-950 text-emerald-200' : 'border-rose-500/50 bg-rose-950 text-rose-200');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove('translate-y-0', 'opacity-100'); t.classList.add('translate-y-8', 'opacity-0'); }, 3500);
+};
+const show = (id, ok, msg) => { const el = document.getElementById(id); el.textContent = (ok ? '\\u2714 ' : '\\u2716 ') + msg; el.className = '${result} ' + (ok ? TONE.ok : TONE.bad); };
 document.querySelectorAll('[data-test]').forEach(b => b.addEventListener('click', async () => {
   const name = b.dataset.test; show('r-' + name, true, 'testing...');
   try { const r = await post('/api/test/' + name); show('r-' + name, r.ok, r.message); }
