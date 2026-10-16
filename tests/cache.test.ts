@@ -30,6 +30,19 @@ describe('FileCache', () => {
     expect(cache.get(key)).toMatchObject({ kind: 'translation', cues: 1 });
   });
 
+  it('clear() removes translations but keeps downloaded sources', () => {
+    const { cache, dir } = mk();
+    const src = cacheKey({ a: 'source' });
+    cache.set(key, 'translation', 'translated', 1);
+    cache.set(src, 'source', 'original', 1);
+    expect(cache.clear('translation')).toBe(1);
+    expect(cache.get(key)).toBeUndefined();
+    expect(cache.get(src)).toMatchObject({ kind: 'source' });
+    expect(readdirSync(dir)).toHaveLength(1);
+    expect(cache.clear()).toBe(1);
+    expect(readdirSync(dir)).toHaveLength(0);
+  });
+
   it('treats expired entries as misses', () => {
     let t = 1_000_000;
     const { cache } = mk(1000, () => t);

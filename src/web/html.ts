@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { PROVIDERS } from '../translation/providers';
 
 /** Replaced at build time by scripts/build-electron.mjs; undefined when running from source. */
 declare const __TAILWIND_CSS__: string | undefined;
@@ -14,7 +15,11 @@ export function escapeHtml(value: unknown): string {
 
 export interface StatusPageData {
   nonce: string;
-  geminiConfigured: boolean;
+  aiConfigured: boolean;
+  /** Provider detected from the saved key, e.g. "Google Gemini"; empty when none. */
+  aiProviderLabel: string;
+  aiModel: string;
+  dualSubtitles: boolean;
   openSubtitlesKeyConfigured: boolean;
   openSubtitlesLoginConfigured: boolean;
   /** Not secret: shown so the user can see which account is configured. */
@@ -105,26 +110,28 @@ export function renderStatusPage(d: StatusPageData): string {
 <style nonce="${escapeHtml(d.nonce)}">${CSS}</style></head>
 <body class="min-h-screen bg-[radial-gradient(900px_450px_at_50%_-120px,rgba(99,102,241,.28),transparent)] font-sans text-slate-200 antialiased">
 ${d.desktop ? titleBar : ''}
-<main class="mx-auto max-w-3xl px-4 pb-24 ${d.desktop ? 'pt-20' : 'pt-12'}">
+<main class="mx-auto max-w-3xl px-4 pb-24 xl:max-w-7xl ${d.desktop ? 'pt-20' : 'pt-12'}">
 <header class="mb-8 text-center sm:text-left">
   <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300">Local &middot; runs only on this computer</div>
   <h1 class="bg-gradient-to-r from-white to-indigo-300 bg-clip-text text-3xl font-extrabold tracking-tight text-transparent sm:text-4xl">AI Subtitle Translator</h1>
-  <p class="mt-2 text-slate-400">Translate Stremio subtitles with Gemini, on demand.</p>
+  <p class="mt-2 text-slate-400">Translate Stremio subtitles with AI, on demand.</p>
 </header>
 
+<div class="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:items-start">
 <div class="space-y-6">
 
 <section class="${card}">${heading('API keys', 'Stored securely on your local machine. Never shown again.')}
 <ul class="mb-5 grid gap-2">
-<li class="flex items-center justify-between gap-3 rounded-xl border border-slate-700/60 bg-slate-950/50 px-3.5 py-2.5"><span class="text-sm">Gemini API key</span>${badge(d.geminiConfigured)}</li>
+<li class="flex items-center justify-between gap-3 rounded-xl border border-slate-700/60 bg-slate-950/50 px-3.5 py-2.5"><span class="text-sm">AI provider API key</span>${badge(d.aiConfigured, d.aiProviderLabel || 'configured')}</li>
 <li class="flex items-center justify-between gap-3 rounded-xl border border-slate-700/60 bg-slate-950/50 px-3.5 py-2.5"><span class="text-sm">OpenSubtitles API key</span>${badge(d.openSubtitlesKeyConfigured)}</li>
 <li class="flex items-center justify-between gap-3 rounded-xl border border-slate-700/60 bg-slate-950/50 px-3.5 py-2.5"><span class="text-sm">OpenSubtitles login${d.openSubtitlesUsername ? ` (<span class="font-mono">${escapeHtml(d.openSubtitlesUsername)}</span>)` : ''}</span>${badge(d.openSubtitlesLoginConfigured)}</li>
 </ul>
 <form id="keys" autocomplete="off">
 <div class="grid gap-4 sm:grid-cols-2">
-<div><label class="${labelCls}" for="k-gemini">Gemini API key</label>
-<input class="${field}" id="k-gemini" type="password" autocomplete="off" placeholder="${d.geminiConfigured ? 'saved - leave empty to keep' : 'paste key'}">
-<p id="k-gemini-warn" class="mt-1.5 hidden text-xs text-amber-300" role="alert">This doesn't look like a valid Google API key (it should start with "AIza").</p></div>
+<div class="sm:col-span-2"><label class="${labelCls}" for="k-ai">AI Provider API Key</label>
+<input class="${field}" id="k-ai" type="password" autocomplete="off" placeholder="${d.aiConfigured ? 'saved - leave empty to keep' : 'paste your Gemini, Claude or OpenAI key'}">
+<p id="k-ai-hint" class="mt-1.5 hidden text-xs text-emerald-300"></p>
+<p id="k-ai-warn" class="mt-1.5 hidden text-xs text-amber-300" role="alert">This doesn't look like a valid API key. Google keys start with "AIza", Anthropic keys with "sk-ant", OpenAI keys with "sk-".</p></div>
 <div><label class="${labelCls}" for="k-os">OpenSubtitles API key</label>
 <input class="${field}" id="k-os" type="password" autocomplete="off" placeholder="${d.openSubtitlesKeyConfigured ? 'saved - leave empty to keep' : 'paste key'}"></div>
 <div><label class="${labelCls}" for="k-user">OpenSubtitles username</label>
@@ -132,18 +139,30 @@ ${d.desktop ? titleBar : ''}
 <div><label class="${labelCls}" for="k-pass">OpenSubtitles password</label>
 <input class="${field}" id="k-pass" type="password" autocomplete="off" placeholder="${d.openSubtitlesLoginConfigured ? 'saved - leave empty to keep' : 'your opensubtitles.com password'}"></div>
 </div>
-<div class="mt-5 grid gap-2"><button type="submit" class="${btnPrimary} w-full">Save keys</button><span class="${result} text-center" id="keys-result"></span></div>
+<div class="mt-5 grid gap-2"><button type="submit" id="save-keys" class="${btnPrimary} w-full disabled:cursor-not-allowed disabled:opacity-40">Save keys</button><span class="${result} text-center" id="keys-result"></span></div>
 </form>
 </section>
 
 <section class="${card}">${heading('Preferences', `RTL punctuation fix: ${d.rtlFix ? 'on' : 'off'} (advanced option, see Troubleshooting).`)}
 <div><label class="${labelCls}" for="lang">Target language</label><select class="${field}" id="lang">${langOptions}</select></div>
+<label class="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-700/60 bg-slate-950/50 px-3.5 py-3"><input type="checkbox" id="dual" class="mt-0.5 h-4 w-4 accent-indigo-500"${d.dualSubtitles ? ' checked' : ''}><span><span class="block text-sm font-medium text-slate-200">Dual Subtitles (English + Target Language)</span><span class="block text-xs text-slate-400">Shows the original line on top and the translation directly below it. Applies to subtitles translated after you save.</span></span></label>
 <div class="mt-5 grid gap-2"><button type="button" id="save" class="${btnPrimary} w-full">Save settings</button><span class="${result} text-center" id="save-result"></span></div>
+<div class="mt-5 border-t border-slate-700/60 pt-5"><p class="mb-3 text-sm text-slate-400">Delete saved translations so subtitles are translated again next time.</p><button type="button" id="clear-cache" class="${btn} w-full">Clear Translation Cache</button><span class="${result} mt-2 block text-center" id="clear-result"></span></div>
+</section>
+
+</div>
+<div class="space-y-6">
+
+<section class="${card}">${heading('Live status', d.aiConfigured ? `Using ${escapeHtml(d.aiProviderLabel)} (${escapeHtml(d.aiModel)}).` : 'No AI key saved yet.')}
+<div class="grid gap-3 sm:grid-cols-2">
+<div class="rounded-xl border border-slate-700/60 bg-slate-950/50 px-4 py-3"><div class="text-xs uppercase tracking-wide text-slate-500">State</div><div class="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-100"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-slate-500"></span><span id="st-state">Waiting for Stremio...</span></div></div>
+<div class="rounded-xl border border-slate-700/60 bg-slate-950/50 px-4 py-3"><div class="text-xs uppercase tracking-wide text-slate-500">Subtitle lines translated this session</div><div id="st-lines" class="mt-1 text-2xl font-bold text-white">0</div></div>
+</div>
 </section>
 
 <section class="${card}">${heading('Test connections')}
 <div class="grid gap-3 sm:grid-cols-3">
-<div class="flex flex-col gap-2"><button type="button" class="${btn} w-full" data-test="gemini">Test Gemini</button><span class="${result} text-center" id="r-gemini"></span></div>
+<div class="flex flex-col gap-2"><button type="button" class="${btn} w-full" data-test="ai">Test AI provider</button><span class="${result} text-center" id="r-ai"></span></div>
 <div class="flex flex-col gap-2"><button type="button" class="${btn} w-full" data-test="opensubtitles">Test OpenSubtitles</button><span class="${result} text-center" id="r-opensubtitles"></span></div>
 <div class="flex flex-col gap-2"><button type="button" class="${btn} w-full" id="sample">Translate built-in sample</button><span class="${result} text-center" id="r-sample"></span></div>
 </div>
@@ -152,12 +171,15 @@ ${d.desktop ? titleBar : ''}
 
 <section class="${card} border-indigo-400/30">${heading('Installation', 'Keep this program running while you watch.')}${install}</section>
 
-<p class="px-1 text-center text-xs text-slate-500">Subtitle text is sent to Google Gemini for translation. API quotas, billing and
-free-tier data-use terms are controlled by the providers (Google, OpenSubtitles), not by this add-on.</p>
 </div>
+</div>
+<p class="mt-6 px-1 text-center text-xs text-slate-500">Subtitle text is sent to the AI provider that matches your key (Google Gemini, Anthropic or OpenAI) for translation. API quotas, billing and
+data-use terms are controlled by the providers, not by this add-on.</p>
 </main>
 <div id="toast" role="status" aria-live="polite" class="pointer-events-none fixed bottom-6 left-1/2 max-w-[90vw] -translate-x-1/2 translate-y-8 rounded-xl border px-5 py-3 text-sm font-semibold opacity-0 shadow-2xl transition duration-300"></div>
 <script nonce="${escapeHtml(d.nonce)}">
+const KEY_RULES = ${JSON.stringify(PROVIDERS.map((p) => ({ prefix: p.prefix, label: p.label, model: p.model })))};
+const detect = (v) => KEY_RULES.find((r) => v.trim().startsWith(r.prefix));
 const post = (url, body) => fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}).then(r => r.json());
 const TONE = {ok:'text-emerald-400', bad:'text-rose-400'};
 let toastTimer;
@@ -177,17 +199,18 @@ document.querySelectorAll('[data-test]').forEach(b => b.addEventListener('click'
 }));
 document.getElementById('save').addEventListener('click', async () => {
   try {
-    const r = await post('/api/settings', {targetLanguage: document.getElementById('lang').value});
+    const r = await post('/api/settings', {targetLanguage: document.getElementById('lang').value, dualSubtitles: document.getElementById('dual').checked});
     show('save-result', r.ok, r.ok ? 'Settings saved' : r.message);
     toast(r.ok, r.ok ? 'Settings saved' : r.message);
   } catch { show('save-result', false, 'request failed'); toast(false, 'Request failed'); }
 });
 document.getElementById('keys').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const fields = {geminiApiKey:'k-gemini', openSubtitlesApiKey:'k-os', openSubtitlesUsername:'k-user', openSubtitlesPassword:'k-pass'};
+  const fields = {aiApiKey:'k-ai', openSubtitlesApiKey:'k-os', openSubtitlesUsername:'k-user', openSubtitlesPassword:'k-pass'};
   const body = {};
   for (const [name, id] of Object.entries(fields)) { const v = document.getElementById(id).value.trim(); if (v) body[name] = v; }
   if (Object.keys(body).length === 0) { show('keys-result', false, 'nothing to save'); return; }
+  if (body.aiApiKey && !detect(body.aiApiKey)) { show('keys-result', false, 'the AI key is not valid - not saved'); return; }
   try {
     const r = await post('/api/keys', body);
     show('keys-result', r.ok, r.message);
@@ -204,11 +227,43 @@ document.getElementById('sample').addEventListener('click', async () => {
     if (r.ok) { out.textContent = r.preview; out.hidden = false; } else { out.hidden = true; }
   } catch { show('r-sample', false, 'request failed'); }
 });
-const gemKey = document.getElementById('k-gemini');
-gemKey.addEventListener('input', () => {
-  const v = gemKey.value.trim();
-  document.getElementById('k-gemini-warn').classList.toggle('hidden', v === '' || v.startsWith('AIza'));
+const aiKey = document.getElementById('k-ai');
+const aiWarn = document.getElementById('k-ai-warn');
+const aiHint = document.getElementById('k-ai-hint');
+const saveKeys = document.getElementById('save-keys');
+aiKey.addEventListener('input', () => {
+  const v = aiKey.value.trim();
+  const p = detect(v);
+  const invalid = v !== '' && !p;
+  aiWarn.classList.toggle('hidden', !invalid);
+  aiHint.classList.toggle('hidden', !p);
+  if (p) aiHint.textContent = '\\u2714 Detected ' + p.label + ' - the app will use ' + p.model + '.';
+  saveKeys.disabled = invalid;
 });
+document.getElementById('clear-cache').addEventListener('click', async () => {
+  try {
+    const r = await post('/api/cache/clear');
+    show('clear-result', r.ok, r.message);
+    toast(r.ok, r.ok ? 'Translation cache cleared' : r.message);
+  } catch { show('clear-result', false, 'request failed'); toast(false, 'Request failed'); }
+});
+const STATES = {
+  waiting: ['Waiting for Stremio...', 'bg-slate-500'],
+  translating: ['Translating...', 'bg-indigo-400 animate-pulse'],
+  idle: ['Ready - last subtitle finished', 'bg-emerald-400'],
+  error: ['Last translation failed - use Test connections', 'bg-rose-400']
+};
+const refreshStatus = async () => {
+  try {
+    const r = await (await fetch('/api/status')).json();
+    const st = STATES[r.state] || STATES.waiting;
+    document.getElementById('st-state').textContent = st[0];
+    document.getElementById('st-dot').className = 'h-2.5 w-2.5 rounded-full ' + st[1];
+    document.getElementById('st-lines').textContent = String(r.linesTranslated);
+  } catch { /* the app may be restarting */ }
+};
+refreshStatus();
+setInterval(refreshStatus, 2500);
 if (window.desktop) {
   const maxIcon = document.getElementById('win-max-icon');
   document.getElementById('win-max').addEventListener('click', () => window.desktop.toggleMaximize());

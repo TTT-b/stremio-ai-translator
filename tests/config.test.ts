@@ -9,7 +9,8 @@ describe('loadConfig', () => {
     expect(c.host).toBe('127.0.0.1');
     expect(c.targetLanguage).toBe('he');
     expect(c.rtlFix).toBe(false);
-    expect(c.geminiApiKey).toBe('');
+    expect(c.aiApiKey).toBe('');
+    expect(c.dualSubtitles).toBe(false);
   });
 
   it('reads provided values', () => {

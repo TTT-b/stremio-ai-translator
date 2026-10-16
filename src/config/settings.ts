@@ -10,6 +10,7 @@ const settingsSchema = z.object({
     .string()
     .refine((v) => findLanguage(v) !== undefined, 'unsupported language')
     .optional(),
+  dualSubtitles: z.boolean().optional(),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
@@ -42,5 +43,6 @@ export function effectiveConfig(config: Config, settings: Settings): Config {
   return {
     ...config,
     targetLanguage: settings.targetLanguage ?? config.targetLanguage,
+    dualSubtitles: settings.dualSubtitles ?? config.dualSubtitles,
   };
 }

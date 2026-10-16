@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AppError } from '../errors';
-import { DEFAULT_MODEL, findLanguage } from './languages';
+import { detectProvider, PROVIDERS, type ProviderId } from '../translation/providers';
+import { findLanguage } from './languages';
 
 const boolish = z
   .string()
@@ -22,6 +23,9 @@ const optionalString = z
   .transform((v) => (v ?? '').trim());
 
 const envSchema = z.object({
+  /** Key for whichever provider it belongs to (detected from its prefix). */
+  AI_API_KEY: optionalString,
+  /** Older name for the same thing; used when AI_API_KEY is empty. */
   GEMINI_API_KEY: optionalString,
   OPENSUBTITLES_API_KEY: optionalString,
   OPENSUBTITLES_USERNAME: optionalString,
@@ -49,8 +53,12 @@ const envSchema = z.object({
 });
 
 export interface Config {
-  geminiApiKey: string;
-  geminiModel: string;
+  /** API key of the AI provider (Gemini, Anthropic or OpenAI). */
+  aiApiKey: string;
+  /** Provider detected from the key prefix (Gemini when the prefix is not recognised). */
+  aiProvider: ProviderId;
+  /** Fixed per provider; not user-selectable. */
+  aiModel: string;
   openSubtitlesApiKey: string;
   openSubtitlesUsername: string;
   openSubtitlesPassword: string;
@@ -62,9 +70,11 @@ export interface Config {
   chunkSize: number;
   chunkConcurrency: number;
   chunkMaxRetries: number;
-  geminiTimeoutMs: number;
+  aiTimeoutMs: number;
   rtlFix: boolean;
   logDialogue: boolean;
+  /** Put the original line above the translation. Set on the config page. */
+  dualSubtitles: boolean;
   cacheTtlDays: number;
   /** How long /sub/<job>.srt waits for a running translation before sending the placeholder. */
   subWaitMs: number;
@@ -85,9 +95,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new AppError('CONFIGURATION_INVALID', problems.join('; '), { problems });
   }
   const e = parsed.data;
+  const aiApiKey = e.AI_API_KEY || e.GEMINI_API_KEY;
+  const provider = detectProvider(aiApiKey) ?? (PROVIDERS[0] as (typeof PROVIDERS)[number]);
   return {
-    geminiApiKey: e.GEMINI_API_KEY,
-    geminiModel: DEFAULT_MODEL, // fixed on purpose: not user-selectable
+    aiApiKey,
+    aiProvider: provider.id,
+    aiModel: provider.model, // fixed on purpose: not user-selectable
     openSubtitlesApiKey: e.OPENSUBTITLES_API_KEY,
     openSubtitlesUsername: e.OPENSUBTITLES_USERNAME,
     openSubtitlesPassword: e.OPENSUBTITLES_PASSWORD,
@@ -99,9 +112,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     chunkSize: e.CHUNK_SIZE,
     chunkConcurrency: e.CHUNK_CONCURRENCY,
     chunkMaxRetries: e.CHUNK_MAX_RETRIES,
-    geminiTimeoutMs: e.GEMINI_TIMEOUT_MS,
+    aiTimeoutMs: e.GEMINI_TIMEOUT_MS,
     rtlFix: e.RTL_FIX,
     logDialogue: e.LOG_DIALOGUE,
+    dualSubtitles: false,
     cacheTtlDays: e.CACHE_TTL_DAYS,
     subWaitMs: e.SUB_WAIT_MS,
     maxConcurrentJobs: e.MAX_CONCURRENT_JOBS,
@@ -113,7 +127,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
 /** Names of the variables that hold secrets (used for redaction and status display). */
 export function secretValues(config: Config): string[] {
-  return [config.geminiApiKey, config.openSubtitlesApiKey, config.openSubtitlesPassword].filter(
+  return [config.aiApiKey, config.openSubtitlesApiKey, config.openSubtitlesPassword].filter(
     (v) => v.length >= 4,
   );
 }

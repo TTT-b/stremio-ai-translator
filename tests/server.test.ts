@@ -94,8 +94,8 @@ describe('local web server', () => {
     expect(res.headers.get('content-security-policy')).toContain("default-src 'none'");
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
-    expect(html).toContain('Gemini API key');
-    expect(html).toContain('configured');
+    expect(html).toContain('AI Provider API Key');
+    expect(html).toContain('Google Gemini'); // provider detected from the saved key
     expect(html).toContain('stremio://127.0.0.1:' + hostHeader.split(':')[1] + '/manifest.json');
     expect(html).not.toContain(SECRET_KEY);
     expect(html).not.toContain(OS_PASSWORD);
@@ -135,7 +135,7 @@ describe('local web server', () => {
   it('saves keys to .env, keeps other lines, and never echoes the value', async () => {
     const newKey = 'AIzaSyNEWKEYNEWKEYNEWKEYNEWKEY123456';
     const res = await post('/api/keys', {
-      geminiApiKey: newKey,
+      aiApiKey: newKey,
       openSubtitlesPassword: "pa ss#word'x",
     });
     const text = await res.text();
@@ -144,12 +144,34 @@ describe('local web server', () => {
     const env = readFileSync(envPath, 'utf8');
     expect(env).toContain('# my settings');
     expect(env).toContain('PORT=7000');
-    expect(env).toContain(`GEMINI_API_KEY=${newKey}`);
-    expect(env).not.toContain('GEMINI_API_KEY=old');
+    expect(env).toContain(`AI_API_KEY=${newKey}`);
     expect(env).toContain("OPENSUBTITLES_PASSWORD=`pa ss#word'x`");
     // The status page now reports it as configured without showing it.
     const html = await (await get('/')).text();
     expect(html).not.toContain(newKey);
+  });
+
+  it('refuses to save an AI key with an unrecognised prefix', async () => {
+    const before = readFileSync(envPath, 'utf8');
+    const res = await post('/api/keys', { aiApiKey: 'not-a-real-key-123' });
+    expect(res.status).toBe(400);
+    expect(readFileSync(envPath, 'utf8')).toBe(before);
+  });
+
+  it('accepts Anthropic and OpenAI keys', async () => {
+    expect((await post('/api/keys', { aiApiKey: 'sk-ant-api03-FAKEFAKEFAKE' })).status).toBe(200);
+    expect((await post('/api/keys', { aiApiKey: 'sk-FAKEFAKEFAKE' })).status).toBe(200);
+    const html = await (await get('/')).text();
+    expect(html).toContain('OpenAI');
+    expect(html).not.toContain('sk-FAKEFAKEFAKE');
+  });
+
+  it('reports live status and clears the translation cache', async () => {
+    const before = (await (await get('/api/status')).json()) as { ok: boolean; state: string };
+    expect(before.ok).toBe(true);
+    expect(['waiting', 'idle', 'translating', 'error']).toContain(before.state);
+    const res = await post('/api/cache/clear', {});
+    expect(await res.json()).toMatchObject({ ok: true });
   });
 
   it('rejects unknown or empty key payloads', async () => {
@@ -166,14 +188,17 @@ describe('local web server', () => {
   it('saves settings to settings.json and rejects invalid ones', async () => {
     const ok = await post('/api/settings', {
       targetLanguage: 'es',
-      geminiModel: 'gemini-2.5-flash-lite',
+      dualSubtitles: true,
     });
     expect(await ok.json()).toEqual({ ok: true });
-    expect(JSON.parse(readFileSync(settingsPath, 'utf8'))).toMatchObject({ targetLanguage: 'es' });
+    expect(JSON.parse(readFileSync(settingsPath, 'utf8'))).toMatchObject({
+      targetLanguage: 'es',
+      dualSubtitles: true,
+    });
     expect(readFileSync(settingsPath, 'utf8')).not.toContain(SECRET_KEY);
     const bad = await post('/api/settings', { targetLanguage: '<script>' });
     expect(bad.status).toBe(400);
-    await post('/api/settings', { targetLanguage: 'he' });
+    await post('/api/settings', { targetLanguage: 'he', dualSubtitles: false });
   });
 
   it('dev route translates a posted SRT and preserves structure', async () => {

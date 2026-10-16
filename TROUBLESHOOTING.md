@@ -8,8 +8,8 @@ log file - it never contains your keys.
 1. Read the message next to the button; it names the cause.
 2. `Missing` / `not set` -> desktop app: paste the key in the **API keys** card and press Save.
    Command line: fill the variable in `.env`, then restart (Ctrl+C, `npm start`).
-3. `API key was rejected` -> re-copy the key (no spaces or quotes). Gemini: create a new key at
-   https://aistudio.google.com/apikey. OpenSubtitles: check the consumer API key at
+3. `API key was rejected` -> re-copy the key (no spaces or quotes). AI key: create a new one at the provider
+   (Gemini: https://aistudio.google.com/apikey, Claude: console.anthropic.com, OpenAI: platform.openai.com). OpenSubtitles: check the consumer API key at
    https://www.opensubtitles.com/en/consumers.
 4. `OpenSubtitles login failed` -> username/password are your opensubtitles.com account (not the
    API key). Try logging in on the website.
@@ -23,7 +23,7 @@ log file - it never contains your keys.
 
 ## No translation happens
 
-1. Is Gemini green on the config page ("Test Gemini")?
+1. Is the AI provider green on the config page ("Test AI provider")?
 2. Click "Translate built-in sample". If that works, translation is fine and the problem is on the
    subtitle-source side.
 3. Look in the log for `SOURCE_SUBTITLE_NOT_FOUND`, `SOURCE_QUOTA_EXCEEDED` (OpenSubtitles daily

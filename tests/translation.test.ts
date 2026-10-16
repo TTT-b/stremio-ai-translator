@@ -39,6 +39,15 @@ describe('translateSubtitle', () => {
     expect(r.file.cues[0]?.text).toBe('T:Hello there.');
   });
 
+  it('dual mode keeps the original on top and the translation directly below', async () => {
+    const r = await translateSubtitle(source, new FakeProvider(), opts({ dualSubtitles: true }));
+    expect(r.file.cues[0]?.text).toBe('Hello there.\nT:Hello there.');
+    expect(r.file.cues).toHaveLength(3);
+    expect(r.file.cues.map((c) => [c.startMs, c.endMs])).toEqual(
+      source.cues.map((c) => [c.startMs, c.endMs]),
+    );
+  });
+
   it('retries an invalid chunk then succeeds', async () => {
     const provider = new FakeProvider((req, n) =>
       n === 1

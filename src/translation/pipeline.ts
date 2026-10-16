@@ -26,6 +26,8 @@ export interface PipelineOptions {
   /** Attempts for transient provider errors (429/5xx/timeouts). */
   maxTransientAttempts?: number;
   rtlFix: boolean;
+  /** Keep the original text on top and put the translation directly below it. */
+  dualSubtitles?: boolean;
   logger: Logger;
   retryBaseDelayMs?: number;
   retryMaxDelayMs?: number;
@@ -196,6 +198,10 @@ export async function translateSubtitle(
   const cues: Cue[] = source.cues.map((c) => {
     let text = (byId.get(String(c.index)) ?? '').trim();
     if (opts.rtlFix) text = applyRtlFix(text);
+    // Added here, not by the AI: the original line is never re-typed or altered.
+    if (opts.dualSubtitles)
+      text = `${c.text.trim()}
+${text}`;
     return { ...c, text };
   });
   assertSameStructure(source.cues, cues);

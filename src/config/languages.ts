@@ -32,8 +32,3 @@ export const LANGUAGES: readonly Language[] = [
 export function findLanguage(code: string): Language | undefined {
   return LANGUAGES.find((l) => l.code === code.toLowerCase());
 }
-
-/** Models offered on the config page. The first is the default. */
-export const KNOWN_MODELS: readonly string[] = ['gemini-3.5-flash-lite', 'gemini-3.8-flash'];
-
-export const DEFAULT_MODEL = KNOWN_MODELS[0] as string;

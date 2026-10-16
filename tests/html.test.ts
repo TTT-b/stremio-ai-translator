@@ -3,7 +3,10 @@ import { renderStatusPage } from '../src/web/html';
 
 const page = renderStatusPage({
   nonce: 'abc',
-  geminiConfigured: true,
+  aiConfigured: true,
+  aiProviderLabel: 'Google Gemini',
+  aiModel: 'gemini-3.5-flash-lite',
+  dualSubtitles: false,
   openSubtitlesKeyConfigured: false,
   openSubtitlesLoginConfigured: false,
   openSubtitlesUsername: '',
@@ -31,7 +34,10 @@ describe('config page', () => {
 describe('desktop title bar', () => {
   const base = {
     nonce: 'abc',
-    geminiConfigured: false,
+    aiConfigured: false,
+    aiProviderLabel: '',
+    aiModel: 'gemini-3.5-flash-lite',
+    dualSubtitles: false,
     openSubtitlesKeyConfigured: false,
     openSubtitlesLoginConfigured: false,
     openSubtitlesUsername: '',
@@ -65,10 +71,34 @@ describe('desktop title bar', () => {
 });
 
 describe('simplified settings', () => {
-  it('has no model picker and warns on non-Google keys', () => {
+  it('has no model picker and one generic key field', () => {
     expect(page).not.toContain('id="model"');
     expect(page).not.toContain('Gemini model');
-    expect(page).toContain("doesn't look like a valid Google API key");
-    expect(page).toContain("startsWith('AIza')");
+    expect(page).toContain('AI Provider API Key');
+    expect(page).not.toContain('Gemini API key');
+  });
+
+  it('warns on unrecognised keys and disables Save keys', () => {
+    expect(page).toContain("doesn't look like a valid API key");
+    expect(page).toContain('id="save-keys"');
+    expect(page).toContain('saveKeys.disabled = invalid');
+    for (const prefix of ['AIza', 'sk-ant', 'sk-']) {
+      expect(page).toContain(`"prefix":"${prefix}"`);
+    }
+  });
+});
+
+describe('premium features', () => {
+  it('has the dual subtitles toggle, cache button and live status card', () => {
+    expect(page).toContain('Dual Subtitles (English + Target Language)');
+    expect(page).toContain('id="dual"');
+    expect(page).toContain('Clear Translation Cache');
+    expect(page).toContain('Waiting for Stremio...');
+    expect(page).toContain('Subtitle lines translated this session');
+  });
+
+  it('uses a two-column grid on wide screens', () => {
+    expect(page).toContain('xl:grid-cols-2');
+    expect(page).toContain('xl:max-w-7xl');
   });
 });

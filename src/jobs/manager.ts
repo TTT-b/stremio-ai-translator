@@ -65,7 +65,7 @@ export function isJobId(s: string): boolean {
 }
 
 /** Deterministic job id: same request and settings -> same job -> shared work and cache. */
-export function jobIdFor(spec: JobSpec, model: string): string {
+export function jobIdFor(spec: JobSpec, model: string, dual = false): string {
   return cacheKey({
     idKind: spec.video.idKind,
     id: spec.video.externalId,
@@ -76,6 +76,7 @@ export function jobIdFor(spec: JobSpec, model: string): string {
     file: spec.filename,
     model,
     prompt: PROMPT_VERSION,
+    ...(dual ? { dual } : {}),
   }).slice(0, 32);
 }
 
@@ -84,6 +85,9 @@ export class JobManager {
   private running = 0;
   private readonly waiting: (() => void)[] = [];
   private readonly now: () => number;
+  private linesTranslated = 0;
+  private started = 0;
+  private lastFailed = false;
 
   constructor(private readonly deps: JobManagerDeps) {
     this.now = deps.now ?? Date.now;
@@ -92,7 +96,8 @@ export class JobManager {
 
   /** Start (or join) the job for this request. Returns immediately. */
   ensure(spec: JobSpec): Job {
-    const id = jobIdFor(spec, this.deps.config().geminiModel);
+    const cfg = this.deps.config();
+    const id = jobIdFor(spec, cfg.aiModel, cfg.dualSubtitles);
     const existing = this.jobs.get(id);
     if (existing) {
       const retryable =
@@ -101,6 +106,7 @@ export class JobManager {
       if (!retryable) return existing;
     }
     this.saveSpec(id, spec);
+    this.started++;
     const job: Job = {
       id,
       spec,
@@ -111,6 +117,29 @@ export class JobManager {
     job.promise = this.schedule(job);
     this.jobs.set(id, job);
     return job;
+  }
+
+  /** Live numbers for the status card. Counts this app session only. */
+  stats(): {
+    state: 'waiting' | 'translating' | 'idle' | 'error';
+    running: number;
+    linesTranslated: number;
+  } {
+    const running = [...this.jobs.values()].filter((j) => j.status === 'running').length;
+    const state =
+      running > 0
+        ? 'translating'
+        : this.started === 0
+          ? 'waiting'
+          : this.lastFailed
+            ? 'error'
+            : 'idle';
+    return { state, running, linesTranslated: this.linesTranslated };
+  }
+
+  /** Forget finished jobs so a cleared cache is not shadowed by results kept in memory. */
+  forgetFinished(): void {
+    for (const [id, job] of this.jobs) if (job.status !== 'running') this.jobs.delete(id);
   }
 
   /** Find a job by id, restoring it from disk after a restart. */
@@ -175,6 +204,7 @@ export class JobManager {
     try {
       job.result = await this.run(job, log);
       job.status = 'done';
+      this.lastFailed = false;
       log.info(
         {
           stage: 'ASSEMBLY',
@@ -189,6 +219,7 @@ export class JobManager {
         ? err
         : new AppError('SOURCE_DOWNLOAD_FAILED', 'unexpected error');
       job.status = 'failed';
+      this.lastFailed = true;
       log.warn(
         { errorCode: job.error.code, durationMs: this.now() - started, ...job.error.details },
         'job failed',
@@ -207,7 +238,8 @@ export class JobManager {
     const rtl = cfg.rtlFix && lang.rtl;
 
     // 1. Whole-job cache: replay costs no network at all.
-    const jobKey = cacheKey({ job: job.id, rtl, kind: 'job' });
+    const dual = cfg.dualSubtitles;
+    const jobKey = cacheKey({ job: job.id, rtl, ...(dual ? { dual } : {}), kind: 'job' });
     const hit = cache.get(jobKey);
     if (hit) return { content: hit.content, via: 'cache', cues: hit.cues };
 
@@ -266,6 +298,7 @@ export class JobManager {
       model: model.model,
       prompt: PROMPT_VERSION,
       rtl,
+      ...(dual ? { dual } : {}),
       kind: 'translation',
     });
     const cached = cache.get(trKey);
@@ -306,6 +339,7 @@ export class JobManager {
       concurrency: cfg.chunkConcurrency,
       maxValidationRetries: cfg.chunkMaxRetries,
       rtlFix: rtl,
+      dualSubtitles: dual,
       logger: log,
       logDialogue: cfg.logDialogue,
     });
@@ -313,6 +347,7 @@ export class JobManager {
     // Only fully validated translations reach this point.
     this.safeSet(trKey, 'translation', content, result.file.cues.length, log);
     this.safeSet(jobKey, 'translation', content, result.file.cues.length, log);
+    this.linesTranslated += result.file.cues.length;
     return { content, via: 'translated', cues: result.file.cues.length };
   }
 

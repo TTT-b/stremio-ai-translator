@@ -26,6 +26,8 @@ import { parseVideoId, type SourceSubtitleProvider } from '../sources/types';
 import { parseSubtitle } from '../subtitles/parse';
 import { serializeSubtitle } from '../subtitles/serialize';
 import { GeminiProvider } from '../translation/gemini';
+import { AnthropicProvider, OpenAiProvider } from '../translation/httpProviders';
+import { detectProvider, PROVIDERS } from '../translation/providers';
 import type { TranslationProvider } from '../translation/provider';
 import { translateSubtitle } from '../translation/pipeline';
 import { renderStatusPage } from './html';
@@ -64,7 +66,7 @@ const isStremioPath = (p: string) =>
 
 const keysSchema = z
   .object({
-    geminiApiKey: z.string().trim().max(256).optional(),
+    aiApiKey: z.string().trim().max(256).optional(),
     openSubtitlesApiKey: z.string().trim().max(256).optional(),
     openSubtitlesUsername: z.string().trim().max(128).optional(),
     openSubtitlesPassword: z.string().trim().max(256).optional(),
@@ -72,7 +74,7 @@ const keysSchema = z
   .strict();
 
 const KEY_ENV_NAMES = {
-  geminiApiKey: 'GEMINI_API_KEY',
+  aiApiKey: 'AI_API_KEY',
   openSubtitlesApiKey: 'OPENSUBTITLES_API_KEY',
   openSubtitlesUsername: 'OPENSUBTITLES_USERNAME',
   openSubtitlesPassword: 'OPENSUBTITLES_PASSWORD',
@@ -117,12 +119,22 @@ export function createApp(deps: ServerDeps): express.Express {
       }));
   const makeProvider =
     deps.createProvider ??
-    ((c: Config) =>
-      new GeminiProvider({
-        apiKey: c.geminiApiKey,
-        model: c.geminiModel,
-        timeoutMs: c.geminiTimeoutMs,
-      }));
+    ((c: Config): TranslationProvider => {
+      const opts = { apiKey: c.aiApiKey, model: c.aiModel, timeoutMs: c.aiTimeoutMs };
+      if (c.aiProvider === 'anthropic') {
+        return new AnthropicProvider({
+          ...opts,
+          ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+        });
+      }
+      if (c.aiProvider === 'openai') {
+        return new OpenAiProvider({
+          ...opts,
+          ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+        });
+      }
+      return new GeminiProvider(opts);
+    });
 
   const dataDir = deps.dataDir ?? resolve(process.cwd(), 'data');
   const cache = new FileCache(join(dataDir, 'cache'), envConfig.cacheTtlDays * 86_400_000, logger);
@@ -187,7 +199,10 @@ export function createApp(deps: ServerDeps): express.Express {
       renderStatusPage({
         desktop: (req.get('user-agent') ?? '').includes('Electron/'),
         nonce,
-        geminiConfigured: c.geminiApiKey !== '',
+        aiConfigured: c.aiApiKey !== '',
+        aiProviderLabel: PROVIDERS.find((p) => p.id === c.aiProvider)?.label ?? '',
+        aiModel: c.aiModel,
+        dualSubtitles: c.dualSubtitles,
         openSubtitlesKeyConfigured: c.openSubtitlesApiKey !== '',
         openSubtitlesLoginConfigured:
           c.openSubtitlesUsername !== '' && c.openSubtitlesPassword !== '',
@@ -214,21 +229,40 @@ export function createApp(deps: ServerDeps): express.Express {
     }
   });
 
-  app.post('/api/test/gemini', async (_req, res) => {
+  // /api/test/gemini is the older name of the same route.
+  app.post(['/api/test/ai', '/api/test/gemini'], async (_req, res) => {
     const c = current();
     const { details, ...result } = await makeProvider(c).testConnection();
     logger.info(
       {
         stage: 'API',
-        provider: 'gemini',
-        model: c.geminiModel,
+        provider: c.aiProvider,
+        model: c.aiModel,
         ok: result.ok,
         errorCode: result.code,
         ...(details ? { details } : {}),
       },
-      'gemini test',
+      'ai provider test',
     );
     res.json(result);
+  });
+
+  // Live numbers for the status card (polled by the page; contains no titles or dialogue).
+  app.get('/api/status', (_req, res) => {
+    res.json({ ok: true, ...jobs.stats() });
+  });
+
+  // Delete translated subtitles from the local cache. Downloaded source files are kept.
+  app.post('/api/cache/clear', (_req, res) => {
+    try {
+      const removed = cache.clear('translation');
+      jobs.forgetFinished();
+      logger.info({ stage: 'CACHE', removed }, 'translation cache cleared');
+      res.json({ ok: true, removed, message: `Translation cache cleared (${removed} files).` });
+    } catch {
+      logger.warn({ stage: 'CACHE', errorCode: 'CACHE_WRITE_FAILED' }, 'clearing cache failed');
+      res.status(500).json({ ok: false, message: 'Could not clear the cache.' });
+    }
   });
 
   app.post('/api/test/opensubtitles', async (_req, res) => {
@@ -252,6 +286,14 @@ export function createApp(deps: ServerDeps): express.Express {
     const parsed = keysSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ ok: false, message: 'Invalid input.' });
+      return;
+    }
+    if (parsed.data.aiApiKey && !detectProvider(parsed.data.aiApiKey)) {
+      res.status(400).json({
+        ok: false,
+        message:
+          'That key is not recognised. Google keys start with "AIza", Anthropic with "sk-ant", OpenAI with "sk-".',
+      });
       return;
     }
     const updates: Record<string, string> = {};
@@ -339,6 +381,7 @@ export function createApp(deps: ServerDeps): express.Express {
       concurrency: c.chunkConcurrency,
       maxValidationRetries: c.chunkMaxRetries,
       rtlFix: c.rtlFix && lang.rtl,
+      dualSubtitles: c.dualSubtitles,
       logger: log,
       logDialogue: c.logDialogue,
     });

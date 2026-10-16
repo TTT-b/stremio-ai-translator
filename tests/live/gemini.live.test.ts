@@ -11,9 +11,9 @@ describe.skipIf(process.env.LIVE_TEST !== '1')('live providers', () => {
 
   it('Gemini translates one short cue', async () => {
     const p = new GeminiProvider({
-      apiKey: config.geminiApiKey,
-      model: config.geminiModel,
-      timeoutMs: config.geminiTimeoutMs,
+      apiKey: config.aiApiKey,
+      model: config.aiModel,
+      timeoutMs: config.aiTimeoutMs,
     });
     const r = await p.translateChunk({
       targetLanguage: 'Hebrew',

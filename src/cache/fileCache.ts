@@ -131,6 +131,31 @@ export class FileCache {
     return { removed, kept };
   }
 
+  /**
+   * Delete cached entries of one kind (all kinds when omitted), plus unreadable files and stray
+   * temp files. Returns how many files were removed.
+   */
+  clear(kind?: CacheEntry['kind']): number {
+    let removed = 0;
+    for (const name of readdirSync(this.dir)) {
+      if (!name.endsWith('.json') && !name.endsWith('.tmp')) continue;
+      const file = join(this.dir, name);
+      let drop = true;
+      if (kind && name.endsWith('.json')) {
+        try {
+          drop = (JSON.parse(readFileSync(file, 'utf8')) as CacheEntry).kind === kind;
+        } catch {
+          drop = true;
+        }
+      }
+      if (drop) {
+        this.remove(file);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
   private remove(file: string): void {
     try {
       unlinkSync(file);

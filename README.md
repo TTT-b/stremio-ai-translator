@@ -2,7 +2,7 @@
 
 A real-time AI subtitle translator for [Stremio](https://www.stremio.com/). When you play a movie
 or episode it offers a subtitle in your language (Hebrew by default). If OpenSubtitles already has
-one it is used directly; otherwise a source subtitle is downloaded, translated by Google Gemini,
+one it is used directly; otherwise a source subtitle is downloaded, translated by AI (Gemini, Claude or OpenAI),
 validated, cached and served to the player.
 
 > **Version 1 is a local, single-user app.** It runs on your own computer at `127.0.0.1` and is
@@ -27,7 +27,8 @@ validated, cached and served to the player.
 ## Requirements
 
 - Node.js 22 or newer (`node -v`)
-- A [Gemini API key](https://aistudio.google.com/apikey)
+- An AI API key: [Google Gemini](https://aistudio.google.com/apikey), Anthropic Claude or OpenAI
+  (the app detects which one from the key's start: `AIza`, `sk-ant`, `sk-`)
 - A free [OpenSubtitles.com](https://www.opensubtitles.com) account and an API consumer key
   (create one at https://www.opensubtitles.com/en/consumers)
 - Stremio desktop
@@ -41,7 +42,7 @@ notepad .env                    # fill in the keys, save, close
 npm start
 ```
 
-In `.env` set `GEMINI_API_KEY`, `OPENSUBTITLES_API_KEY`, `OPENSUBTITLES_USERNAME` and
+In `.env` set `AI_API_KEY`, `OPENSUBTITLES_API_KEY`, `OPENSUBTITLES_USERNAME` and
 `OPENSUBTITLES_PASSWORD` (the account login is required for downloads). Every option is explained
 in [`.env.example`](.env.example). You can also paste the keys on the config page instead.
 Set `RTL_FIX=true` for Hebrew/Arabic if punctuation looks wrong in your player.
@@ -95,10 +96,15 @@ from the finished parts on the next attempt.
 ## Config page
 
 - **API keys** show configured/missing (never the values); **Save keys** writes them to `.env`.
-- **Settings**: target language (saved to `settings.json`). The app always uses the Gemini model
-  `gemini-3.5-flash-lite`; there is nothing to choose. A green "Settings saved" message confirms
+- **AI Provider API Key**: paste a Gemini (`AIza...`), Anthropic (`sk-ant-...`) or OpenAI (`sk-...`)
+  key; the app picks the provider and a fixed model (`gemini-3.5-flash-lite`, `claude-haiku-5-5`,
+  `gpt-4o-mini`). An unrecognised key shows a warning and **Save keys** stays disabled.
+- **Settings**: target language and **Dual Subtitles** (original line on top, translation below it;
+  saved to `settings.json`). **Clear Translation Cache** deletes saved translations (downloaded
+  sources are kept) and shows a toast. **Live status** shows the app state and lines translated this
+  session. A green "Settings saved" message confirms
   the save.
-- **Test Gemini / Test OpenSubtitles** and **Translate built-in sample** verify your setup.
+- **Test AI provider / Test OpenSubtitles** and **Translate built-in sample** verify your setup.
 - **Installation** shows the install button and the manifest URL. Saving shows a toast message.
 
 The page makes no third-party requests: Tailwind CSS is built locally into
@@ -139,7 +145,7 @@ curl.exe -X POST --data-binary "@my.srt" "http://127.0.0.1:7000/dev/translate?la
 
 ## Privacy
 
-Subtitle dialogue is sent to Google Gemini for translation. Provider quotas, billing and free-tier
+Subtitle dialogue is sent to the AI provider that matches your key (Google Gemini, Anthropic or OpenAI). Provider quotas, billing and free-tier
 data-use terms are controlled by Google and OpenSubtitles, not by this add-on. Logs never contain
 keys or (by default) dialogue.
 
