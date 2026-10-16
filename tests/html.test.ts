@@ -99,6 +99,8 @@ describe('premium features', () => {
     expect(page).toContain('Clear Translation Cache');
     expect(page).toContain('Waiting for Stremio...');
     expect(page).toContain('Subtitle lines translated this session');
+    expect(page).toContain('id="st-progress"');
+    expect(page).toContain('out of');
   });
 
   it('uses a two-column grid on wide screens', () => {

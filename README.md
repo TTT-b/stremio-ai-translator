@@ -45,7 +45,8 @@ npm start
 In `.env` set `AI_API_KEY`, `OPENSUBTITLES_API_KEY`, `OPENSUBTITLES_USERNAME` and
 `OPENSUBTITLES_PASSWORD` (the account login is required for downloads). Every option is explained
 in [`.env.example`](.env.example). You can also paste the keys on the config page instead.
-Set `RTL_FIX=true` for Hebrew/Arabic if punctuation looks wrong in your player.
+The RTL punctuation fix for Hebrew/Arabic is always on (`RTL_FIX=false` turns it off). The live status
+card shows "Translated X out of Y lines (Z%)" with a progress bar for the current subtitle.
 
 Then open http://127.0.0.1:7000/ . Success looks like
 `Open http://127.0.0.1:7000/ in your browser` in the terminal. Stop with Ctrl+C.

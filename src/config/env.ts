@@ -46,7 +46,13 @@ const envSchema = z.object({
   CHUNK_CONCURRENCY: intRange(3, 1, 6),
   CHUNK_MAX_RETRIES: intRange(2, 0, 5),
   GEMINI_TIMEOUT_MS: intRange(120000, 5000, 600000),
-  RTL_FIX: boolish,
+  /** On by default for RTL languages; only an explicit RTL_FIX=false turns it off. */
+  RTL_FIX: z
+    .string()
+    .optional()
+    .transform((v) => (v ?? '').trim().toLowerCase())
+    .pipe(z.enum(['', 'true', 'false', '1', '0']))
+    .transform((v) => v !== 'false' && v !== '0'),
   LOG_DIALOGUE: boolish,
   CACHE_TTL_DAYS: intRange(90, 1, 3650),
   SUB_WAIT_MS: intRange(15000, 0, 60000),

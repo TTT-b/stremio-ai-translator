@@ -39,6 +39,8 @@ export interface Job {
   finishedAt?: number;
   result?: JobResult;
   error?: AppError;
+  /** Lines finished so far / total lines of this media file. */
+  progress?: { done: number; total: number };
   promise: Promise<void>;
 }
 
@@ -124,6 +126,7 @@ export class JobManager {
     state: 'waiting' | 'translating' | 'idle' | 'error';
     running: number;
     linesTranslated: number;
+    progress: { done: number; total: number; percent: number } | null;
   } {
     const running = [...this.jobs.values()].filter((j) => j.status === 'running').length;
     const state =
@@ -134,7 +137,19 @@ export class JobManager {
           : this.lastFailed
             ? 'error'
             : 'idle';
-    return { state, running, linesTranslated: this.linesTranslated };
+    // The file being worked on now, else the most recent one that reported progress.
+    const withProgress = [...this.jobs.values()].filter((j) => j.progress);
+    const current = withProgress.filter((j) => j.status === 'running').pop() ?? withProgress.pop();
+    const p = current?.progress;
+    const progress =
+      p && p.total > 0
+        ? {
+            done: p.done,
+            total: p.total,
+            percent: Math.min(100, Math.floor((p.done / p.total) * 100)),
+          }
+        : null;
+    return { state, running, linesTranslated: this.linesTranslated, progress };
   }
 
   /** Forget finished jobs so a cleared cache is not shadowed by results kept in memory. */
@@ -235,13 +250,17 @@ export class JobManager {
     const { cache } = this.deps;
     const lang = findLanguage(job.spec.targetLanguage);
     if (!lang) throw new AppError('CONFIGURATION_INVALID', 'TARGET_LANGUAGE');
+    // Always on for right-to-left languages; RTL_FIX=false is the only way to opt out.
     const rtl = cfg.rtlFix && lang.rtl;
 
     // 1. Whole-job cache: replay costs no network at all.
     const dual = cfg.dualSubtitles;
     const jobKey = cacheKey({ job: job.id, rtl, ...(dual ? { dual } : {}), kind: 'job' });
     const hit = cache.get(jobKey);
-    if (hit) return { content: hit.content, via: 'cache', cues: hit.cues };
+    if (hit) {
+      job.progress = { done: hit.cues, total: hit.cues };
+      return { content: hit.content, via: 'cache', cues: hit.cues };
+    }
 
     // 2. Find the best subtitle.
     const source = this.deps.makeSource(cfg, log);
@@ -278,11 +297,13 @@ export class JobManager {
     }
     const parsed = parseSubtitle(raw);
     log.info({ stage: 'PARSER', cues: parsed.cues.length, format: parsed.format }, 'source parsed');
+    job.progress = { done: 0, total: parsed.cues.length };
 
     // 4a. Already in the target language: serve as SRT, no translation.
     if (selection.kind === 'direct') {
       const content = serializeSubtitle({ format: 'srt', cues: parsed.cues });
       this.safeSet(jobKey, 'translation', content, parsed.cues.length, log);
+      job.progress = { done: parsed.cues.length, total: parsed.cues.length };
       return { content, via: 'direct', cues: parsed.cues.length };
     }
 
@@ -304,6 +325,7 @@ export class JobManager {
     const cached = cache.get(trKey);
     if (cached) {
       this.safeSet(jobKey, 'translation', cached.content, cached.cues, log);
+      job.progress = { done: parsed.cues.length, total: parsed.cues.length };
       return { content: cached.content, via: 'cache', cues: cached.cues };
     }
 
@@ -340,6 +362,9 @@ export class JobManager {
       maxValidationRetries: cfg.chunkMaxRetries,
       rtlFix: rtl,
       dualSubtitles: dual,
+      onProgress: (done, total) => {
+        job.progress = { done, total };
+      },
       logger: log,
       logDialogue: cfg.logDialogue,
     });

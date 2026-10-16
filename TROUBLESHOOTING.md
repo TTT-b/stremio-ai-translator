@@ -45,8 +45,9 @@ subtitle's sync. Choose a different source release, or use Stremio's subtitle de
 
 ## Hebrew punctuation looks wrong
 
-Symptoms: periods or question marks at the wrong end of a line. Set `RTL_FIX=true` in `.env`,
-restart, reselect the subtitle. Turn it back off if it makes things worse.
+Symptoms: periods or question marks at the wrong end of a line. Since v1.4.2 the fix is always on
+for Hebrew/Arabic/Persian. If you set `RTL_FIX=false` in `.env`, remove that line, restart, and
+reselect the subtitle (old cached translations use a different key, so they are re-made).
 
 ## Slow or timed-out translations
 

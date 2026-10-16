@@ -8,7 +8,8 @@ describe('loadConfig', () => {
     expect(c.port).toBe(7000);
     expect(c.host).toBe('127.0.0.1');
     expect(c.targetLanguage).toBe('he');
-    expect(c.rtlFix).toBe(false);
+    expect(c.rtlFix).toBe(true);
+    expect(loadConfig({ RTL_FIX: 'false' }).rtlFix).toBe(false);
     expect(c.aiApiKey).toBe('');
     expect(c.dualSubtitles).toBe(false);
   });

@@ -48,6 +48,32 @@ describe('translateSubtitle', () => {
     );
   });
 
+  it('dual mode is exactly two lines even for multi-line cues, with RTL marks on line 2 only', async () => {
+    const multi = {
+      format: 'srt' as const,
+      cues: [{ index: 1, startMs: 0, endMs: 1000, text: 'Hi there,\nfriend.' }],
+    };
+    const provider = new FakeProvider((req) => ({
+      translations: req.cues.map((c) => ({ id: c.id, text: 'שלום\nחבר.' })),
+    }));
+    const r = await translateSubtitle(multi, provider, opts({ dualSubtitles: true, rtlFix: true }));
+    const lines = (r.file.cues[0]?.text ?? '').split('\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe('Hi there, friend.');
+    expect(lines[1]).toBe('‏שלום חבר.‏');
+  });
+
+  it('reports progress as cues finish', async () => {
+    const seen: [number, number][] = [];
+    await translateSubtitle(
+      source,
+      new FakeProvider(),
+      opts({ onProgress: (d, t) => seen.push([d, t]) }),
+    );
+    expect(seen[0]).toEqual([0, 3]);
+    expect(seen[seen.length - 1]).toEqual([3, 3]);
+  });
+
   it('retries an invalid chunk then succeeds', async () => {
     const provider = new FakeProvider((req, n) =>
       n === 1

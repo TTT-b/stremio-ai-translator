@@ -28,6 +28,8 @@ export interface PipelineOptions {
   rtlFix: boolean;
   /** Keep the original text on top and put the translation directly below it. */
   dualSubtitles?: boolean;
+  /** Called after each chunk with cues finished so far and the file's total. */
+  onProgress?: (done: number, total: number) => void;
   logger: Logger;
   retryBaseDelayMs?: number;
   retryMaxDelayMs?: number;
@@ -183,9 +185,14 @@ export async function translateSubtitle(
     'starting translation',
   );
 
-  const results = await runPool(chunks, opts.concurrency, (chunk) =>
-    translateOneChunk(chunk, chunks.length, provider, opts),
-  );
+  let doneCues = 0;
+  opts.onProgress?.(0, source.cues.length);
+  const results = await runPool(chunks, opts.concurrency, async (chunk) => {
+    const r = await translateOneChunk(chunk, chunks.length, provider, opts);
+    doneCues += chunk.cues.length;
+    opts.onProgress?.(doneCues, source.cues.length);
+    return r;
+  });
 
   const byId = new Map<string, string>();
   const usage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
@@ -197,11 +204,17 @@ export async function translateSubtitle(
 
   const cues: Cue[] = source.cues.map((c) => {
     let text = (byId.get(String(c.index)) ?? '').trim();
-    if (opts.rtlFix) text = applyRtlFix(text);
-    // Added here, not by the AI: the original line is never re-typed or altered.
-    if (opts.dualSubtitles)
-      text = `${c.text.trim()}
-${text}`;
+    if (opts.dualSubtitles) {
+      // Strictly two lines: original, "\n", translation. Inner line breaks are folded into
+      // spaces so a multi-line cue cannot produce more (or blank) lines that players mis-render.
+      const oneLine = (s: string) => s.replace(/\s*\n\s*/g, ' ').trim();
+      const original = oneLine(c.text);
+      let translated = oneLine(text);
+      if (opts.rtlFix) translated = applyRtlFix(translated);
+      text = translated === '' ? original : `${original}\n${translated}`;
+    } else if (opts.rtlFix) {
+      text = applyRtlFix(text);
+    }
     return { ...c, text };
   });
   assertSameStructure(source.cues, cues);

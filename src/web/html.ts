@@ -156,6 +156,7 @@ ${d.desktop ? titleBar : ''}
 <div class="rounded-xl border border-slate-700/60 bg-slate-950/50 px-4 py-3"><div class="text-xs uppercase tracking-wide text-slate-500">State</div><div class="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-100"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-slate-500"></span><span id="st-state">Waiting for Stremio...</span></div></div>
 <div class="rounded-xl border border-slate-700/60 bg-slate-950/50 px-4 py-3"><div class="text-xs uppercase tracking-wide text-slate-500">Subtitle lines translated this session</div><div id="st-lines" class="mt-1 text-2xl font-bold text-white">0</div></div>
 </div>
+<div class="mt-3 rounded-xl border border-slate-700/60 bg-slate-950/50 px-4 py-3"><div class="text-xs uppercase tracking-wide text-slate-500">Current subtitle file</div><div id="st-progress-text" class="mt-1 text-sm font-semibold text-slate-100">No subtitle in progress</div><progress id="st-progress" class="mt-2 block h-2 w-full accent-indigo-400" max="100" value="0"></progress></div>
 </section>
 
 <section class="${card}">${heading('Test connections')}
@@ -246,6 +247,11 @@ const refreshStatus = async () => {
     document.getElementById('st-state').textContent = st[0];
     document.getElementById('st-dot').className = 'h-2.5 w-2.5 rounded-full ' + st[1];
     document.getElementById('st-lines').textContent = String(r.linesTranslated);
+    const p = r.progress;
+    document.getElementById('st-progress-text').textContent = p
+      ? 'Translated ' + p.done + ' out of ' + p.total + ' lines (' + p.percent + '%)'
+      : 'No subtitle in progress';
+    document.getElementById('st-progress').value = p ? p.percent : 0;
   } catch { /* the app may be restarting */ }
 };
 refreshStatus();
