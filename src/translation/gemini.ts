@@ -87,7 +87,7 @@ export class GeminiProvider implements TranslationProvider {
         ...base,
         ok: false,
         code: 'CONFIGURATION_INVALID',
-        message: 'GEMINI_API_KEY is not set in .env.',
+        message: 'Gemini API key is not set. Add it in the API keys card.',
       };
     }
     try {

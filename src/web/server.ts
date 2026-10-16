@@ -175,7 +175,7 @@ export function createApp(deps: ServerDeps): express.Express {
 
   app.use('/api', express.json({ limit: '10kb' }));
 
-  app.get('/', (_req, res) => {
+  app.get('/', (req, res) => {
     const c = current();
     const nonce = randomBytes(16).toString('base64');
     res.setHeader(
@@ -185,6 +185,7 @@ export function createApp(deps: ServerDeps): express.Express {
     const manifestUrl = `http://127.0.0.1:${c.port}/manifest.json`;
     res.type('html').send(
       renderStatusPage({
+        desktop: (req.get('user-agent') ?? '').includes('Electron/'),
         nonce,
         geminiConfigured: c.geminiApiKey !== '',
         openSubtitlesKeyConfigured: c.openSubtitlesApiKey !== '',
@@ -277,7 +278,7 @@ export function createApp(deps: ServerDeps): express.Express {
       logger.warn({ stage: 'CONFIG', errorCode: e.code }, 'saving keys failed');
       res.status(500).json({
         ok: false,
-        message: `Could not save keys (${e.message}). Edit the .env file manually.`,
+        message: `Could not save keys (${e.message}). Make sure the app data folder is writable.`,
       });
     }
   });

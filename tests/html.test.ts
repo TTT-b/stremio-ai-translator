@@ -29,3 +29,36 @@ describe('config page', () => {
     expect(page).toMatch(/<style nonce="abc">[^<]*\.rounded-2xl/);
   });
 });
+
+describe('desktop title bar', () => {
+  const base = {
+    nonce: 'abc',
+    geminiConfigured: false,
+    openSubtitlesKeyConfigured: false,
+    openSubtitlesLoginConfigured: false,
+    openSubtitlesUsername: '',
+    languages: [{ code: 'he', name: 'Hebrew' }],
+    models: ['m1'],
+    targetLanguage: 'he',
+    model: 'm1',
+    manifestUrl: 'http://127.0.0.1:7000/manifest.json',
+    installUrl: 'stremio://127.0.0.1:7000/manifest.json',
+    stremioReady: true,
+    rtlFix: false,
+  };
+
+  it('is only rendered inside the desktop window', () => {
+    expect(renderStatusPage(base)).not.toContain('Close the Translator?');
+    expect(renderStatusPage({ ...base, desktop: true })).toContain('Close the Translator?');
+  });
+
+  it('offers tray and quit choices in the exit modal', () => {
+    const html = renderStatusPage({ ...base, desktop: true });
+    expect(html).toContain('Minimize to System Tray');
+    expect(html).toContain('Quit Program');
+  });
+
+  it('no longer mentions .env', () => {
+    expect(page).not.toContain('.env');
+  });
+});

@@ -56,6 +56,48 @@ Then open http://127.0.0.1:7000/ . Success looks like
 > it at the provider and create a new one. Keys are never shown on the config page, written to
 > logs, or put in URLs.
 
+## Desktop app (Windows installer, no console window)
+
+1. Run `Stremio-AI-Subtitle-Translator-Setup-<version>.exe` and wait; the app opens by itself.
+2. Paste your keys into the **API keys** card in the window and press Save. Success looks like
+   a "Saved" message; the keys are never shown again.
+3. The window has its own title bar. The **X** asks "Close the Translator?": **Minimize to System
+   Tray** hides the app (bottom-right, near the clock) and translations keep running; **Quit
+   Program** stops the add-on. Right-click the tray icon for **Open UI** or **Quit**.
+4. Continue with **Install in Stremio** below, using http://127.0.0.1:7000/manifest.json.
+
+Keys, `settings.json`, `data/` and `logs/` live in your user profile folder
+(`%APPDATA%\stremio-ai-subtitle-translator`), not next to the app and not in the installer.
+Windows SmartScreen may warn about an unsigned app: choose **More info -> Run anyway**.
+Uninstalling keeps that folder; delete it to remove your saved keys.
+
+Updates: the installed app checks GitHub Releases for a newer version at start and every 6 hours,
+downloads it quietly and installs it when you quit. To publish one, raise `version` in
+`package.json`, run `npm run dist`, and upload the installer plus `latest.yml` (both in `release/`)
+to a new GitHub release tagged `v<version>`.
+
+Build it yourself (Node.js 22+): `npm run dist` writes the installer to `release/`.
+`npm run desktop` opens the app without packaging.
+
+## Windows .exe (no Node.js needed)
+
+1. Download `stremio-ai-translator.exe` from the
+   [Releases page](https://github.com/TTT-b/stremio-ai-translator/releases) and put it in its own
+   folder, for example `C:\StremioTranslator`.
+2. In that same folder create a file named `.env` (copy [`.env.example`](.env.example) and fill in
+   the keys; or skip this and paste the keys on the config page, which creates `.env` for you).
+3. Double-click the `.exe`. A console window opens; leave it open while you watch. Success looks
+   like `Open http://127.0.0.1:7000/ in your browser`.
+4. Open http://127.0.0.1:7000/ and continue with **Install in Stremio** below.
+
+`.env`, `settings.json`, `data/` and `logs/` are always read from and written to the folder that
+contains the `.exe`, never inside it. Windows SmartScreen may warn about an unsigned app the first
+time: choose **More info -> Run anyway**. Never share your `.env`.
+
+Build the `.exe` yourself (needs Node.js 22+): `npm run build:exe` produces
+`dist/stremio-ai-translator.exe`. It bundles the code and the locally built CSS with Node's
+single-executable support, so nothing is downloaded at run time.
+
 ## Install in Stremio
 
 1. Keep `npm start` running.

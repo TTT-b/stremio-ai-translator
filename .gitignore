@@ -12,3 +12,5 @@ dist/
 .DS_Store
 Thumbs.db
 *.zip
+dist-electron/
+release/

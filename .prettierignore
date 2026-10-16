@@ -5,3 +5,5 @@ dist/
 package-lock.json
 src/web/tailwind.generated.css
 
+dist-electron/
+release/

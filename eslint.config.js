@@ -2,7 +2,7 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['node_modules/', 'data/', 'logs/', 'dist/'] },
+  { ignores: ['node_modules/', 'data/', 'logs/', 'dist/', 'dist-electron/', 'release/'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

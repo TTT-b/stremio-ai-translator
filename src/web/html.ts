@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { DEFAULT_MODEL } from '../config/languages';
 
+/** Replaced at build time by scripts/build-exe.mjs; undefined when running from source. */
+declare const __TAILWIND_CSS__: string | undefined;
+
 export function escapeHtml(value: unknown): string {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -25,13 +28,16 @@ export interface StatusPageData {
   installUrl: string;
   stremioReady: boolean;
   rtlFix: boolean;
+  /** True inside the Electron desktop window: renders the custom title bar. */
+  desktop?: boolean;
 }
 
 /** Locally built Tailwind CSS (npm run build:css), inlined so the page loads nothing external. */
-const CSS = readFileSync(new URL('./tailwind.generated.css', import.meta.url), 'utf8').replace(
-  /<\/style/gi,
-  '<\\/style',
-);
+const CSS = (
+  typeof __TAILWIND_CSS__ === 'string'
+    ? __TAILWIND_CSS__ // embedded by scripts/build-exe.mjs
+    : readFileSync(new URL('./tailwind.generated.css', import.meta.url), 'utf8')
+).replace(/<\/style/gi, '<\\/style');
 
 const card =
   'rounded-2xl border border-slate-700/60 bg-slate-900/70 p-6 shadow-xl shadow-black/30 backdrop-blur';
@@ -55,6 +61,23 @@ const heading = (title: string, hint = '') =>
   `<div class="mb-4"><h2 class="text-lg font-semibold text-white">${title}</h2>${
     hint ? `<p class="text-sm text-slate-400">${hint}</p>` : ''
   }</div>`;
+
+const winBtn =
+  'no-drag flex h-9 w-12 items-center justify-center text-slate-400 transition hover:bg-slate-700/60 hover:text-white focus:outline-none';
+/** Custom title bar for the frameless desktop window (drag area + minimize / close-to-tray). */
+const titleBar = `<div class="drag fixed inset-x-0 top-0 z-50 flex h-9 items-center justify-between border-b border-slate-800 bg-slate-950/95 backdrop-blur">
+<div class="flex items-center gap-2 pl-3 text-xs font-medium text-slate-400"><span class="h-2.5 w-2.5 rounded-full bg-gradient-to-br from-indigo-400 to-fuchsia-500"></span>AI Subtitle Translator</div>
+<div class="flex"><button type="button" id="win-min" class="${winBtn}" aria-label="Minimize"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor"/></svg></button>
+<button type="button" id="win-close" class="${winBtn} hover:!bg-rose-600" aria-label="Close"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor"/></svg></button></div></div>
+<div id="exit-modal" class="no-drag fixed inset-0 z-[60] hidden items-center justify-center bg-slate-950/80 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="exit-title">
+<div class="w-full max-w-sm rounded-2xl border border-slate-700/70 bg-slate-900 p-6 shadow-2xl shadow-black/60">
+<h2 id="exit-title" class="text-lg font-semibold text-white">Close the Translator?</h2>
+<p class="mt-1 text-sm text-slate-400">Minimizing keeps translations running in the background.</p>
+<div class="mt-5 grid gap-2">
+<button type="button" id="exit-tray" class="rounded-xl bg-gradient-to-r from-indigo-500 to-fuchsia-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300">Minimize to System Tray</button>
+<button type="button" id="exit-quit" class="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm font-semibold text-rose-300 transition hover:bg-rose-600 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">Quit Program</button>
+<button type="button" id="exit-cancel" class="px-4 py-2 text-sm text-slate-400 transition hover:text-white focus:outline-none">Cancel</button>
+</div></div></div>`;
 
 export function renderStatusPage(d: StatusPageData): string {
   const langOptions = d.languages
@@ -90,7 +113,8 @@ export function renderStatusPage(d: StatusPageData): string {
 <title>AI Subtitle Translator</title>
 <style nonce="${escapeHtml(d.nonce)}">${CSS}</style></head>
 <body class="min-h-screen bg-[radial-gradient(900px_450px_at_50%_-120px,rgba(99,102,241,.28),transparent)] font-sans text-slate-200 antialiased">
-<main class="mx-auto max-w-3xl px-4 pb-24 pt-12">
+${d.desktop ? titleBar : ''}
+<main class="mx-auto max-w-3xl px-4 pb-24 ${d.desktop ? 'pt-20' : 'pt-12'}">
 <header class="mb-8 text-center sm:text-left">
   <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300">Local &middot; runs only on this computer</div>
   <h1 class="bg-gradient-to-r from-white to-indigo-300 bg-clip-text text-3xl font-extrabold tracking-tight text-transparent sm:text-4xl">AI Subtitle Translator</h1>
@@ -99,7 +123,7 @@ export function renderStatusPage(d: StatusPageData): string {
 
 <div class="space-y-6">
 
-<section class="${card}">${heading('API keys', 'Stored in the local .env file and never shown again.')}
+<section class="${card}">${heading('API keys', 'Stored securely on your local machine. Never shown again.')}
 <ul class="mb-5 grid gap-2">
 <li class="flex items-center justify-between gap-3 rounded-xl border border-slate-700/60 bg-slate-950/50 px-3.5 py-2.5"><span class="text-sm">Gemini API key</span>${badge(d.geminiConfigured)}</li>
 <li class="flex items-center justify-between gap-3 rounded-xl border border-slate-700/60 bg-slate-950/50 px-3.5 py-2.5"><span class="text-sm">OpenSubtitles API key</span>${badge(d.openSubtitlesKeyConfigured)}</li>
@@ -120,7 +144,7 @@ export function renderStatusPage(d: StatusPageData): string {
 </form>
 </section>
 
-<section class="${card}">${heading('Preferences', `RTL punctuation fix: ${d.rtlFix ? 'on' : 'off'} (set RTL_FIX in .env).`)}
+<section class="${card}">${heading('Preferences', `RTL punctuation fix: ${d.rtlFix ? 'on' : 'off'} (advanced option, see Troubleshooting).`)}
 <div class="grid gap-4 sm:grid-cols-2">
 <div><label class="${labelCls}" for="lang">Target language</label><select class="${field}" id="lang">${langOptions}</select></div>
 <div><label class="${labelCls}" for="model">Gemini model</label><select class="${field}" id="model">${modelOptions}</select></div>
@@ -191,6 +215,17 @@ document.getElementById('sample').addEventListener('click', async () => {
     if (r.ok) { out.textContent = r.preview; out.hidden = false; } else { out.hidden = true; }
   } catch { show('r-sample', false, 'request failed'); }
 });
+if (window.desktop) {
+  document.getElementById('win-min').addEventListener('click', () => window.desktop.minimize());
+  const modal = document.getElementById('exit-modal');
+  const setModal = (open) => { modal.classList.toggle('hidden', !open); modal.classList.toggle('flex', open); };
+  document.getElementById('win-close').addEventListener('click', () => setModal(true));
+  document.getElementById('exit-cancel').addEventListener('click', () => setModal(false));
+  document.getElementById('exit-tray').addEventListener('click', () => { setModal(false); window.desktop.hide(); });
+  document.getElementById('exit-quit').addEventListener('click', () => window.desktop.quit());
+  modal.addEventListener('click', (e) => { if (e.target === modal) setModal(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setModal(false); });
+}
 const copy = document.getElementById('copy');
 if (copy) copy.addEventListener('click', () => { navigator.clipboard.writeText(document.getElementById('manifest').value); toast(true, 'Manifest URL copied'); });
 </script>

@@ -6,8 +6,8 @@ log file - it never contains your keys.
 ## "Test Connection" fails
 
 1. Read the message next to the button; it names the cause.
-2. `Missing in .env` / `not set` -> open `.env`, fill the named variable, **restart** the add-on
-   (Ctrl+C in the terminal, then `npm start`).
+2. `Missing` / `not set` -> desktop app: paste the key in the **API keys** card and press Save.
+   Command line: fill the variable in `.env`, then restart (Ctrl+C, `npm start`).
 3. `API key was rejected` -> re-copy the key (no spaces or quotes). Gemini: create a new key at
    https://aistudio.google.com/apikey. OpenSubtitles: check the consumer API key at
    https://www.opensubtitles.com/en/consumers.

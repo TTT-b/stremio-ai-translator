@@ -9,7 +9,7 @@ export interface OpenSubtitlesCredentials {
   userAgent: string;
 }
 
-/** Missing .env variables for the given credentials (names only). */
+/** Missing credential variables for the given credentials (names only). */
 export function missingCredentials(c: OpenSubtitlesCredentials): string[] {
   const missing: string[] = [];
   if (!c.apiKey) missing.push('OPENSUBTITLES_API_KEY');

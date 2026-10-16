@@ -29,12 +29,14 @@ export const ERROR_META: Record<ErrorCode, ErrorMeta> = {
   CONFIGURATION_INVALID: {
     httpStatus: 500,
     retryable: false,
-    userMessage: 'The add-on configuration is incomplete or invalid. Check your .env file.',
+    userMessage:
+      'The add-on configuration is incomplete or invalid. Open the app and re-enter the key in the API keys card.',
   },
   INVALID_API_KEY: {
     httpStatus: 401,
     retryable: false,
-    userMessage: 'The API key was rejected by the provider. Check the key in your .env file.',
+    userMessage:
+      'The API key was rejected by the provider. Open the app and re-enter the key in the API keys card.',
   },
   PROVIDER_RATE_LIMITED: {
     httpStatus: 429,
@@ -64,7 +66,8 @@ export const ERROR_META: Record<ErrorCode, ErrorMeta> = {
   SOURCE_AUTH_FAILED: {
     httpStatus: 401,
     retryable: false,
-    userMessage: 'OpenSubtitles login failed. Check username and password in your .env file.',
+    userMessage:
+      'OpenSubtitles login failed. Re-enter your username and password in the API keys card.',
   },
   SOURCE_QUOTA_EXCEEDED: {
     httpStatus: 429,

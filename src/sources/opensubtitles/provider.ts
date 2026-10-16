@@ -131,7 +131,7 @@ export class OpenSubtitlesProvider implements SourceSubtitleProvider {
         ...base,
         ok: false,
         code: 'CONFIGURATION_INVALID',
-        message: `Missing in .env: ${missing.join(', ')}`,
+        message: `Missing: ${missing.join(', ')}. Add it in the API keys card.`,
       };
     }
     try {
