@@ -8,9 +8,7 @@ const page = renderStatusPage({
   openSubtitlesLoginConfigured: false,
   openSubtitlesUsername: '',
   languages: [{ code: 'he', name: 'Hebrew' }],
-  models: ['m1'],
   targetLanguage: 'he',
-  model: 'm1',
   manifestUrl: 'http://127.0.0.1:7000/manifest.json',
   installUrl: 'stremio://127.0.0.1:7000/manifest.json',
   stremioReady: true,
@@ -38,9 +36,7 @@ describe('desktop title bar', () => {
     openSubtitlesLoginConfigured: false,
     openSubtitlesUsername: '',
     languages: [{ code: 'he', name: 'Hebrew' }],
-    models: ['m1'],
     targetLanguage: 'he',
-    model: 'm1',
     manifestUrl: 'http://127.0.0.1:7000/manifest.json',
     installUrl: 'stremio://127.0.0.1:7000/manifest.json',
     stremioReady: true,
@@ -52,6 +48,11 @@ describe('desktop title bar', () => {
     expect(renderStatusPage({ ...base, desktop: true })).toContain('Close the Translator?');
   });
 
+  it('has minimize, maximize and close controls', () => {
+    const html = renderStatusPage({ ...base, desktop: true });
+    for (const id of ['win-min', 'win-max', 'win-close']) expect(html).toContain('id="' + id + '"');
+  });
+
   it('offers tray and quit choices in the exit modal', () => {
     const html = renderStatusPage({ ...base, desktop: true });
     expect(html).toContain('Minimize to System Tray');
@@ -60,5 +61,14 @@ describe('desktop title bar', () => {
 
   it('no longer mentions .env', () => {
     expect(page).not.toContain('.env');
+  });
+});
+
+describe('simplified settings', () => {
+  it('has no model picker and warns on non-Google keys', () => {
+    expect(page).not.toContain('id="model"');
+    expect(page).not.toContain('Gemini model');
+    expect(page).toContain("doesn't look like a valid Google API key");
+    expect(page).toContain("startsWith('AIza')");
   });
 });

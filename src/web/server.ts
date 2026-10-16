@@ -5,7 +5,7 @@ import { JobManager } from '../jobs/manager';
 import { createStremioRouter } from '../stremio/addon';
 import { IN_PROGRESS_MESSAGE, placeholderSrt } from '../stremio/placeholder';
 import express, { type NextFunction, type Request, type Response } from 'express';
-import { findLanguage, KNOWN_MODELS, LANGUAGES } from '../config/languages';
+import { findLanguage, LANGUAGES } from '../config/languages';
 import type { Config } from '../config/env';
 import {
   effectiveConfig,
@@ -193,9 +193,7 @@ export function createApp(deps: ServerDeps): express.Express {
           c.openSubtitlesUsername !== '' && c.openSubtitlesPassword !== '',
         openSubtitlesUsername: c.openSubtitlesUsername,
         languages: LANGUAGES.map((l) => ({ code: l.code, name: l.name })),
-        models: [...KNOWN_MODELS],
         targetLanguage: c.targetLanguage,
-        model: c.geminiModel,
         manifestUrl,
         installUrl: `stremio://127.0.0.1:${c.port}/manifest.json`,
         stremioReady: true,

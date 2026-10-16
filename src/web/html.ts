@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { DEFAULT_MODEL } from '../config/languages';
 
-/** Replaced at build time by scripts/build-exe.mjs; undefined when running from source. */
+/** Replaced at build time by scripts/build-electron.mjs; undefined when running from source. */
 declare const __TAILWIND_CSS__: string | undefined;
 
 export function escapeHtml(value: unknown): string {
@@ -21,9 +20,7 @@ export interface StatusPageData {
   /** Not secret: shown so the user can see which account is configured. */
   openSubtitlesUsername: string;
   languages: { code: string; name: string }[];
-  models: string[];
   targetLanguage: string;
-  model: string;
   manifestUrl: string;
   installUrl: string;
   stremioReady: boolean;
@@ -35,7 +32,7 @@ export interface StatusPageData {
 /** Locally built Tailwind CSS (npm run build:css), inlined so the page loads nothing external. */
 const CSS = (
   typeof __TAILWIND_CSS__ === 'string'
-    ? __TAILWIND_CSS__ // embedded by scripts/build-exe.mjs
+    ? __TAILWIND_CSS__ // embedded by scripts/build-electron.mjs
     : readFileSync(new URL('./tailwind.generated.css', import.meta.url), 'utf8')
 ).replace(/<\/style/gi, '<\\/style');
 
@@ -68,6 +65,7 @@ const winBtn =
 const titleBar = `<div class="drag fixed inset-x-0 top-0 z-50 flex h-9 items-center justify-between border-b border-slate-800 bg-slate-950/95 backdrop-blur">
 <div class="flex items-center gap-2 pl-3 text-xs font-medium text-slate-400"><span class="h-2.5 w-2.5 rounded-full bg-gradient-to-br from-indigo-400 to-fuchsia-500"></span>AI Subtitle Translator</div>
 <div class="flex"><button type="button" id="win-min" class="${winBtn}" aria-label="Minimize"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor"/></svg></button>
+<button type="button" id="win-max" class="${winBtn}" aria-label="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect id="win-max-icon" x=".5" y=".5" width="9" height="9" stroke="currentColor"/></svg></button>
 <button type="button" id="win-close" class="${winBtn} hover:!bg-rose-600" aria-label="Close"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor"/></svg></button></div></div>
 <div id="exit-modal" class="no-drag fixed inset-0 z-[60] hidden items-center justify-center bg-slate-950/80 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="exit-title">
 <div class="w-full max-w-sm rounded-2xl border border-slate-700/70 bg-slate-900 p-6 shadow-2xl shadow-black/60">
@@ -84,13 +82,6 @@ export function renderStatusPage(d: StatusPageData): string {
     .map(
       (l) =>
         `<option value="${escapeHtml(l.code)}"${l.code === d.targetLanguage ? ' selected' : ''}>${escapeHtml(l.name)} (${escapeHtml(l.code)})</option>`,
-    )
-    .join('');
-  const modelList = d.models.includes(d.model) ? d.models : [d.model, ...d.models];
-  const modelOptions = modelList
-    .map(
-      (m) =>
-        `<option value="${escapeHtml(m)}"${m === d.model ? ' selected' : ''}>${escapeHtml(m)}${m === DEFAULT_MODEL ? ' (recommended)' : ''}</option>`,
     )
     .join('');
 
@@ -132,7 +123,8 @@ ${d.desktop ? titleBar : ''}
 <form id="keys" autocomplete="off">
 <div class="grid gap-4 sm:grid-cols-2">
 <div><label class="${labelCls}" for="k-gemini">Gemini API key</label>
-<input class="${field}" id="k-gemini" type="password" autocomplete="off" placeholder="${d.geminiConfigured ? 'saved - leave empty to keep' : 'paste key'}"></div>
+<input class="${field}" id="k-gemini" type="password" autocomplete="off" placeholder="${d.geminiConfigured ? 'saved - leave empty to keep' : 'paste key'}">
+<p id="k-gemini-warn" class="mt-1.5 hidden text-xs text-amber-300" role="alert">This doesn't look like a valid Google API key (it should start with "AIza").</p></div>
 <div><label class="${labelCls}" for="k-os">OpenSubtitles API key</label>
 <input class="${field}" id="k-os" type="password" autocomplete="off" placeholder="${d.openSubtitlesKeyConfigured ? 'saved - leave empty to keep' : 'paste key'}"></div>
 <div><label class="${labelCls}" for="k-user">OpenSubtitles username</label>
@@ -140,23 +132,20 @@ ${d.desktop ? titleBar : ''}
 <div><label class="${labelCls}" for="k-pass">OpenSubtitles password</label>
 <input class="${field}" id="k-pass" type="password" autocomplete="off" placeholder="${d.openSubtitlesLoginConfigured ? 'saved - leave empty to keep' : 'your opensubtitles.com password'}"></div>
 </div>
-<div class="mt-5 flex flex-wrap items-center gap-3"><button type="submit" class="${btnPrimary}">Save keys</button><span class="${result}" id="keys-result"></span></div>
+<div class="mt-5 grid gap-2"><button type="submit" class="${btnPrimary} w-full">Save keys</button><span class="${result} text-center" id="keys-result"></span></div>
 </form>
 </section>
 
 <section class="${card}">${heading('Preferences', `RTL punctuation fix: ${d.rtlFix ? 'on' : 'off'} (advanced option, see Troubleshooting).`)}
-<div class="grid gap-4 sm:grid-cols-2">
 <div><label class="${labelCls}" for="lang">Target language</label><select class="${field}" id="lang">${langOptions}</select></div>
-<div><label class="${labelCls}" for="model">Gemini model</label><select class="${field}" id="model">${modelOptions}</select></div>
-</div>
-<div class="mt-5 flex flex-wrap items-center gap-3"><button type="button" id="save" class="${btnPrimary}">Save settings</button><span class="${result}" id="save-result"></span></div>
+<div class="mt-5 grid gap-2"><button type="button" id="save" class="${btnPrimary} w-full">Save settings</button><span class="${result} text-center" id="save-result"></span></div>
 </section>
 
 <section class="${card}">${heading('Test connections')}
-<div class="space-y-3">
-<div class="flex flex-wrap items-center gap-3"><button type="button" class="${btn}" data-test="gemini">Test Gemini</button><span class="${result}" id="r-gemini"></span></div>
-<div class="flex flex-wrap items-center gap-3"><button type="button" class="${btn}" data-test="opensubtitles">Test OpenSubtitles</button><span class="${result}" id="r-opensubtitles"></span></div>
-<div class="flex flex-wrap items-center gap-3"><button type="button" class="${btn}" id="sample">Translate built-in sample</button><span class="${result}" id="r-sample"></span></div>
+<div class="grid gap-3 sm:grid-cols-3">
+<div class="flex flex-col gap-2"><button type="button" class="${btn} w-full" data-test="gemini">Test Gemini</button><span class="${result} text-center" id="r-gemini"></span></div>
+<div class="flex flex-col gap-2"><button type="button" class="${btn} w-full" data-test="opensubtitles">Test OpenSubtitles</button><span class="${result} text-center" id="r-opensubtitles"></span></div>
+<div class="flex flex-col gap-2"><button type="button" class="${btn} w-full" id="sample">Translate built-in sample</button><span class="${result} text-center" id="r-sample"></span></div>
 </div>
 <pre id="sample-out" hidden class="mt-4 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-slate-700 bg-slate-950/70 p-3 text-sm"></pre>
 </section>
@@ -188,7 +177,7 @@ document.querySelectorAll('[data-test]').forEach(b => b.addEventListener('click'
 }));
 document.getElementById('save').addEventListener('click', async () => {
   try {
-    const r = await post('/api/settings', {targetLanguage: document.getElementById('lang').value, geminiModel: document.getElementById('model').value});
+    const r = await post('/api/settings', {targetLanguage: document.getElementById('lang').value});
     show('save-result', r.ok, r.ok ? 'Settings saved' : r.message);
     toast(r.ok, r.ok ? 'Settings saved' : r.message);
   } catch { show('save-result', false, 'request failed'); toast(false, 'Request failed'); }
@@ -215,7 +204,15 @@ document.getElementById('sample').addEventListener('click', async () => {
     if (r.ok) { out.textContent = r.preview; out.hidden = false; } else { out.hidden = true; }
   } catch { show('r-sample', false, 'request failed'); }
 });
+const gemKey = document.getElementById('k-gemini');
+gemKey.addEventListener('input', () => {
+  const v = gemKey.value.trim();
+  document.getElementById('k-gemini-warn').classList.toggle('hidden', v === '' || v.startsWith('AIza'));
+});
 if (window.desktop) {
+  const maxIcon = document.getElementById('win-max-icon');
+  document.getElementById('win-max').addEventListener('click', () => window.desktop.toggleMaximize());
+  window.desktop.onMaximizeChange((m) => { maxIcon.setAttribute('width', m ? '7' : '9'); maxIcon.setAttribute('height', m ? '7' : '9'); maxIcon.setAttribute('y', m ? '2.5' : '.5'); });
   document.getElementById('win-min').addEventListener('click', () => window.desktop.minimize());
   const modal = document.getElementById('exit-modal');
   const setModal = (open) => { modal.classList.toggle('hidden', !open); modal.classList.toggle('flex', open); };

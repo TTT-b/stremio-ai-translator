@@ -14,7 +14,7 @@ log file - it never contains your keys.
 4. `OpenSubtitles login failed` -> username/password are your opensubtitles.com account (not the
    API key). Try logging in on the website.
 5. `model is unavailable` / `not available to this key` -> Google retired that model for new
-   users. Pick another model on the config page (or set `GEMINI_MODEL` in `.env`).
+   users. The app uses one fixed model, so install the latest version of the app (updates arrive automatically).
    5a. `quota or billing limit` with `prepaid credits depleted` -> the Google project behind your key
    has no credits. Open https://ai.studio/projects, check billing/credits for the project, or
    create a key in a different project. Newer (3.x) models need credits; 2.5 models are closed

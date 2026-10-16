@@ -23,7 +23,6 @@ const optionalString = z
 
 const envSchema = z.object({
   GEMINI_API_KEY: optionalString,
-  GEMINI_MODEL: optionalString.transform((v) => v || DEFAULT_MODEL),
   OPENSUBTITLES_API_KEY: optionalString,
   OPENSUBTITLES_USERNAME: optionalString,
   OPENSUBTITLES_PASSWORD: optionalString,
@@ -88,7 +87,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const e = parsed.data;
   return {
     geminiApiKey: e.GEMINI_API_KEY,
-    geminiModel: e.GEMINI_MODEL,
+    geminiModel: DEFAULT_MODEL, // fixed on purpose: not user-selectable
     openSubtitlesApiKey: e.OPENSUBTITLES_API_KEY,
     openSubtitlesUsername: e.OPENSUBTITLES_USERNAME,
     openSubtitlesPassword: e.OPENSUBTITLES_PASSWORD,

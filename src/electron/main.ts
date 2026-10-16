@@ -67,6 +67,9 @@ function createWindow(port: number): void {
       win?.hide();
     }
   });
+  const sendMaximized = () => win?.webContents.send('window:maximized', win.isMaximized());
+  win.on('maximize', sendMaximized);
+  win.on('unmaximize', sendMaximized);
   win.on('closed', () => {
     win = undefined;
   });
@@ -111,6 +114,12 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   ipcMain.on('window:minimize', (e) => BrowserWindow.fromWebContents(e.sender)?.minimize());
+  ipcMain.on('window:toggle-maximize', (e) => {
+    const w = BrowserWindow.fromWebContents(e.sender);
+    if (!w) return;
+    if (w.isMaximized()) w.unmaximize();
+    else w.maximize();
+  });
   // The page shows its own "Close the Translator?" modal and then asks for one of these.
   ipcMain.on('window:hide', (e) => BrowserWindow.fromWebContents(e.sender)?.hide());
   ipcMain.on('window:quit', () => app.quit());

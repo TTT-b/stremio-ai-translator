@@ -22,8 +22,7 @@ execFileSync(
   { stdio: 'inherit' },
 );
 
-await build({
-  entryPoints: { main: 'src/electron/main.ts', preload: 'src/electron/preload.ts' },
+const common = {
   outdir: 'dist-electron',
   outExtension: { '.js': '.cjs' },
   bundle: true,
@@ -32,11 +31,19 @@ await build({
   target: 'node22',
   external: ['electron'],
   logLevel: 'warning',
+};
+
+await build({
+  ...common,
+  entryPoints: { main: 'src/electron/main.ts' },
   define: {
     __TAILWIND_CSS__: JSON.stringify(readFileSync('src/web/tailwind.generated.css', 'utf8')),
     'import.meta.url': 'import_meta_url',
   },
   banner: { js: "const import_meta_url = require('node:url').pathToFileURL(__filename).href;" },
 });
+
+// The sandboxed preload may only require 'electron': no banner, no other imports.
+await build({ ...common, entryPoints: { preload: 'src/electron/preload.ts' } });
 
 console.log('Built dist-electron/main.cjs and preload.cjs');

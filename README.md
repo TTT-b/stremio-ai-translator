@@ -19,7 +19,7 @@ validated, cached and served to the player.
 - **Natural punctuation** - the prompt mirrors the source, so translations do not get a period on
   every fragment.
 - **Responsive local GUI** - a dark, card-based config page (Tailwind CSS) for keys, language,
-  model, connection tests, and install (button and copyable URL).
+  connection tests, and install (button and copyable URL).
 - **Caching and resilience** - file cache, background jobs with an "in progress" placeholder, and
   chunked translation that resumes after failures.
 - **Validation** - deterministic code owns parsing, timestamps and IDs; the AI only translates text.
@@ -32,7 +32,7 @@ validated, cached and served to the player.
   (create one at https://www.opensubtitles.com/en/consumers)
 - Stremio desktop
 
-## Setup
+## Run from source (developers)
 
 ```powershell
 npm install
@@ -79,28 +79,9 @@ to a new GitHub release tagged `v<version>`.
 Build it yourself (Node.js 22+): `npm run dist` writes the installer to `release/`.
 `npm run desktop` opens the app without packaging.
 
-## Windows .exe (no Node.js needed)
-
-1. Download `stremio-ai-translator.exe` from the
-   [Releases page](https://github.com/TTT-b/stremio-ai-translator/releases) and put it in its own
-   folder, for example `C:\StremioTranslator`.
-2. In that same folder create a file named `.env` (copy [`.env.example`](.env.example) and fill in
-   the keys; or skip this and paste the keys on the config page, which creates `.env` for you).
-3. Double-click the `.exe`. A console window opens; leave it open while you watch. Success looks
-   like `Open http://127.0.0.1:7000/ in your browser`.
-4. Open http://127.0.0.1:7000/ and continue with **Install in Stremio** below.
-
-`.env`, `settings.json`, `data/` and `logs/` are always read from and written to the folder that
-contains the `.exe`, never inside it. Windows SmartScreen may warn about an unsigned app the first
-time: choose **More info -> Run anyway**. Never share your `.env`.
-
-Build the `.exe` yourself (needs Node.js 22+): `npm run build:exe` produces
-`dist/stremio-ai-translator.exe`. It bundles the code and the locally built CSS with Node's
-single-executable support, so nothing is downloaded at run time.
-
 ## Install in Stremio
 
-1. Keep `npm start` running.
+1. Keep the desktop app (or `npm start`) running.
 2. Open http://127.0.0.1:7000/ and click **Install in Stremio** (manual alternative: Stremio ->
    Add-ons -> paste `http://127.0.0.1:7000/manifest.json`).
 3. Play a movie or episode, open the subtitles menu and pick the entry labelled by this add-on.
@@ -114,9 +95,9 @@ from the finished parts on the next attempt.
 ## Config page
 
 - **API keys** show configured/missing (never the values); **Save keys** writes them to `.env`.
-- **Settings**: target language and Gemini model (saved to `settings.json`). Recommended and
-  default model: `gemini-3.5-flash-lite`; alternative: `gemini-3.8-flash`. A green "Settings saved"
-  message confirms the save.
+- **Settings**: target language (saved to `settings.json`). The app always uses the Gemini model
+  `gemini-3.5-flash-lite`; there is nothing to choose. A green "Settings saved" message confirms
+  the save.
 - **Test Gemini / Test OpenSubtitles** and **Translate built-in sample** verify your setup.
 - **Installation** shows the install button and the manifest URL. Saving shows a toast message.
 

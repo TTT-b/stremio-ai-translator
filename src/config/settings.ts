@@ -10,10 +10,6 @@ const settingsSchema = z.object({
     .string()
     .refine((v) => findLanguage(v) !== undefined, 'unsupported language')
     .optional(),
-  geminiModel: z
-    .string()
-    .regex(/^[A-Za-z0-9._-]{1,64}$/, 'invalid model name')
-    .optional(),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
@@ -46,6 +42,5 @@ export function effectiveConfig(config: Config, settings: Settings): Config {
   return {
     ...config,
     targetLanguage: settings.targetLanguage ?? config.targetLanguage,
-    geminiModel: settings.geminiModel ?? config.geminiModel,
   };
 }
