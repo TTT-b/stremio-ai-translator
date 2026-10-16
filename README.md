@@ -28,7 +28,7 @@ validated, cached and served to the player.
 
 - Node.js 22 or newer (`node -v`)
 - An AI API key: [Google Gemini](https://aistudio.google.com/apikey), Anthropic Claude or OpenAI
-  (the app detects which one from the key's start: `AIza`, `sk-ant`, `sk-`)
+  (the app finds out which one by asking the providers when you save the key)
 - A free [OpenSubtitles.com](https://www.opensubtitles.com) account and an API consumer key
   (create one at https://www.opensubtitles.com/en/consumers)
 - Stremio desktop
@@ -96,9 +96,11 @@ from the finished parts on the next attempt.
 ## Config page
 
 - **API keys** show configured/missing (never the values); **Save keys** writes them to `.env`.
-- **AI Provider API Key**: paste a Gemini (`AIza...`), Anthropic (`sk-ant-...`) or OpenAI (`sk-...`)
-  key; the app picks the provider and a fixed model (`gemini-3.5-flash-lite`, `claude-haiku-5-5`,
-  `gpt-4o-mini`). An unrecognised key shows a warning and **Save keys** stays disabled.
+- **AI Provider API Key**: paste any Gemini, Anthropic or OpenAI key. **Save keys** checks it with
+  a free "list models" request to the providers (the one that looks most likely first; a wrong
+  guess means the key is also sent to the other providers, which refuse it). The first provider
+  that accepts it is saved and used from then on with a fixed model (`gemini-3.5-flash-lite`,
+  `claude-haiku-5-5`, `gpt-4o-mini`). If all refuse it, nothing is saved and an error is shown.
 - **Settings**: target language and **Dual Subtitles** (original line on top, translation below it;
   saved to `settings.json`). **Clear Translation Cache** deletes saved translations (downloaded
   sources are kept) and shows a toast. **Live status** shows the app state and lines translated this

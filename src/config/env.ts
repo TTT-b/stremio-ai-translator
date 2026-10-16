@@ -25,6 +25,8 @@ const optionalString = z
 const envSchema = z.object({
   /** Key for whichever provider it belongs to (detected from its prefix). */
   AI_API_KEY: optionalString,
+  /** Written by the app after a provider accepted the key: gemini, anthropic or openai. */
+  AI_PROVIDER: optionalString,
   /** Older name for the same thing; used when AI_API_KEY is empty. */
   GEMINI_API_KEY: optionalString,
   OPENSUBTITLES_API_KEY: optionalString,
@@ -96,7 +98,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   const e = parsed.data;
   const aiApiKey = e.AI_API_KEY || e.GEMINI_API_KEY;
-  const provider = detectProvider(aiApiKey) ?? (PROVIDERS[0] as (typeof PROVIDERS)[number]);
+  // The provider that verified the key wins; the prefix is only a fallback for hand-edited files.
+  const provider =
+    PROVIDERS.find((p) => p.id === e.AI_PROVIDER.toLowerCase()) ??
+    detectProvider(aiApiKey) ??
+    (PROVIDERS[0] as (typeof PROVIDERS)[number]);
   return {
     aiApiKey,
     aiProvider: provider.id,

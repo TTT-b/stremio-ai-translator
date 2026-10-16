@@ -27,7 +27,8 @@ import { parseSubtitle } from '../subtitles/parse';
 import { serializeSubtitle } from '../subtitles/serialize';
 import { GeminiProvider } from '../translation/gemini';
 import { AnthropicProvider, OpenAiProvider } from '../translation/httpProviders';
-import { detectProvider, PROVIDERS } from '../translation/providers';
+import { PROVIDERS } from '../translation/providers';
+import { verifyAiKey, type VerifyResult } from '../translation/verify';
 import type { TranslationProvider } from '../translation/provider';
 import { translateSubtitle } from '../translation/pipeline';
 import { renderStatusPage } from './html';
@@ -42,6 +43,8 @@ export interface ServerDeps {
   /** Builds the subtitle source provider. Injectable for tests. */
   createSourceProvider?: (config: Config, logger: Logger) => SourceSubtitleProvider;
   fetchImpl?: typeof fetch;
+  /** Asks the providers which one accepts an AI key. Injectable for tests. */
+  verifyAiKey?: (key: string) => Promise<VerifyResult>;
   /** .env file the key form writes to. Defaults to ./.env */
   envPath?: string;
   /** Called with the new config after keys are saved (so logging redaction stays current). */
@@ -135,6 +138,8 @@ export function createApp(deps: ServerDeps): express.Express {
       }
       return new GeminiProvider(opts);
     });
+
+  const verify = deps.verifyAiKey ?? ((key: string) => verifyAiKey(key, deps.fetchImpl));
 
   const dataDir = deps.dataDir ?? resolve(process.cwd(), 'data');
   const cache = new FileCache(join(dataDir, 'cache'), envConfig.cacheTtlDays * 86_400_000, logger);
@@ -282,24 +287,42 @@ export function createApp(deps: ServerDeps): express.Express {
   });
 
   // Save API keys to the local .env file. Values are never echoed back or logged.
-  app.post('/api/keys', (req, res) => {
+  app.post('/api/keys', async (req, res) => {
     const parsed = keysSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ ok: false, message: 'Invalid input.' });
-      return;
-    }
-    if (parsed.data.aiApiKey && !detectProvider(parsed.data.aiApiKey)) {
-      res.status(400).json({
-        ok: false,
-        message:
-          'That key is not recognised. Google keys start with "AIza", Anthropic with "sk-ant", OpenAI with "sk-".',
-      });
       return;
     }
     const updates: Record<string, string> = {};
     for (const [field, envName] of Object.entries(KEY_ENV_NAMES)) {
       const value = parsed.data[field as keyof typeof KEY_ENV_NAMES];
       if (value) updates[envName] = value;
+    }
+    // An AI key is saved only after a provider has accepted it; that provider is remembered.
+    let verifiedLabel = '';
+    if (updates.AI_API_KEY) {
+      const verdict = await verify(updates.AI_API_KEY);
+      logger.info(
+        {
+          stage: 'API',
+          ok: verdict.ok,
+          provider: verdict.ok ? verdict.provider.id : undefined,
+          reason: verdict.ok ? undefined : verdict.reason,
+        },
+        'ai key verification',
+      );
+      if (!verdict.ok) {
+        const unreachable = verdict.reason === 'unreachable';
+        res.status(unreachable ? 503 : 401).json({
+          ok: false,
+          message: unreachable
+            ? 'Could not verify the key right now (no clear answer from the providers). Check your internet connection and try again. Nothing was saved.'
+            : 'The key was rejected by Google Gemini, OpenAI and Anthropic. Nothing was saved - check that you copied the whole key.',
+        });
+        return;
+      }
+      updates.AI_PROVIDER = verdict.provider.id;
+      verifiedLabel = verdict.provider.label;
     }
     if (Object.keys(updates).length === 0) {
       res.status(400).json({ ok: false, message: 'Nothing to save.' });
@@ -312,7 +335,16 @@ export function createApp(deps: ServerDeps): express.Express {
       Object.assign(process.env, updates);
       deps.onConfigChange?.(envConfig);
       logger.info({ stage: 'CONFIG', updated: Object.keys(updates) }, 'keys saved to .env');
-      res.json({ ok: true, message: `Saved: ${Object.keys(updates).join(', ')}` });
+      const others = Object.keys(updates).filter((k) => k !== 'AI_API_KEY' && k !== 'AI_PROVIDER');
+      const parts = [
+        ...(verifiedLabel ? [`Key verified: ${verifiedLabel}`] : []),
+        ...(others.length ? [`Saved: ${others.join(', ')}`] : []),
+      ];
+      res.json({
+        ok: true,
+        message: parts.join('. ') || 'Saved',
+        ...(verifiedLabel ? { provider: verifiedLabel } : {}),
+      });
     } catch (err) {
       const e = isAppError(err) ? err : new AppError('CONFIGURATION_INVALID');
       logger.warn({ stage: 'CONFIG', errorCode: e.code }, 'saving keys failed');

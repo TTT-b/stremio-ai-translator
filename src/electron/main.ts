@@ -11,6 +11,7 @@ import type { Logger } from 'pino';
 import { isAppError } from '../errors';
 import { startAddon, type RunningAddon } from '../startup';
 import { ICON_PNG_BASE64 } from './iconData';
+import { isStremioInstallUrl } from './links';
 
 const TITLE = 'Stremio AI Subtitle Translator';
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -51,13 +52,13 @@ function createWindow(port: number): void {
   win.removeMenu();
   // The window may only show our own page; anything else opens in the default browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https:\/\//.test(url)) void shell.openExternal(url);
+    if (/^https:\/\//.test(url) || isStremioInstallUrl(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith(origin)) {
       event.preventDefault();
-      if (/^https:\/\//.test(url)) void shell.openExternal(url);
+      if (/^https:\/\//.test(url) || isStremioInstallUrl(url)) void shell.openExternal(url);
     }
   });
   // Any other close request (Alt+F4, taskbar) hides to the tray; only Quit really closes it.
@@ -123,6 +124,10 @@ if (!app.requestSingleInstanceLock()) {
   // The page shows its own "Close the Translator?" modal and then asks for one of these.
   ipcMain.on('window:hide', (e) => BrowserWindow.fromWebContents(e.sender)?.hide());
   ipcMain.on('window:quit', () => app.quit());
+  // Only our own add-on link may be handed to the operating system (opens Stremio desktop).
+  ipcMain.on('app:open-stremio', (_e, url: unknown) => {
+    if (typeof url === 'string' && isStremioInstallUrl(url)) void shell.openExternal(url);
+  });
 
   app.whenReady().then(async () => {
     try {

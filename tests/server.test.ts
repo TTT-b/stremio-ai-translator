@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../src/config/env';
 import { AppError } from '../src/errors';
+import { PROVIDERS } from '../src/translation/providers';
 import { createApp } from '../src/web/server';
 import { FakeProvider, silentLogger } from './helpers';
 import { createServer, request as httpRequest, type Server } from 'node:http';
@@ -64,6 +65,18 @@ describe('local web server', () => {
           },
         ],
       }),
+      // Stand-in for the providers' own answer: the key text decides who "accepts" it.
+      verifyAiKey: async (key) => {
+        if (key.startsWith('offline')) return { ok: false, reason: 'unreachable' };
+        if (key.startsWith('bad')) return { ok: false, reason: 'invalid' };
+        const id = key.startsWith('sk-ant')
+          ? 'anthropic'
+          : key.startsWith('sk-')
+            ? 'openai'
+            : 'gemini';
+        const provider = PROVIDERS.find((p) => p.id === id) as (typeof PROVIDERS)[number];
+        return { ok: true, provider };
+      },
       createProvider: () =>
         new FakeProvider(async (req) => {
           if (providerFailsWith) throw providerFailsWith;
@@ -151,15 +164,27 @@ describe('local web server', () => {
     expect(html).not.toContain(newKey);
   });
 
-  it('refuses to save an AI key with an unrecognised prefix', async () => {
+  it('rejects a key no provider accepts and leaves .env untouched', async () => {
     const before = readFileSync(envPath, 'utf8');
-    const res = await post('/api/keys', { aiApiKey: 'not-a-real-key-123' });
-    expect(res.status).toBe(400);
+    const res = await post('/api/keys', { aiApiKey: 'bad-key-123' });
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { ok: boolean }).ok).toBe(false);
     expect(readFileSync(envPath, 'utf8')).toBe(before);
   });
 
-  it('accepts Anthropic and OpenAI keys', async () => {
+  it('does not save when the providers cannot be reached', async () => {
+    const before = readFileSync(envPath, 'utf8');
+    const res = await post('/api/keys', { aiApiKey: 'offline-key' });
+    expect(res.status).toBe(503);
+    expect(readFileSync(envPath, 'utf8')).toBe(before);
+  });
+
+  it('remembers which provider accepted the key, whatever its prefix', async () => {
+    const res = await post('/api/keys', { aiApiKey: 'AQ.Ab8RN6FAKEKEYFAKEKEY' });
+    expect(await res.json()).toMatchObject({ ok: true, provider: 'Google Gemini' });
+    expect(readFileSync(envPath, 'utf8')).toContain('AI_PROVIDER=gemini');
     expect((await post('/api/keys', { aiApiKey: 'sk-ant-api03-FAKEFAKEFAKE' })).status).toBe(200);
+    expect(readFileSync(envPath, 'utf8')).toContain('AI_PROVIDER=anthropic');
     expect((await post('/api/keys', { aiApiKey: 'sk-FAKEFAKEFAKE' })).status).toBe(200);
     const html = await (await get('/')).text();
     expect(html).toContain('OpenAI');

@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import { PROVIDERS } from '../translation/providers';
 
 /** Replaced at build time by scripts/build-electron.mjs; undefined when running from source. */
 declare const __TAILWIND_CSS__: string | undefined;
@@ -91,7 +90,7 @@ export function renderStatusPage(d: StatusPageData): string {
     .join('');
 
   const install = d.stremioReady
-    ? `<a class="group inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 px-6 py-4 text-lg font-bold text-white shadow-xl shadow-indigo-500/30 transition duration-200 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl hover:shadow-fuchsia-500/40 active:scale-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300 sm:w-auto" href="${escapeHtml(d.installUrl)}">
+    ? `<a id="install" class="group inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 px-6 py-4 text-lg font-bold text-white shadow-xl shadow-indigo-500/30 transition duration-200 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl hover:shadow-fuchsia-500/40 active:scale-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300 sm:w-auto" href="${escapeHtml(d.installUrl)}">
          <span>Install in Stremio</span><span class="transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true">&rarr;</span></a>
        <p class="mt-5 text-sm text-slate-400">Or paste this address in Stremio &rarr; Add-ons:</p>
        <div class="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -130,8 +129,7 @@ ${d.desktop ? titleBar : ''}
 <div class="grid gap-4 sm:grid-cols-2">
 <div class="sm:col-span-2"><label class="${labelCls}" for="k-ai">AI Provider API Key</label>
 <input class="${field}" id="k-ai" type="password" autocomplete="off" placeholder="${d.aiConfigured ? 'saved - leave empty to keep' : 'paste your Gemini, Claude or OpenAI key'}">
-<p id="k-ai-hint" class="mt-1.5 hidden text-xs text-emerald-300"></p>
-<p id="k-ai-warn" class="mt-1.5 hidden text-xs text-amber-300" role="alert">This doesn't look like a valid API key. Google keys start with "AIza", Anthropic keys with "sk-ant", OpenAI keys with "sk-".</p></div>
+<p class="mt-1.5 text-xs text-slate-500">Paste a Google Gemini, Anthropic Claude or OpenAI key. The app checks which one accepts it when you press Save keys.</p></div>
 <div><label class="${labelCls}" for="k-os">OpenSubtitles API key</label>
 <input class="${field}" id="k-os" type="password" autocomplete="off" placeholder="${d.openSubtitlesKeyConfigured ? 'saved - leave empty to keep' : 'paste key'}"></div>
 <div><label class="${labelCls}" for="k-user">OpenSubtitles username</label>
@@ -139,7 +137,7 @@ ${d.desktop ? titleBar : ''}
 <div><label class="${labelCls}" for="k-pass">OpenSubtitles password</label>
 <input class="${field}" id="k-pass" type="password" autocomplete="off" placeholder="${d.openSubtitlesLoginConfigured ? 'saved - leave empty to keep' : 'your opensubtitles.com password'}"></div>
 </div>
-<div class="mt-5 grid gap-2"><button type="submit" id="save-keys" class="${btnPrimary} w-full disabled:cursor-not-allowed disabled:opacity-40">Save keys</button><span class="${result} text-center" id="keys-result"></span></div>
+<div class="mt-5 grid gap-2"><button type="submit" id="save-keys" class="${btnPrimary} w-full disabled:cursor-wait disabled:opacity-60">Save keys</button><span class="${result} text-center" id="keys-result"></span></div>
 </form>
 </section>
 
@@ -178,8 +176,6 @@ data-use terms are controlled by the providers, not by this add-on.</p>
 </main>
 <div id="toast" role="status" aria-live="polite" class="pointer-events-none fixed bottom-6 left-1/2 max-w-[90vw] -translate-x-1/2 translate-y-8 rounded-xl border px-5 py-3 text-sm font-semibold opacity-0 shadow-2xl transition duration-300"></div>
 <script nonce="${escapeHtml(d.nonce)}">
-const KEY_RULES = ${JSON.stringify(PROVIDERS.map((p) => ({ prefix: p.prefix, label: p.label, model: p.model })))};
-const detect = (v) => KEY_RULES.find((r) => v.trim().startsWith(r.prefix));
 const post = (url, body) => fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}).then(r => r.json());
 const TONE = {ok:'text-emerald-400', bad:'text-rose-400'};
 let toastTimer;
@@ -210,13 +206,16 @@ document.getElementById('keys').addEventListener('submit', async (e) => {
   const body = {};
   for (const [name, id] of Object.entries(fields)) { const v = document.getElementById(id).value.trim(); if (v) body[name] = v; }
   if (Object.keys(body).length === 0) { show('keys-result', false, 'nothing to save'); return; }
-  if (body.aiApiKey && !detect(body.aiApiKey)) { show('keys-result', false, 'the AI key is not valid - not saved'); return; }
+  const saveBtn = document.getElementById('save-keys');
+  saveBtn.disabled = true;
+  show('keys-result', true, body.aiApiKey ? 'verifying key...' : 'saving...');
   try {
     const r = await post('/api/keys', body);
     show('keys-result', r.ok, r.message);
     toast(r.ok, r.message);
     if (r.ok) { for (const id of Object.values(fields)) document.getElementById(id).value = ''; setTimeout(() => location.reload(), 1200); }
   } catch { show('keys-result', false, 'request failed'); toast(false, 'Request failed'); }
+  saveBtn.disabled = false;
 });
 document.getElementById('sample').addEventListener('click', async () => {
   show('r-sample', true, 'translating...');
@@ -226,19 +225,6 @@ document.getElementById('sample').addEventListener('click', async () => {
     const out = document.getElementById('sample-out');
     if (r.ok) { out.textContent = r.preview; out.hidden = false; } else { out.hidden = true; }
   } catch { show('r-sample', false, 'request failed'); }
-});
-const aiKey = document.getElementById('k-ai');
-const aiWarn = document.getElementById('k-ai-warn');
-const aiHint = document.getElementById('k-ai-hint');
-const saveKeys = document.getElementById('save-keys');
-aiKey.addEventListener('input', () => {
-  const v = aiKey.value.trim();
-  const p = detect(v);
-  const invalid = v !== '' && !p;
-  aiWarn.classList.toggle('hidden', !invalid);
-  aiHint.classList.toggle('hidden', !p);
-  if (p) aiHint.textContent = '\\u2714 Detected ' + p.label + ' - the app will use ' + p.model + '.';
-  saveKeys.disabled = invalid;
 });
 document.getElementById('clear-cache').addEventListener('click', async () => {
   try {
@@ -277,6 +263,11 @@ if (window.desktop) {
   document.getElementById('exit-quit').addEventListener('click', () => window.desktop.quit());
   modal.addEventListener('click', (e) => { if (e.target === modal) setModal(false); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setModal(false); });
+}
+// Electron does not launch other apps from a plain stremio:// link, so the main process opens it.
+const installLink = document.getElementById('install');
+if (installLink && window.desktop && window.desktop.openStremio) {
+  installLink.addEventListener('click', (e) => { e.preventDefault(); window.desktop.openStremio(installLink.getAttribute('href')); });
 }
 const copy = document.getElementById('copy');
 if (copy) copy.addEventListener('click', () => { navigator.clipboard.writeText(document.getElementById('manifest').value); toast(true, 'Manifest URL copied'); });

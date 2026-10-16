@@ -78,13 +78,17 @@ describe('simplified settings', () => {
     expect(page).not.toContain('Gemini API key');
   });
 
-  it('warns on unrecognised keys and disables Save keys', () => {
-    expect(page).toContain("doesn't look like a valid API key");
+  it('accepts any key text: no prefix rules in the page', () => {
+    expect(page).not.toContain('startsWith');
+    expect(page).not.toContain('KEY_RULES');
+    expect(page).not.toContain("doesn't look like a valid API key");
     expect(page).toContain('id="save-keys"');
-    expect(page).toContain('saveKeys.disabled = invalid');
-    for (const prefix of ['AIza', 'sk-ant', 'sk-']) {
-      expect(page).toContain(`"prefix":"${prefix}"`);
-    }
+    expect(page).toContain('verifying key...');
+  });
+
+  it('hands the install link to the desktop app', () => {
+    expect(page).toContain('id="install"');
+    expect(page).toContain('window.desktop.openStremio');
   });
 });
 
