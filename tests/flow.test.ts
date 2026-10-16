@@ -83,6 +83,7 @@ async function start(opts: {
       GEMINI_API_KEY: 'k'.repeat(12),
       SUB_WAIT_MS: String(opts.subWaitMs ?? 2000),
       CHUNK_SIZE: '2',
+      CHUNK_DELAY_MS: '0',
     }),
     logger: silentLogger(),
     settingsPath: join(h.dataDir, 'settings.json'),

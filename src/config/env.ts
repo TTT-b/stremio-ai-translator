@@ -43,7 +43,8 @@ const envSchema = z.object({
     .transform((v) => (v || 'info').toLowerCase())
     .pipe(z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])),
   CHUNK_SIZE: intRange(30, 1, 200),
-  CHUNK_CONCURRENCY: intRange(3, 1, 6),
+  CHUNK_CONCURRENCY: intRange(2, 1, 6),
+  CHUNK_DELAY_MS: intRange(4000, 0, 60000),
   CHUNK_MAX_RETRIES: intRange(2, 0, 5),
   GEMINI_TIMEOUT_MS: intRange(120000, 5000, 600000),
   /** On by default for RTL languages; only an explicit RTL_FIX=false turns it off. */
@@ -77,6 +78,8 @@ export interface Config {
   logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
   chunkSize: number;
   chunkConcurrency: number;
+  /** Minimum gap between provider requests, in ms. */
+  chunkDelayMs: number;
   chunkMaxRetries: number;
   aiTimeoutMs: number;
   rtlFix: boolean;
@@ -123,6 +126,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     logLevel: e.LOG_LEVEL,
     chunkSize: e.CHUNK_SIZE,
     chunkConcurrency: e.CHUNK_CONCURRENCY,
+    chunkDelayMs: e.CHUNK_DELAY_MS,
     chunkMaxRetries: e.CHUNK_MAX_RETRIES,
     aiTimeoutMs: e.GEMINI_TIMEOUT_MS,
     rtlFix: e.RTL_FIX,

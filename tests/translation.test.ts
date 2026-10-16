@@ -74,6 +74,45 @@ describe('translateSubtitle', () => {
     expect(seen[seen.length - 1]).toEqual([3, 3]);
   });
 
+  it('waits out rate limits and quota errors with growing pauses, then succeeds', async () => {
+    const sleeps: number[] = [];
+    const waits: number[] = [];
+    const provider = new FakeProvider((req, n) => {
+      if (n === 1) throw new AppError('PROVIDER_RATE_LIMITED');
+      if (n === 2) throw new AppError('PROVIDER_QUOTA_EXCEEDED');
+      return { translations: req.cues.map((c) => ({ id: c.id, text: `T:${c.text}` })) };
+    });
+    const r = await translateSubtitle(
+      source,
+      provider,
+      opts({
+        concurrency: 1,
+        chunkSize: 100,
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
+        onRateLimitWait: (d) => waits.push(d),
+      }),
+    );
+    expect(r.file.cues).toHaveLength(3);
+    expect(sleeps.slice(0, 2)).toEqual([5000, 10000]);
+    expect(waits.reduce((a, b) => a + b, 0)).toBe(0); // every wait was closed again
+    expect(waits).toContain(1);
+  });
+
+  it('gives up with the original error once the wait budget is spent', async () => {
+    const provider = new FakeProvider(() => {
+      throw new AppError('PROVIDER_RATE_LIMITED');
+    });
+    await expect(
+      translateSubtitle(
+        source,
+        provider,
+        opts({ rateLimitBudgetMs: 12_000, sleep: async () => undefined }),
+      ),
+    ).rejects.toMatchObject({ code: 'PROVIDER_RATE_LIMITED' });
+  });
+
   it('retries an invalid chunk then succeeds', async () => {
     const provider = new FakeProvider((req, n) =>
       n === 1

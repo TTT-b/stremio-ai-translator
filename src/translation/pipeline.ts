@@ -28,6 +28,12 @@ export interface PipelineOptions {
   rtlFix: boolean;
   /** Keep the original text on top and put the translation directly below it. */
   dualSubtitles?: boolean;
+  /** Minimum gap between the starts of two provider requests (free-tier friendly). */
+  requestGapMs?: number;
+  /** How long one chunk may keep waiting out rate limits / quota before the job fails. */
+  rateLimitBudgetMs?: number;
+  /** Called with +1 when a chunk starts waiting on a rate limit and -1 when it stops. */
+  onRateLimitWait?: (delta: 1 | -1) => void;
   /** Called after each chunk with cues finished so far and the file's total. */
   onProgress?: (done: number, total: number) => void;
   logger: Logger;
@@ -44,11 +50,59 @@ export interface PipelineResult {
   chunks: number;
 }
 
+const RATE_WAIT_BASE_MS = 5000;
+const RATE_WAIT_MAX_MS = 60_000;
+const RATE_BUDGET_MS = 20 * 60_000;
+
+/**
+ * Rate limits and quota errors from the provider are waited out, never fatal at once: pause with
+ * exponential backoff (5s, 10s, ... capped at 60s, or the provider's own retry-after) and ask again.
+ * Only after the budget is spent does the original error reach the caller.
+ */
+async function waitOutRateLimits<T>(
+  call: () => Promise<T>,
+  opts: PipelineOptions,
+  log: Logger,
+): Promise<T> {
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const budget = opts.rateLimitBudgetMs ?? RATE_BUDGET_MS;
+  let waited = 0;
+  let waiting = false;
+  try {
+    for (let n = 1; ; n++) {
+      try {
+        return await call();
+      } catch (err) {
+        const limited =
+          isAppError(err) &&
+          (err.code === 'PROVIDER_RATE_LIMITED' || err.code === 'PROVIDER_QUOTA_EXCEEDED');
+        if (!limited) throw err;
+        const hinted = err.retryAfterMs;
+        const delay = Math.min(
+          RATE_WAIT_MAX_MS,
+          Math.max(hinted ?? 0, RATE_WAIT_BASE_MS * 2 ** Math.min(n - 1, 4)),
+        );
+        if (waited + delay > budget) throw err;
+        if (!waiting) {
+          waiting = true;
+          opts.onRateLimitWait?.(1);
+        }
+        log.warn({ stage: 'API', attempt: n, delayMs: delay }, 'rate limited, waiting to retry');
+        waited += delay;
+        await sleep(delay);
+      }
+    }
+  } finally {
+    if (waiting) opts.onRateLimitWait?.(-1);
+  }
+}
+
 async function translateOneChunk(
   chunk: Chunk,
   total: number,
   provider: TranslationProvider,
   opts: PipelineOptions,
+  pace: () => Promise<void>,
 ): Promise<{ translations: ChunkCue[]; usage: TokenUsage }> {
   const log = opts.logger.child({ stage: 'CHUNK', chunk: `${chunk.number + 1}/${total}` });
   const usage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
@@ -69,13 +123,20 @@ async function translateOneChunk(
     const started = Date.now();
     try {
       const result = await withRetry(
-        () =>
-          provider.translateChunk({
-            targetLanguage: opts.targetLanguageName,
-            targetLanguageCode: opts.targetLanguageCode,
-            cues: source,
-            context: chunk.context,
-          }),
+        async () =>
+          waitOutRateLimits(
+            async () => {
+              await pace();
+              return provider.translateChunk({
+                targetLanguage: opts.targetLanguageName,
+                targetLanguageCode: opts.targetLanguageCode,
+                cues: source,
+                context: chunk.context,
+              });
+            },
+            opts,
+            log,
+          ),
         {
           maxAttempts: opts.maxTransientAttempts ?? 4,
           baseDelayMs: opts.retryBaseDelayMs ?? 1000,
@@ -185,10 +246,21 @@ export async function translateSubtitle(
     'starting translation',
   );
 
+  // Spaces out request starts across all lanes so bursts never hit a per-minute limit.
+  let nextSlot = 0;
+  const pace = async (): Promise<void> => {
+    const gap = opts.requestGapMs ?? 0;
+    if (gap <= 0) return;
+    const now = Date.now();
+    const start = Math.max(now, nextSlot);
+    nextSlot = start + gap;
+    if (start > now)
+      await (opts.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms))))(start - now);
+  };
   let doneCues = 0;
   opts.onProgress?.(0, source.cues.length);
   const results = await runPool(chunks, opts.concurrency, async (chunk) => {
-    const r = await translateOneChunk(chunk, chunks.length, provider, opts);
+    const r = await translateOneChunk(chunk, chunks.length, provider, opts, pace);
     doneCues += chunk.cues.length;
     opts.onProgress?.(doneCues, source.cues.length);
     return r;

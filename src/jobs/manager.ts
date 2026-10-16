@@ -90,6 +90,7 @@ export class JobManager {
   private linesTranslated = 0;
   private started = 0;
   private lastFailed = false;
+  private rateLimited = 0;
 
   constructor(private readonly deps: JobManagerDeps) {
     this.now = deps.now ?? Date.now;
@@ -123,7 +124,7 @@ export class JobManager {
 
   /** Live numbers for the status card. Counts this app session only. */
   stats(): {
-    state: 'waiting' | 'translating' | 'idle' | 'error';
+    state: 'waiting' | 'translating' | 'ratelimited' | 'idle' | 'error';
     running: number;
     linesTranslated: number;
     progress: { done: number; total: number; percent: number } | null;
@@ -131,7 +132,9 @@ export class JobManager {
     const running = [...this.jobs.values()].filter((j) => j.status === 'running').length;
     const state =
       running > 0
-        ? 'translating'
+        ? this.rateLimited > 0
+          ? 'ratelimited'
+          : 'translating'
         : this.started === 0
           ? 'waiting'
           : this.lastFailed
@@ -362,6 +365,10 @@ export class JobManager {
       maxValidationRetries: cfg.chunkMaxRetries,
       rtlFix: rtl,
       dualSubtitles: dual,
+      requestGapMs: cfg.chunkDelayMs,
+      onRateLimitWait: (d) => {
+        this.rateLimited = Math.max(0, this.rateLimited + d);
+      },
       onProgress: (done, total) => {
         job.progress = { done, total };
       },

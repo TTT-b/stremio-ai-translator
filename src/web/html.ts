@@ -237,6 +237,7 @@ document.getElementById('clear-cache').addEventListener('click', async () => {
 const STATES = {
   waiting: ['Waiting for Stremio...', 'bg-slate-500'],
   translating: ['Translating...', 'bg-indigo-400 animate-pulse'],
+  ratelimited: ['Rate limited, waiting to retry...', 'bg-amber-400 animate-pulse'],
   idle: ['Ready - last subtitle finished', 'bg-emerald-400'],
   error: ['Last translation failed - use Test connections', 'bg-rose-400']
 };

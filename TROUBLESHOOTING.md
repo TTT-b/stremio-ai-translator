@@ -55,6 +55,15 @@ Large models can take 30-90 s per chunk. The add-on retries, and finished chunks
 selecting the subtitle again continues where it stopped. To speed things up lower `CHUNK_SIZE`
 (for example 20) or raise `CHUNK_CONCURRENCY` (up to 6) in `.env`, then restart.
 
+## "Rate limited, waiting to retry..." / free-tier limits
+
+Google's free tier allows only a few requests per minute. Since v1.4.3 the app sends at most 2 at a
+time, pauses `CHUNK_DELAY_MS` (default 4000) between requests, and when the provider answers 429 or
+"quota" it waits (5s, 10s, ... up to 60s) and retries the same part instead of failing. The live
+status card shows "Rate limited, waiting to retry...". It gives up after about 20 minutes of waiting;
+a truly exhausted daily quota needs a new day or a billing-enabled key. Finished parts are cached,
+so reselecting the subtitle continues where it stopped.
+
 ## "No suitable source subtitle" for anime
 
 1. Open `http://127.0.0.1:7000/dev/source-search?type=series&id=kitsu:<id>:<episode>` (use the id
