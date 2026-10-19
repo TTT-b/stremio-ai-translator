@@ -85,6 +85,7 @@ export function detectSpeech(
   url: string,
   signal: AbortSignal,
   onProgress?: (seconds: number) => void,
+  window?: { startSec: number; durationSec: number },
 ): Promise<SpeechScan> {
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -93,8 +94,10 @@ export function detectSpeech(
         '-v',
         'error',
         '-nostdin',
+        ...(window ? ['-ss', String(window.startSec)] : []),
         '-i',
         url,
+        ...(window ? ['-t', String(window.durationSec)] : []),
         '-vn',
         '-map',
         '0:a:0',
@@ -149,17 +152,26 @@ const AGREE_MS = 200;
  * Fits the subtitle at several speech thresholds and returns a result only when at least two of them
  * agree on the shift (a threshold that is wrong for this film gives nothing or something different).
  */
-export function fitAcrossLevels(cues: Cue[], loudness: ArrayLike<number>): TimingFit | undefined {
+export function fitAcrossLevels(
+  cues: Cue[],
+  loudness: ArrayLike<number>,
+  mask?: Uint8Array,
+): TimingFit | undefined {
   const fits: TimingFit[] = [];
   for (const level of LEVELS) {
-    const fit = fitTiming(cues, speechFromLoudness(loudness, level));
+    const fit = fitTiming(cues, speechFromLoudness(loudness, level), mask ? { mask } : {});
     if (fit) fits.push(fit);
   }
-  fits.sort((a, b) => b.score - a.score);
-  const best = fits[0];
-  if (!best) return undefined;
-  const agree = fits.filter(
-    (f) => f.scale === best.scale && Math.abs(f.offsetMs - best.offsetMs) <= AGREE_MS,
-  );
-  return agree.length >= 2 ? best : undefined;
+  // The biggest group of thresholds that agree on stretch and shift wins; its middle shift is used.
+  let group: TimingFit[] = [];
+  for (const anchor of fits) {
+    const near = fits.filter(
+      (f) => f.scale === anchor.scale && Math.abs(f.offsetMs - anchor.offsetMs) <= AGREE_MS,
+    );
+    if (near.length > group.length) group = near;
+  }
+  if (group.length < 2) return undefined;
+  const offsets = group.map((f) => f.offsetMs).sort((x, y) => x - y);
+  const best = group.reduce((p, q) => (q.score > p.score ? q : p));
+  return { ...best, offsetMs: offsets[Math.floor(offsets.length / 2)] as number };
 }

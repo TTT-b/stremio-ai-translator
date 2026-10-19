@@ -16,6 +16,7 @@ import {
   SYNC_IN_PROGRESS_MESSAGE,
 } from '../stremio/placeholder';
 import { SyncService } from '../sync/service';
+import { fitSubtitleToVideo } from '../sync/videoFit';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { findLanguage, LANGUAGES } from '../config/languages';
 import type { Config } from '../config/env';
@@ -75,6 +76,7 @@ export interface ServerDeps {
   ffmpegFor?: JobManagerDeps['ffmpegFor'];
   /** The speech tool for precise sync. Tests pass one with fake downloads. */
   sync?: SyncService;
+  speechFit?: JobManagerDeps['speechFit'];
   /** Where the author's news.json is downloaded from. Tests point it elsewhere. */
   newsUrl?: string;
   /** Test hook: caps on how long one step of a job may take. */
@@ -215,6 +217,7 @@ export function createApp(deps: ServerDeps): express.Express {
     cache,
     library,
     sync,
+    speechFit: deps.speechFit ?? fitSubtitleToVideo,
     ...(deps.findStream ? { findStream: deps.findStream } : {}),
     ...(deps.ffmpegFor ? { ffmpegFor: deps.ffmpegFor } : {}),
     ...(deps.loadEmbedded ? { loadEmbedded: deps.loadEmbedded } : {}),

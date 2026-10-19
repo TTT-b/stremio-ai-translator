@@ -264,6 +264,18 @@ prefix `HE:`. Besides the built-in samples, it picks from any `.srt` files you p
 folder inside the app's data folder (`data\test-subtitles` when run from the project). Test subtitles are
 not added to the library. While test mode is on, real translations are paused, so turn it off when done.
 
+### Timing from the sound of the video (automatic, no download)
+
+When a subtitle has only a guessed timing (no own subtitle in the video, no hash match), the add-on
+listens to three short pieces of the playing video (about 12 minutes of a 24-minute episode, less
+for a long film) with the ffmpeg that comes with Stremio. It marks when someone is talking and
+compares that with when the subtitle is shown, in any language, with no speech model and no
+download. If it is sure, it moves the whole subtitle by the missing seconds (and fixes a
+frame-rate stretch such as 25 vs 23.976 fps). If it is not sure, the subtitle stays exactly as it
+was. The **Skip** button on the main screen skips this step. Look for `subtitle moved onto the
+speech` or `timing left as it was` in the log (stage `SOURCE`). On real episodes the result was
+within about 0.1 second.
+
 ### Precise sync by speech (optional, for videos without their own subtitle)
 
 For a video that has no subtitle of its own, the timing of a downloaded subtitle can be wrong.

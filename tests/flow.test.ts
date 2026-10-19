@@ -58,6 +58,7 @@ async function start(opts: {
   searchHangs?: boolean;
   sync?: NonNullable<Parameters<typeof createApp>[0]['sync']>;
   findStream?: NonNullable<Parameters<typeof createApp>[0]['findStream']>;
+  speechFit?: NonNullable<Parameters<typeof createApp>[0]['speechFit']>;
   settings?: object;
   onPending?: NonNullable<Parameters<typeof createApp>[0]['onPending']>;
   gate?: Promise<void>;
@@ -119,6 +120,11 @@ async function start(opts: {
     createSourceProvider: () => source,
     // Never look for a real ffmpeg or Stremio server in tests: embedded subtitles are off unless a test supplies them.
     loadEmbedded: opts.loadEmbedded ?? (async () => undefined),
+    // Tests never listen to a real video unless one supplies speechFit.
+    speechFit: opts.speechFit ?? (async () => undefined),
+    ...(opts.speechFit && !opts.sync
+      ? { findStream: opts.findStream ?? (async () => undefined), ffmpegFor: () => 'ffmpeg.exe' }
+      : {}),
     ...(opts.sync
       ? {
           sync: opts.sync,
@@ -796,6 +802,84 @@ describe('diagnostics', () => {
     const text = await (await current.get('/api/diagnostics')).text();
     expect(text).not.toContain('Test Show');
     expect(text).toContain('"queue":1');
+  });
+});
+
+describe('timing from the sound of the video', () => {
+  const FILE_PATH = '/subtitles/movie/tt0111161/filename=Movie.2020.1080p.mkv.json';
+  const stream = {
+    infoHash: 'a'.repeat(40),
+    fileIdx: 0,
+    url: 'http://127.0.0.1:11470/x/0',
+    videoPath: 'Movie.2020.1080p.mkv',
+    files: [],
+  };
+  const served = async (srt: string) => {
+    const sub = ((await (await current!.get(FILE_PATH)).json()) as SubsResponse).subtitles[0]!;
+    return (await current!.get(new URL(sub.url).pathname)).text().then((s) => ({ s, srt }));
+  };
+
+  it('moves a guessed subtitle by what the fit says, and calls it speech timing', async () => {
+    let asked = 0;
+    current = await start({
+      findStream: async () => stream,
+      speechFit: async (o) => {
+        asked++;
+        expect(o.url).toBe(stream.url);
+        return { scale: 1, offsetMs: 2000, score: 0.2, baseline: 0 };
+      },
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    const { s } = await served('');
+    expect(asked).toBe(1);
+    expect(s).toContain('HE:');
+    let lib: { items: { timing?: string }[] } = { items: [] };
+    for (let i = 0; i < 40 && lib.items.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      lib = (await (await current.get('/api/library')).json()) as typeof lib;
+    }
+    expect(lib.items[0]?.timing).toBe('speech');
+  });
+
+  it('keeps the subtitle as it was when the fit is not sure', async () => {
+    current = await start({
+      findStream: async () => stream,
+      speechFit: async () => undefined,
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    await served('');
+    let lib: { items: { timing?: string }[] } = { items: [] };
+    for (let i = 0; i < 40 && lib.items.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      lib = (await (await current.get('/api/library')).json()) as typeof lib;
+    }
+    expect(lib.items[0]?.timing).toBe('estimated');
+  });
+
+  it('keeps the subtitle as it was when the fit fails', async () => {
+    current = await start({
+      findStream: async () => stream,
+      speechFit: async () => {
+        throw new Error('ffmpeg exploded');
+      },
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    const { s } = await served('');
+    expect(s).toContain('HE:');
+  });
+
+  it('does not listen when the video is not on this computer', async () => {
+    let asked = 0;
+    current = await start({
+      findStream: async () => undefined,
+      speechFit: async () => {
+        asked++;
+        return undefined;
+      },
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    await served('');
+    expect(asked).toBe(0);
   });
 });
 

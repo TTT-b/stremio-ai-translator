@@ -6,8 +6,14 @@ import { findLanguage } from '../config/languages';
 import { AppError, isAppError } from '../errors';
 import type { Logger } from '../logging/logger';
 import { rankSameLanguage, selectSubtitle } from '../sources/select';
-import { findStreamWaiting, loadEmbeddedSubtitle, locateTools } from '../sources/embedded';
+import {
+  findStream,
+  findStreamWaiting,
+  loadEmbeddedSubtitle,
+  locateTools,
+} from '../sources/embedded';
 import { alignCues, type SpokenWord } from '../sync/align';
+import { applyFit, type TimingFit } from '../sync/fit';
 import type { LocalStream } from '../sync/service';
 import { cinemetaTitle, kitsuTitles, makeTitleResolver, parseFilename } from '../sources/titles';
 import type { Library } from './library';
@@ -116,7 +122,12 @@ export interface JobManagerDeps {
   /** A finished job with guessed timing is checked again after this long (default 15 s). */
   refreshGuessAfterMs?: number;
   /** Hard caps so one stuck step can never block the queue (defaults: 2 min 20 s, 2 min, 1 hour). */
-  limits?: { embeddedCapMs?: number; sourceCapMs?: number; jobCapMs?: number };
+  limits?: {
+    embeddedCapMs?: number;
+    sourceCapMs?: number;
+    jobCapMs?: number;
+    speechCapMs?: number;
+  };
   /** Precise sync by speech (optional): listens to the video and puts the subtitle on the words. */
   sync?: SyncPort;
   /** Test hooks: where the playing video is on Stremio's server, and which ffmpeg to use. */
@@ -126,6 +137,14 @@ export interface JobManagerDeps {
     fetchImpl?: typeof fetch,
   ) => Promise<LocalStream | undefined>;
   ffmpegFor?: (cfg: Config) => string | undefined;
+  /** Checks a subtitle's timing against the video's sound (a few short pieces); optional. */
+  speechFit?: (o: {
+    url: string;
+    ffmpeg: string;
+    cues: Cue[];
+    signal: AbortSignal;
+    onProgress?: (percent: number) => void;
+  }) => Promise<TimingFit | undefined>;
   /** When set, every finished subtitle is listed here so the user can review and delete it. */
   library?: Library;
   /** Ask mode: called once when a new request is waiting for the user's OK (for a notification). */
@@ -160,7 +179,7 @@ interface ChosenSource {
  * 7: lines placed on the speech stay on screen at least one second.
  * 8: stray letters of any foreign alphabet are removed, also from subtitles made before.
  */
-const SOURCE_LOGIC_VERSION = 8;
+const SOURCE_LOGIC_VERSION = 9;
 
 /** Files compared for timing when there is no hash match. Each uncached one costs a download. */
 const CONSENSUS_POOL_SIZE = 3;
@@ -855,6 +874,22 @@ export class JobManager {
           chosen = await search();
         }
       }
+      // No exact timing: listen to a few short pieces of the video and move the subtitle onto them.
+      if (!placedOnSpeech && !chosen.exact && this.deps.speechFit && job.spec.filename) {
+        job.stage = 'sync';
+        const picked = chosen;
+        const moved = await this.skippable(
+          job,
+          'sync',
+          (wasSkipped) => this.fitToSpeech(job, cfg, log, picked, wasSkipped),
+          undefined,
+        );
+        this.stopIfCancelled(job);
+        if (moved) {
+          placedOnSpeech = true;
+          chosen = moved;
+        }
+      }
     }
     // Only a subtitle known to match this video goes under the main key.
     const outKey = chosen.exact || !tryLocal ? jobKey : fallbackKey;
@@ -1040,6 +1075,70 @@ export class JobManager {
     } catch {
       return undefined;
     } finally {
+      delete job.syncPercent;
+    }
+  }
+
+  /**
+   * Moves a guessed-timing subtitle onto the video's real speech. Returns the moved subtitle, or
+   * undefined (leave it as it is) when the video is not on this computer, it is not sure, or it took too long.
+   */
+  private async fitToSpeech(
+    job: Job,
+    cfg: Config,
+    log: Logger,
+    picked: ChosenSource,
+    wasSkipped: () => boolean,
+  ): Promise<ChosenSource | undefined> {
+    const fit = this.deps.speechFit;
+    const filename = job.spec.filename;
+    const ffmpeg = this.deps.ffmpegFor
+      ? this.deps.ffmpegFor(cfg)
+      : locateTools(cfg.ffmpegPath)?.ffmpeg;
+    if (!fit || !filename || !ffmpeg) return undefined;
+    const abort = new AbortController();
+    const watch = setInterval(() => {
+      if (job.cancelled || wasSkipped()) abort.abort();
+    }, 500);
+    const cap = setTimeout(() => abort.abort(), this.deps.limits?.speechCapMs ?? 300_000);
+    try {
+      const find = this.deps.findStream ?? findStream;
+      const stream = await find(cfg.stremioServerUrl, filename, this.deps.fetchImpl);
+      if (!stream) return undefined;
+      job.syncPercent = 0;
+      const cues = parseSubtitle(picked.raw).cues;
+      const result = await fit({
+        url: stream.url,
+        ffmpeg,
+        cues,
+        signal: abort.signal,
+        onProgress: (p) => {
+          job.syncPercent = p;
+        },
+      });
+      if (!result) {
+        log.info({ stage: 'SOURCE', sync: 'fit-unsure' }, 'timing left as it was');
+        return undefined;
+      }
+      log.info(
+        {
+          stage: 'SOURCE',
+          sync: 'fitted',
+          offsetMs: result.offsetMs,
+          scale: Math.round(result.scale * 10000) / 10000,
+        },
+        'subtitle moved onto the speech',
+      );
+      return {
+        ...picked,
+        raw: serializeSubtitle({ format: 'srt', cues: applyFit(cues, result) }),
+        exact: true,
+      };
+    } catch {
+      return undefined;
+    } finally {
+      clearInterval(watch);
+      clearTimeout(cap);
       delete job.syncPercent;
     }
   }

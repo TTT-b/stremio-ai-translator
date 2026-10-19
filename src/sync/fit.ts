@@ -12,6 +12,9 @@ import type { Cue } from '../subtitles/types';
 /** One frame of the speech signal, in milliseconds. */
 export const FRAME_MS = 50;
 
+/** Fewer overlapping frames than this (10 s) say nothing about a shift. */
+const MIN_OVERLAP_FRAMES = 200;
+
 const FPS = [23.976, 24, 25, 29.97, 30];
 
 /** Stretches a subtitle made for one frame rate gets on a video of another (1 = none). */
@@ -37,6 +40,8 @@ export interface FitOptions {
   minGain?: number;
   /** A wrong peak must stay below this share of the best score (default 0.85). */
   maxRunnerUp?: number;
+  /** 1 where the video's sound was really read; omitted = all of it. */
+  mask?: Uint8Array;
 }
 
 export interface TimingFit {
@@ -65,32 +70,43 @@ function activity(cues: Cue[], scale: number, frames: number): Uint8Array {
   return sub;
 }
 
-/** Agreement (a correlation between two on/off signals) for every shift in -maxLag..maxLag frames. */
+/**
+ * Agreement (a correlation between two on/off signals) for every shift in -maxLag..maxLag frames.
+ * Only frames where `mask` is 1 are compared (the parts of the video that were actually heard).
+ */
 function curve(
   sub: Uint8Array,
   speech: Uint8Array,
-  speechOn: number,
+  mask: Uint8Array | undefined,
   maxLag: number,
 ): Float64Array {
   const n = speech.length;
+  let seen = 0;
+  let speechOn = 0;
+  for (let i = 0; i < n; i++) {
+    if (mask && !mask[i]) continue;
+    seen++;
+    if (speech[i]) speechOn++;
+  }
+  const out = new Float64Array(2 * maxLag + 1);
+  if (seen === 0 || speechOn === 0 || speechOn === seen) return out;
   const ones: number[] = [];
   for (let i = 0; i < sub.length; i++) if (sub[i]) ones.push(i);
-  const subOn = ones.length;
-  const out = new Float64Array(2 * maxLag + 1);
-  if (subOn === 0 || speechOn === 0) return out;
-  const ps = subOn / n;
-  const pv = speechOn / n;
-  const denom = Math.sqrt(ps * (1 - ps) * pv * (1 - pv));
-  if (denom === 0) return out;
   const idx = Int32Array.from(ones);
+  const pv = speechOn / seen;
   for (let k = 0; k <= 2 * maxLag; k++) {
     const lag = k - maxLag;
+    let subOn = 0;
     let n11 = 0;
     for (let j = 0; j < idx.length; j++) {
       const t = (idx[j] as number) + lag;
-      if (t >= 0 && t < n && speech[t]) n11++;
+      if (t < 0 || t >= n || (mask && !mask[t])) continue;
+      subOn++;
+      if (speech[t]) n11++;
     }
-    out[k] = (n11 / n - ps * pv) / denom;
+    if (subOn < MIN_OVERLAP_FRAMES || subOn === seen) continue;
+    const ps = subOn / seen;
+    out[k] = (n11 / seen - ps * pv) / Math.sqrt(ps * (1 - ps) * pv * (1 - pv));
   }
   return out;
 }
@@ -115,12 +131,9 @@ export function fitTiming(
   const maxRunnerUp = opts.maxRunnerUp ?? 0.85;
   const maxLag = Math.round((opts.maxOffsetMs ?? 40_000) / FRAME_MS);
   if (cues.length < 20 || speech.length < 400) return undefined;
-  let speechOn = 0;
-  for (let i = 0; i < speech.length; i++) if (speech[i]) speechOn++;
-
   const curves: Curve[] = SCALE_CANDIDATES.map((scale) => ({
     scale,
-    r: curve(activity(cues, scale, speech.length), speech, speechOn, maxLag),
+    r: curve(activity(cues, scale, speech.length), speech, opts.mask, maxLag),
   }));
   const plain = curves.find((c) => c.scale === 1) as Curve;
   const baseline = plain.r[maxLag] as number;
