@@ -104,7 +104,9 @@ Build it yourself (Node.js 22+): `npm run dist` writes the installer to `release
    computer" prompt (Chrome), and click Install. The add-on then shows up in the Stremio app
    (reopen it if it does not appear after a minute). Tested in Chrome only. Manual alternative:
    Stremio -> Add-ons -> paste `http://127.0.0.1:7000/manifest.json`. (A `stremio://` link cannot
-   work here: Stremio turns it into https and drops the port.)
+   work here: Stremio turns it into https and drops the port.) The same **Install in Stremio**
+   button and the add-on address with a **Copy** button are also at the bottom of the main
+   screen, so you do not need to reopen the setup wizard.
 3. Play a movie or episode, open the subtitles menu and pick the entry labelled by this add-on.
 4. If it says **"Translation in progress - reselect this subtitle in a minute"**, wait and select
    it again. A full episode usually takes 1-5 minutes the first time.

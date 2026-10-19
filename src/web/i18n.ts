@@ -83,6 +83,7 @@ const S = {
     en: 'The original line appears above the translation. Applies to subtitles translated after saving.',
   },
   installBtn: { he: 'התקן ב-Stremio', en: 'Install in Stremio' },
+  installTitle: { he: 'התקנה ב-Stremio', en: 'Install in Stremio' },
   installNote1: {
     he: 'נפתח Stremio Web בדפדפן (התחבר שם לחשבון Stremio שלך; ייתכן ש-Chrome יבקש לאשר גישה למחשב הזה – בחר Allow). אחר כך התוסף יופיע באפליקציית Stremio.',
     en: 'Stremio Web opens in your browser (sign in to your Stremio account there; Chrome may ask to allow access to this computer - choose Allow). The add-on then appears in the Stremio app.',

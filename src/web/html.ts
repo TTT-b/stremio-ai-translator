@@ -211,6 +211,13 @@ export function renderStatusPage(d: StatusPageData): string {
     : `<p class="text-sm text-warm-mu">${tt('installNotReady')}
        <code dir="ltr" class="rounded bg-warm-bg px-1.5 py-0.5">${escapeHtml(d.installUrl)}</code></p>`;
 
+  /** Short install box for the main screen, so the link is at hand without reopening the wizard. */
+  const installCompact = d.stremioReady
+    ? `<section class="${tile} flex flex-col gap-2.5"><div class="text-sm font-bold text-warm-tx">${tt('installTitle')}</div>
+<a id="install-d" class="${btn} text-center" href="${escapeHtml(d.installUrl)}" target="_blank" rel="noopener noreferrer">${tt('installBtn')}</a>
+<div class="flex gap-2"><input id="manifest-d" readonly dir="ltr" class="${field} min-w-0 flex-1 font-mono text-[13px]" value="${escapeHtml(d.manifestUrl)}" aria-label="${tt('manifestAria')}"><button type="button" id="copy-d" class="${btn}">${tt('copy')}</button></div></section>`
+    : '';
+
   const testRow = (label: string, button: string, resultId: string, extra = '') =>
     `<div class="${extra}flex items-center justify-between gap-3 rounded-2xl border border-warm-ln px-3.5 py-2.5"><div class="min-w-0"><div class="text-sm font-semibold text-warm-tx">${label}</div><span class="${result} mt-0.5 !text-xs text-warm-mu" id="${resultId}"></span></div>${button}</div>`;
   const testBtn = (attr: string) =>
@@ -306,6 +313,7 @@ ${checks('r-', 'sample', 'sample-out')}
 <section class="${tile} flex flex-col gap-2.5"><div><div class="text-sm font-bold text-warm-tx">${tt('checksTitle')}</div><div class="mt-0.5 text-xs text-warm-mu">${tt('checksSub')}</div></div>
 ${checks('dr-', 'dsample', 'dsample-out')}
 </section>
+${installCompact}
 <div class="flex items-center gap-2.5 text-[13px] text-warm-mu"><span class="text-warm-ok" aria-hidden="true">&#10003;</span>${tt('keepRunning')}</div>
 </div>
 
@@ -1018,8 +1026,10 @@ if (window.desktop) {
   });
   $('news-close').addEventListener('click', closeNews);
 }
-const copy = $('copy');
-if (copy) copy.addEventListener('click', () => { navigator.clipboard.writeText($('manifest').value); toast(true, ${JSON.stringify(t(lang, 'copied'))}); });
+for (const [btnId, fieldId] of [['copy', 'manifest'], ['copy-d', 'manifest-d']]) {
+  const copyBtn = $(btnId);
+  if (copyBtn) copyBtn.addEventListener('click', () => { navigator.clipboard.writeText($(fieldId).value); toast(true, ${JSON.stringify(t(lang, 'copied'))}); });
+}
 </script>
 </body></html>`;
 }

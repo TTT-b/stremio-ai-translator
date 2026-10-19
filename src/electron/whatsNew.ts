@@ -12,6 +12,52 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '1.5.1': {
+    en: [
+      {
+        title: 'Skip button for slow steps',
+        text: 'When a step takes too long (looking for a subtitle, listening to the video), a Skip button lets you move on to the next one instead of waiting.',
+      },
+      {
+        title: 'Install link on the main screen',
+        text: 'The Stremio install button and the add-on address with a Copy button now sit at the bottom of the main screen, so you no longer need to reopen the setup wizard.',
+      },
+      {
+        title: 'Cancel and start again',
+        text: 'A cancelled request can be started again after 20 seconds.',
+      },
+      {
+        title: 'Better subtitle reading from the video',
+        text: 'While a video is still loading, the app keeps trying to read its built-in subtitle for up to 2 minutes before it falls back to another source.',
+      },
+      {
+        title: 'Test mode for developers',
+        text: 'Under Advanced settings. Made-up subtitles and a pretend AI run through the real queue, without using your keys or download limits.',
+      },
+    ],
+    he: [
+      {
+        title: 'כפתור "דלג" לשלבים איטיים',
+        text: 'כששלב לוקח יותר מדי זמן (חיפוש כתובית, האזנה לסרטון), כפתור "דלג" מאפשר לעבור לשלב הבא במקום לחכות.',
+      },
+      {
+        title: 'קישור ההתקנה במסך הראשי',
+        text: 'כפתור ההתקנה ב-Stremio וכתובת התוסף עם כפתור "העתק" נמצאים עכשיו בתחתית המסך הראשי, ואין צורך לפתוח שוב את אשף ההגדרה.',
+      },
+      {
+        title: 'ביטול והתחלה מחדש',
+        text: 'בקשה שבוטלה אפשר להתחיל שוב אחרי 20 שניות.',
+      },
+      {
+        title: 'קריאה טובה יותר של כתובית מתוך הסרטון',
+        text: 'כל עוד הסרטון עדיין נטען, האפליקציה ממשיכה לנסות לקרוא את הכתובית המוטמעת בו עד 2 דקות לפני שהיא עוברת למקור אחר.',
+      },
+      {
+        title: 'מצב בדיקות למפתחים',
+        text: 'בהגדרות מתקדמות. כתוביות מומצאות ו-AI מדומה עוברים דרך התור האמיתי, בלי להשתמש במפתחות או במכסות ההורדה שלך.',
+      },
+    ],
+  },
   '1.5.0': {
     en: [
       {
