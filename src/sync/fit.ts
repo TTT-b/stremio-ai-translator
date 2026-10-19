@@ -126,12 +126,14 @@ export function fitTiming(
   const baseline = plain.r[maxLag] as number;
 
   // The best shift of every stretch; an odd stretch is chosen only when it clearly beats no stretch.
-  let best = { scale: 1, ...peak(plain.r) };
+  const none = { scale: 1, ...peak(plain.r) };
+  let stretched: { scale: number; k: number; v: number } | undefined;
   for (const c of curves) {
     if (c.scale === 1) continue;
     const p = peak(c.r);
-    if (p.v > best.v + 0.02) best = { scale: c.scale, ...p };
+    if (!stretched || p.v > stretched.v) stretched = { scale: c.scale, ...p };
   }
+  const best = stretched && stretched.v > none.v + 0.02 ? stretched : none;
   if (best.v < minScore) return undefined;
 
   const chosen = curves.find((c) => c.scale === best.scale) as Curve;

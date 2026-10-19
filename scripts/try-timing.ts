@@ -2,8 +2,8 @@
 //   npx tsx scripts/try-timing.ts <video> <subtitle.srt> [--shift=7000] [--ffmpeg=path]
 // --shift moves the subtitle first by that many ms, so you can see the fit bring it back.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { applyFit, fitTiming } from '../src/sync/fit';
-import { detectSpeech } from '../src/sync/speech';
+import { applyFit } from '../src/sync/fit';
+import { detectSpeech, fitAcrossLevels } from '../src/sync/speech';
 import { parseSubtitle } from '../src/subtitles/parse';
 import { serializeSubtitle } from '../src/subtitles/serialize';
 
@@ -36,7 +36,7 @@ console.log(
   `\nSound read in ${((Date.now() - t0) / 1000).toFixed(0)} s: ${Math.round(scan.seconds / 60)} min, speech in ${((on / scan.speech.length) * 100).toFixed(0)}% of it`,
 );
 
-const fit = fitTiming(given, scan.speech);
+const fit = fitAcrossLevels(given, scan.loudness);
 if (!fit) {
   console.log('Result: NOT SURE - the subtitle would be left exactly as it is.');
   process.exit(0);

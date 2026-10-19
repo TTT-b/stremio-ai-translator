@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { FRAME_MS } from './fit';
+import type { Cue } from '../subtitles/types';
+import { FRAME_MS, fitTiming, type TimingFit } from './fit';
 
 /**
  * Finds WHEN someone is talking in a video, from the loudness of its voice band only. No words and
@@ -35,7 +36,7 @@ function percentile(sorted: number[], p: number): number {
  * Turns the loudness of every frame into speech on/off. The threshold follows the film: between its
  * quiet floor and its loud parts, so a quiet drama and a loud action film both work.
  */
-export function speechFromLoudness(db: ArrayLike<number>): Uint8Array {
+export function speechFromLoudness(db: ArrayLike<number>, level = 0.4): Uint8Array {
   const out = new Uint8Array(db.length);
   const live: number[] = [];
   for (let i = 0; i < db.length; i++) if ((db[i] as number) > DEAD_DB) live.push(db[i] as number);
@@ -44,7 +45,7 @@ export function speechFromLoudness(db: ArrayLike<number>): Uint8Array {
   const floor = percentile(live, 0.2);
   const loud = percentile(live, 0.95);
   if (loud - floor < 6) return out; // flat sound: nothing to tell speech apart from
-  const threshold = floor + 0.4 * (loud - floor);
+  const threshold = floor + level * (loud - floor);
   for (let i = 0; i < db.length; i++) if ((db[i] as number) > threshold) out[i] = 1;
 
   // Join close bursts, then drop the very short ones.
@@ -67,6 +68,8 @@ export function speechFromLoudness(db: ArrayLike<number>): Uint8Array {
 }
 
 export interface SpeechScan {
+  /** Loudness of every frame (dB), so other thresholds can be tried. */
+  loudness: number[];
   /** One entry per FRAME_MS: 1 = speech. */
   speech: Uint8Array;
   /** Seconds of video that were read. */
@@ -127,7 +130,36 @@ export function detectSpeech(
       signal.removeEventListener('abort', kill);
       if (signal.aborted) reject(new Error('stopped'));
       else if (code !== 0 && db.length === 0) reject(new Error(`exit ${code}`));
-      else resolve({ speech: speechFromLoudness(db), seconds: (db.length * FRAME_MS) / 1000 });
+      else
+        resolve({
+          loudness: db,
+          speech: speechFromLoudness(db),
+          seconds: (db.length * FRAME_MS) / 1000,
+        });
     });
   });
+}
+
+/** Thresholds tried between the film's quiet floor and its loud parts; real films need different ones. */
+const LEVELS = [0.5, 0.6, 0.7, 0.8];
+/** Two thresholds must give the same shift within this many ms for the answer to be trusted. */
+const AGREE_MS = 200;
+
+/**
+ * Fits the subtitle at several speech thresholds and returns a result only when at least two of them
+ * agree on the shift (a threshold that is wrong for this film gives nothing or something different).
+ */
+export function fitAcrossLevels(cues: Cue[], loudness: ArrayLike<number>): TimingFit | undefined {
+  const fits: TimingFit[] = [];
+  for (const level of LEVELS) {
+    const fit = fitTiming(cues, speechFromLoudness(loudness, level));
+    if (fit) fits.push(fit);
+  }
+  fits.sort((a, b) => b.score - a.score);
+  const best = fits[0];
+  if (!best) return undefined;
+  const agree = fits.filter(
+    (f) => f.scale === best.scale && Math.abs(f.offsetMs - best.offsetMs) <= AGREE_MS,
+  );
+  return agree.length >= 2 ? best : undefined;
 }
