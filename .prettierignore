@@ -1,0 +1,9 @@
+node_modules/
+data/
+logs/
+dist/
+package-lock.json
+src/web/tailwind.generated.css
+
+dist-electron/
+release/

@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background: #15120e;
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Native-app feel: no text selection except form fields and output, draggable title bar. */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+input,
+textarea,
+select,
+pre {
+  user-select: text;
+  -webkit-user-select: text;
+}
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Slim dark scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #352e25;
+  border-radius: 9999px;
+  border: 2px solid #15120e;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4034;
+}

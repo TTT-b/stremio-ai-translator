@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "items": [
+    {
+      "id": "2026-10-18-news-bell",
+      "date": "2026-10-18",
+      "title": {
+        "he": "פעמון הודעות חדש",
+        "en": "New news bell"
+      },
+      "body": {
+        "he": "כאן אפרסם עדכונים והודעות לכל מי שמשתמש בתוסף, ותמצאו כאן תמיד את מה שחדש בכל גרסה. הודעה חדשה מסומנת בנקודה על הפעמון.",
+        "en": "This is where I will post updates and messages for everyone who uses the add-on, and you can always find what is new in each version here. A new message shows as a dot on the bell."
+      }
+    }
+  ]
+}

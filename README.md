@@ -1,0 +1,372 @@
+# AI Subtitle Translator for Stremio
+
+A real-time AI subtitle translator for [Stremio](https://www.stremio.com/). When you play a movie
+or episode it offers a subtitle in your language (Hebrew by default). If OpenSubtitles already has
+one it is used directly; otherwise a source subtitle is downloaded, translated by AI (Gemini, Claude or OpenAI),
+validated, cached and served to the player.
+
+> **Version 1 is a local, single-user app.** It runs on your own computer at `127.0.0.1` and is
+> designed for Stremio desktop.
+
+## Key features
+
+- **Real-time translation** - subtitles are translated on demand while you watch; later plays are
+  instant from the cache.
+- **Smart source lookup** - search by file hash, then IMDb/TMDB id, then title text; anime
+  (`kitsu:` / `tmdb:` ids) is supported and results are filtered to the right season and episode.
+- **RTL punctuation fix for Hebrew** (and Arabic/Persian) - per-line Unicode marks keep `. , ? !`
+  on the correct side of the line, including two-line subtitles and `<i>` tags.
+- **Natural punctuation** - the prompt mirrors the source, so translations do not get a period on
+  every fragment.
+- **Responsive local GUI** - a five-step setup wizard plus a dashboard with a settings drawer
+  (Tailwind CSS) for keys, language, connection tests, and install (button and copyable URL).
+- **Caching and resilience** - file cache, background jobs with an "in progress" placeholder, and
+  chunked translation that resumes after failures.
+- **Validation** - deterministic code owns parsing, timestamps and IDs; the AI only translates text.
+  Since v1.4.4 it also silently removes stray letters from a foreign alphabet (for example an
+  Arabic letter inside a Hebrew word) unless the source line had them; no retry is needed. Latin
+  names and brands are always kept. Since v1.5 this covers every alphabet (Georgian, Ethiopic, Bengali and
+  so on), and subtitles that were saved earlier are cleaned the next time they are requested.
+- **Fast and adaptive** (v1.4.4) - 80 lines per request and 4 requests at once, with no fixed
+  delay. Only a 429 / 503 from the provider makes the app pause all requests together and slow
+  down briefly; it speeds up again once the provider recovers.
+- **Better gender accuracy** (v1.4.4) - each request also carries the next few source lines, and the
+  prompt tells the model to infer gender from pronouns and names, stay consistent, and use
+  gender-neutral wording when it is truly unknown. Translations made with older versions are
+  re-made (the prompt version is part of the cache key).
+
+## Requirements
+
+- Node.js 22 or newer (`node -v`)
+- An AI API key: [Google Gemini](https://aistudio.google.com/apikey), Anthropic Claude or OpenAI
+  (the app finds out which one by asking the providers when you save the key)
+- A free [OpenSubtitles.com](https://www.opensubtitles.com) account and an API consumer key
+  (create one at https://www.opensubtitles.com/en/consumers)
+- Stremio desktop
+
+## Run from source (developers)
+
+```powershell
+npm install
+Copy-Item .env.example .env     # macOS/Linux: cp .env.example .env
+notepad .env                    # fill in the keys, save, close
+npm start
+```
+
+In `.env` set `AI_API_KEY`, `OPENSUBTITLES_API_KEY`, `OPENSUBTITLES_USERNAME` and
+`OPENSUBTITLES_PASSWORD` (the account login is required for downloads). Every option is explained
+in [`.env.example`](.env.example). You can also paste the keys on the config page instead.
+The RTL punctuation fix for Hebrew/Arabic is always on (`RTL_FIX=false` turns it off). The live status
+card shows "Translated X out of Y lines (Z%)" with a progress bar for the current subtitle.
+
+Then open http://127.0.0.1:7000/ . Success looks like
+`Open http://127.0.0.1:7000/ in your browser` in the terminal. Stop with Ctrl+C.
+
+> ## Security: never share your keys
+>
+> **Never upload, commit or share your `.env` file or your API keys.** `.env`, `settings.json`,
+> `data/` and `logs/` are listed in `.gitignore` - keep it that way. If a key ever leaks, revoke
+> it at the provider and create a new one. Keys are never shown on the config page, written to
+> logs, or put in URLs.
+
+## Desktop app (Windows installer, no console window)
+
+1. Run `Stremio-AI-Subtitle-Translator-Setup-<version>.exe` and wait; the app opens by itself.
+2. Paste your keys into the **API keys** card in the window and press Save. Success looks like
+   a "Saved" message; the keys are never shown again.
+3. The window has its own title bar. The **X** asks "Close the Translator?": **Minimize to System
+   Tray** hides the app (bottom-right, near the clock) and translations keep running; **Quit
+   Program** stops the add-on. Right-click the tray icon for **Open UI** or **Quit**.
+4. Continue with **Install in Stremio** below, using http://127.0.0.1:7000/manifest.json.
+
+Keys, `settings.json`, `data/` and `logs/` live in your user profile folder
+(`%APPDATA%\stremio-ai-subtitle-translator`), not next to the app and not in the installer.
+Windows SmartScreen may warn about an unsigned app: choose **More info -> Run anyway**.
+Uninstalling keeps that folder; delete it to remove your saved keys.
+
+Updates: the installed app checks GitHub Releases for a newer version at start and every 6 hours,
+downloads it quietly and installs it when you quit. When a download finishes, a blue **Update**
+button appears in the top bar: click it to restart and install right away. **Settings &rarr;
+Check for updates** checks on demand. The first launch after an update shows a one-time
+**What's new** popup (notes live in `src/electron/whatsNew.ts`; add an entry per release). To publish one, raise `version` in
+`package.json`, run `npm run dist`, and upload the installer plus `latest.yml` (both in `release/`)
+to a new GitHub release tagged `v<version>`. Or let `npm run publish` do it: it builds and uploads
+the release to GitHub using `GH_TOKEN` from `.env` (a token with repo access; never commit it).
+
+Build it yourself (Node.js 22+): `npm run dist` writes the installer to `release/`.
+`npm run desktop` opens the app without packaging.
+
+## Install in Stremio
+
+1. Keep the desktop app (or `npm start`) running.
+2. Open http://127.0.0.1:7000/ and click **Install in Stremio**. It opens Stremio Web in your
+   browser: sign in to the same Stremio account, allow the browser's one-time "access this
+   computer" prompt (Chrome), and click Install. The add-on then shows up in the Stremio app
+   (reopen it if it does not appear after a minute). Tested in Chrome only. Manual alternative:
+   Stremio -> Add-ons -> paste `http://127.0.0.1:7000/manifest.json`. (A `stremio://` link cannot
+   work here: Stremio turns it into https and drops the port.)
+3. Play a movie or episode, open the subtitles menu and pick the entry labelled by this add-on.
+4. If it says **"Translation in progress - reselect this subtitle in a minute"**, wait and select
+   it again. A full episode usually takes 1-5 minutes the first time.
+
+The subtitle list answers immediately with a local link. Opening it waits up to `SUB_WAIT_MS`
+(15 s) for the job and otherwise shows the placeholder. A translation that fails part-way resumes
+from the finished parts on the next attempt.
+
+## Config page
+
+The page uses a focused, warm-dark design: one centered card at a time. The interface is in
+**Hebrew (right to left) or English (left to right)**: Hebrew by default, switch in **Settings →
+Interface language** (or the small language button above the wizard). Everything the page shows
+follows the choice: buttons, error and test messages, the What's new notes and the tray menu. The
+server, its logs and the Stremio placeholder subtitles stay in English. Button names below are
+the English meaning. Every release adds its What's new notes in both languages
+(`src/electron/whatsNew.ts`), and every screen text lives in `src/web/i18n.ts` with both languages.
+
+- **Setup wizard** (shown on first run, or while a key is missing). Five steps with a progress bar
+  at the top; **Back** / **Continue** move between them:
+  1. **AI key** - paste any Gemini, Anthropic or OpenAI key. **Continue** checks it with a free
+     "list models" request to the providers (the one that looks most likely first; a wrong guess
+     means the key is also sent to the other providers, which refuse it). The first provider that
+     accepts it is saved to `.env` and used from then on with a fixed model
+     (`gemini-3.5-flash-lite`, `claude-haiku-5-5`, `gpt-4o-mini`). If all refuse it, nothing is
+     saved and an error is shown. Buttons open the pages where each key is created (Gemini and
+     OpenSubtitles are marked Free) in your normal browser.
+  2. **OpenSubtitles** - API key, username and password (saved to `.env`, never shown again).
+  3. **Language** - target language and **Dual Subtitles** (original line on top, translation
+     below it; saved to `settings.json`).
+  4. **Test** - **Test AI provider**, **Test OpenSubtitles** and **Translate built-in sample**.
+  5. **Install** - the install button and the copyable manifest URL. **Finish** opens the dashboard.
+     If you open the wizard again from Settings, **Cancel - back to the main screen** on step 1 leaves
+     it without changing anything.
+- **Dashboard** ("All set"): live state, progress of the current subtitle file, lines translated
+  this session, target language and dual-subtitles setting, and the **Connection checks**
+  (Test AI provider, Test OpenSubtitles, Translate built-in sample). A meter shows how many of
+  the account's OpenSubtitles downloads were used today (for example 10 / 20; a free account has
+  20 per day). It is read from OpenSubtitles at most every 10 minutes and after each download,
+  and is hidden when it cannot be read.
+- **My subtitles** (button on the dashboard): every subtitle translated so far, grouped by title -
+  series by season and episode, movies together. Tick what to delete (a whole series, a season or
+  single episodes), or use **Select all** / **Delete all**; a confirmation always comes first. A
+  deleted subtitle is translated again the next time you play it. Downloaded source files are kept,
+  so no OpenSubtitles download quota is lost. Each row says whether its timing is **exact** (taken
+  from the video itself, or a file-hash match) or **estimated** (an OpenSubtitles subtitle that may
+  belong to another version of the video: if it is off, try another stream or shift it in Stremio's
+  player). The list stores titles and numbers only
+  (`data/library.json`), never subtitle text.
+- **Settings** (button on the dashboard) opens a side drawer: key status (configured/missing, never
+  the values), fields to replace keys, language, dual subtitles, **Clear Translation Cache**
+  (deletes saved translations; downloaded sources are kept), **Run setup again**, and (desktop app)
+  the version and **Check for updates**. **Save** stores everything and shows a toast.
+- **News bell** (top of the wizard and the dashboard): messages from the author to everyone who has
+  the app, plus the release notes of every version. A dot with a number marks what is new; opening
+  the bell marks it as read, and everything stays listed. The release notes are always in your
+  interface language.
+
+### Posting a message to every user (for the author)
+
+The messages live in `news.json` in this repository. The app downloads that one small file from
+GitHub (`raw.githubusercontent.com`) at most every 30 minutes and keeps the last copy for offline
+use; nothing about the user is sent. Text only (no HTML), links must be `https`. To post one:
+
+```powershell
+npm run news -- --he-title "כותרת" --en-title "Title" --he "ההודעה בעברית" --en "The message in English"
+git add news.json
+git commit -m "news: <short title>"
+git push
+```
+
+Optional: `--link https://...` adds an Open button. Users see it within about half an hour after the
+push. Newest first; at most 50 messages are kept. To turn the feature off on one computer, set
+`NEWS_ENABLED=false` in `.env` (the bell then shows only the saved copy and the release notes).
+
+The page makes no third-party requests: Tailwind CSS is built locally into
+`src/web/tailwind.generated.css` and inlined (`npm start` rebuilds it automatically; run
+`npm run build:css` after editing `src/web/html.ts`). The server only listens on `127.0.0.1`, so the
+manifest URL works on this computer only.
+
+## Anime and other ID types
+
+Search order (each step runs only if the previous found nothing):
+
+1. File hash (`videoHash` from Stremio) - best sync
+2. IMDb or TMDB id (with season/episode)
+3. Text search by title: the playing file's name, then the title from Kitsu (kitsu ids) or
+   Cinemeta (IMDb ids)
+
+### Subtitles that ship with the video (exact timing)
+
+When a video plays through Stremio's own streaming server (torrents), the add-on first looks for a
+subtitle that ships with that exact file: a **text track stored inside the video file**, or a **subtitle file in the same torrent** (for example Subs/<video name>/2_English.srt). Either matches
+the release, so it has no timing drift and needs no OpenSubtitles download. How it works:
+
+1. The add-on asks Stremio's local server (`http://127.0.0.1:11470`) which torrent file has the
+   playing file's name (Stremio sends it with the request).
+2. It reads the file's subtitle tracks with `ffprobe` and `ffmpeg`, which are installed with
+   Stremio (`%LOCALAPPDATA%\Programs\Stremio`). Set `FFMPEG_PATH` in `.env` to use another copy.
+3. A track in your target language is served as is; otherwise an English track is translated.
+   Forced and commentary tracks are skipped, and full-dialogue tracks (the smaller file) are\n preferred over SDH ones. Subtitle files in the torrent need no ffmpeg.
+   Picture-based tracks (PGS) are not supported.
+4. If anything is missing (no local stream, no ffmpeg, no text track) the normal OpenSubtitles
+   search below runs, so nothing breaks. The whole lookup has a 30-second limit and a slow or
+   half-downloaded file is skipped, never waited for. A subtitle made this way is only a guess for
+   the timing, so it is checked again the next time Stremio asks (for example once the video is
+   on Stremio's local server) and replaced by the video's own subtitle when there is one.
+
+Turn it off in **Settings → Use subtitles embedded in the video file** (or `EMBEDDED_SUBTITLES=false`
+in `.env`). `STREMIO_SERVER_URL` can change the server address; only `127.0.0.1` / `localhost` is
+accepted. Look for `embedded subtitle` in the log (stage `SOURCE`).
+
+### Second subtitle source (SubDL)
+
+Optional. Save a free API key from subdl.com in **Settings > SubDL API key**. The add-on then also
+looks for subtitles on SubDL (free, up to 300 downloads a day per IP) and uses them when
+OpenSubtitles has none, or when OpenSubtitles says today's downloads are used up. OpenSubtitles stays
+first; a subtitle that already exists in the target language on SubDL is used directly. SubDL
+subtitles are zip files; only the first `.srt` inside is used, and season packs are skipped. The key
+is stored like the other keys (`.env`, never committed) and is never logged. Look for
+`OpenSubtitles limit reached, using SubDL` in the log (stage `SOURCE`). The key can also be added in
+the setup wizard (step 2), and **Test SubDL** in the connection checks (shown only when a key is saved)
+checks it. SubDL has no call that reports usage, so unlike OpenSubtitles there is no meter for it.
+
+### Ask before translating (optional)
+
+**Settings > Translation > Ask me before translating** (or `TRANSLATION_MODE=ask` in `.env`). The default,
+`auto`, translates as soon as Stremio asks. In `ask` mode a new request is only noted: the player shows
+"Received...", the desktop app shows a notification, and the main screen lists it in the **translation
+queue** with **Translate** and **Cancel**. After you press Translate, reselect the subtitle in Stremio.
+Choosing another episode replaces a request that is still waiting. A subtitle that was translated before
+is served at once without asking. Cancel also stops a translation that is already running (it stops
+before its next request to the AI). After a cancel, reselecting the subtitle in Stremio starts the
+translation again once 20 seconds have passed (Stremio's own immediate re-ask is ignored). Up to 4 translations run at once (`MAX_CONCURRENT_JOBS`).
+
+**Skip a slow step.** While the app looks for a subtitle inside the video, or listens to the video
+(precise sync), the queue line on the main screen shows a **Skip** button. It gives up that step and goes
+on to the next one: the video's own subtitle, then listening, then the download from OpenSubtitles. Which
+steps run at all is set in Settings (embedded subtitles, precise sync).
+
+**First subtitle source.** Under Translation you can choose which source is asked first:
+OpenSubtitles (the default) or SubDL. The other one is used only when the first has no subtitle. SubDL
+needs a SubDL key (Accounts and keys); without a key OpenSubtitles is used. SubDL has no file-hash match, so
+its timing is less exact, but it does not use up the OpenSubtitles daily downloads.
+
+**Settings.** The panel opens from the start side of the window (the right in Hebrew, the left in
+English) as one column of categories: Accounts and keys, Translation, Maintenance, Advanced settings and
+About. All are closed at first; tap one to open it (opening one closes the others). The version and the
+update check are in About.
+
+**Test mode (Advanced settings, for developers).** Turn it on to try the queue, the buttons and the
+diagnostics without playing a video. "Run a test request" adds a made-up episode to the real queue. No
+OpenSubtitles and no AI are used (no quota is spent): a random subtitle is picked and every line gets the
+prefix `HE:`. Besides the built-in samples, it picks from any `.srt` files you put in the `test-subtitles`
+folder inside the app's data folder (`data\test-subtitles` when run from the project). Test subtitles are
+not added to the library. While test mode is on, real translations are paused, so turn it off when done.
+
+### Precise sync by speech (optional, for videos without their own subtitle)
+
+For a video that has no subtitle of its own, the timing of a downloaded subtitle can be wrong.
+**Settings → Precise sync by speech** fixes that: the add-on listens to the video's speech with
+[whisper.cpp](https://github.com/ggml-org/whisper.cpp) and its small English model (`tiny.en`),
+matches the words of an English subtitle with the words that are spoken, and moves every cue to the
+moment it is said. The error does not have to be constant: a subtitle that is 2 s early, then 1 s
+late, then right is fixed cue by cue. Text, order and number of cues never change.
+
+- **Free and local.** Both tools are MIT-licensed and run on your computer; the audio never leaves
+  it. They are downloaded once (about 87 MB) after you press **Download and turn on** and confirm,
+  from `github.com` (the tool) and `huggingface.co` (the model). Each download is checked against a
+  SHA-256 checksum fixed in `src/sync/tools.ts` and refused if it differs; only the few files needed
+  are unpacked. Windows 64-bit only. **Remove the tool** in Settings deletes everything again.
+- **Works for weak computers.** The tool picks the right build for the processor (down to very old
+  ones), uses at most 4 threads at below-normal priority, and no graphics card. Measured with 2
+  threads: about 76 s for a 23-minute episode (4 threads: about 45 s); a slow computer takes a few
+  minutes, once. The words are saved, so each video is listened to once.
+- **How accurate.** On a real episode, a real English OpenSubtitles subtitle (median error 1.5 s, only
+  13% of cues within 0.5 s) was measured against the video's own embedded subtitle after syncing:
+  87% of cues within 0.3 s, 98% within 0.5 s, 100% within 1 s. A synthetic test with errors of up to
+  4 s in changing steps gave 85% / 96% / 99%.
+- **When it runs.** Only when the video plays through Stremio's local streaming server (torrents),
+  the video has no subtitle of its own, and the sync switch is on. The English subtitle from
+  OpenSubtitles is then used (translated by the AI, which keeps the exact timing) instead of a
+  Hebrew one, because only English text can be matched with the speech. If the text does not match
+  what is said (a different cut, or a video that is not in English), the normal choice is used. The
+  first subtitle of a video shows "Syncing the subtitle to the speech" for a few minutes; reselect
+  it afterwards.
+- `SYNC_MODEL=base.en` in `.env` uses the larger model (141 MB, twice as slow, a little more
+  accurate). `PRECISE_SYNC=true` switches the feature on from the start. Look for `sync` and
+  `speech transcribed` in the log (stage `SOURCE`).
+
+### Timing consensus (fewer out-of-sync subtitles)
+
+When there is no hash match, the subtitle timing may belong to another release of the video.
+The add-on can then download 3 subtitles in the same language, compare only their timing
+(not their text), and use the one whose timing most of the others share. A hash match skips
+this. Each uncached file counts against the OpenSubtitles daily download quota, which is small on
+a free account, so the comparison runs only once OpenSubtitles has reported at least 30 downloads
+left today; the first subtitle after a start downloads a single file. Look for `timing consensus`
+in the log (stage `SOURCE`) to see the scores. This only runs when there is no subtitle inside the video file.
+Offsets that change during an episode are not corrected for downloaded subtitles.
+
+Preview what would be chosen (no download quota used):
+`http://127.0.0.1:7000/dev/source-search?type=series&id=kitsu:49294:3` (optional `&filename=...`).
+
+## Commands
+
+| Command                 | Purpose                                                 |
+| ----------------------- | ------------------------------------------------------- |
+| `npm start`             | run the add-on (`npm run dev` restarts on code changes) |
+| `npm run check`         | format check + lint + type-check + tests                |
+| `npm test`              | tests (free; all external APIs mocked)                  |
+| `npm run test:live`     | one tiny real request per provider (uses your keys)     |
+| `npm run cache:cleanup` | remove expired/corrupt cache entries                    |
+
+To force fresh translations (for example after changing prompts) delete the cache:
+`Remove-Item data\cache\*.json`.
+
+Translate a file of your own:
+
+```powershell
+curl.exe -X POST --data-binary "@my.srt" "http://127.0.0.1:7000/dev/translate?lang=he" -o out.srt
+```
+
+## Privacy
+
+Subtitle dialogue is sent to the AI provider that matches your key (Google Gemini, Anthropic or OpenAI). Provider quotas, billing and free-tier
+data-use terms are controlled by Google and OpenSubtitles, not by this add-on. Logs never contain
+keys or (by default) dialogue.
+
+## Security notes
+
+- Binds to `127.0.0.1` only; rejects foreign `Host`/`Origin` headers; strict CSP (`default-src 'none'`, nonce-only
+  scripts and styles, no external sources); no CORS.
+- Secrets live only in `.env`; a scan of tracked files, git history, logs and cache found none.
+- `path-to-regexp` is pinned to the patched 0.1.13 via `overrides`. Remaining `npm audit` findings
+  (`tmp` via the Stremio SDK's interactive CLI scaffolding) are code this add-on never loads; the
+  suggested `npm audit fix --force` would downgrade the SDK, so it is not applied.
+- No Dockerfile on purpose: the server is hard-wired to localhost, and exposing an unauthenticated
+  page that holds API keys is unsafe.
+
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if something does not work.
+
+## Adding another translation provider
+
+Implement `TranslationProvider` (`src/translation/provider.ts`): `testConnection`,
+`translateChunk`, `getProviderName`, `getModelInformation`, `normalizeError` (map errors to
+`AppError` codes; mark transient ones retryable), then return it from `createProvider`. The
+pipeline, validation and cache do not change.
+
+## Roadmap (not implemented)
+
+Public deployment: HTTPS hosting, per-user bring-your-own-key with keys encrypted at rest, opaque
+config ID in the manifest URL, authentication, rate limiting, SSRF hardening and quotas.
+
+## License
+
+[MIT](LICENSE)
+
+## Documentation used
+
+- [Stremio subtitles handler](https://github.com/Stremio/stremio-addon-sdk/blob/master/docs/api/requests/defineSubtitlesHandler.md)
+- [Gemini models](https://ai.google.dev/gemini-api/docs/models) and
+  [structured output](https://ai.google.dev/gemini-api/docs/structured-output)
+- [`@google/genai`](https://github.com/googleapis/js-genai)
+- [OpenSubtitles REST API](https://opensubtitles.stoplight.io/docs/opensubtitles-api)
