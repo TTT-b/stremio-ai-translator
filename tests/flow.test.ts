@@ -1274,6 +1274,48 @@ describe('ask mode (translate only after the user says yes)', () => {
       expect(await (await current.get(new URL(url).pathname)).text()).toContain('HE:');
     });
 
+    it('a subtitle inside the video that arrives just after Skip is still used (it is exact)', async () => {
+      const at = (s: number) =>
+        `00:${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')},000`;
+      const own = Array.from(
+        { length: 25 },
+        (_, i) => `${i + 1}\n${at(10 + i * 3)} --> ${at(11 + i * 3)}\nOWN line ${i + 1}\n`,
+      ).join('\n');
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      current = await start({
+        subWaitMs: 50,
+        findStream: async () => ({
+          infoHash: 'a'.repeat(40),
+          fileIdx: 0,
+          url: 'http://127.0.0.1:11470/x/0',
+          videoPath: 'late.mkv',
+          files: [],
+        }),
+        // The timing check is slow, so the job is still busy when the video's own subtitle arrives.
+        speechFit: async (o) => {
+          await new Promise<void>((resolve) => {
+            if (o.signal.aborted) resolve();
+            o.signal.addEventListener('abort', () => resolve(), { once: true });
+          });
+          return undefined;
+        },
+        loadEmbedded: (async () => {
+          await gate;
+          return { raw: own, language: 'en', source: 'track', cues: 25 };
+        }) as never,
+      });
+      const url = await requestFile(current, 'late.mkv');
+      await until(async () => (await statusOf(current!)).queue[0]?.skippable === 'local');
+      const id = (await statusOf(current)).queue[0]!.id;
+      expect((await post(current, `/api/jobs/${id}/skip`, {})).ok).toBe(true);
+      await until(async () => (await statusOf(current!)).queue[0]?.skippable === 'sync');
+      release();
+      await done(current, url);
+      const text = await (await current.get(new URL(url).pathname)).text();
+      expect(text).toContain('HE:OWN line 1');
+    });
+
     it('one Skip applies to every request for the episode (another file of the same video)', async () => {
       current = await start(slowOpts);
       const a = await requestFile(current, 'slow.mkv');

@@ -415,17 +415,22 @@ export class JobManager {
     step: 'local' | 'sync',
     start: (wasSkipped: () => boolean) => Promise<T>,
     fallback: T,
+    /** Called when the user skips, with the work that is still running (its late result may be wanted). */
+    onSkipped?: (work: Promise<T>) => void,
   ): Promise<T> {
     // Already skipped for this episode by an earlier click: do not even start.
     if (this.skipped.get(videoKey(job.spec))?.has(step)) return fallback;
     let flag = false;
+    const running: { work?: Promise<T> } = {};
     const skipped = new Promise<T>((resolve) => {
       job.skipNow = () => {
         flag = true;
+        if (running.work) onSkipped?.(running.work);
         resolve(fallback);
       };
     });
     const work = start(() => flag);
+    running.work = work;
     work.catch(() => undefined); // if skipped, it ends by itself in the background
     try {
       return await Promise.race([work, skipped]);
@@ -790,6 +795,9 @@ export class JobManager {
     // 2. Find the best subtitle: the one inside the playing video file first (exact timing, no
     // download), then OpenSubtitles.
     job.stage = 'local';
+    // If the user skips the search inside the video but it still finishes a moment later, its
+    // exact subtitle is better than anything downloaded: it is used as soon as it is there.
+    const late: { value?: ChosenSource } = {};
     let chosen = await this.skippable(
       job,
       'local',
@@ -810,6 +818,14 @@ export class JobManager {
           },
         ),
       undefined,
+      (work) => {
+        work.then(
+          (found) => {
+            if (found) late.value = found;
+          },
+          () => undefined,
+        );
+      },
     );
     this.stopIfCancelled(job);
     if (!chosen && fallback) {
@@ -874,6 +890,10 @@ export class JobManager {
           chosen = await search();
         }
       }
+      if (late.value && !chosen.exact) {
+        log.info({ stage: 'SOURCE', embedded: 'late' }, 'subtitle inside the video arrived late');
+        chosen = late.value;
+      }
       // No exact timing: listen to a few short pieces of the video and move the subtitle onto them.
       if (!placedOnSpeech && !chosen.exact && this.deps.speechFit && job.spec.filename) {
         job.stage = 'sync';
@@ -881,7 +901,8 @@ export class JobManager {
         const moved = await this.skippable(
           job,
           'sync',
-          (wasSkipped) => this.fitToSpeech(job, cfg, log, picked, wasSkipped),
+          (wasSkipped) =>
+            this.fitToSpeech(job, cfg, log, picked, () => wasSkipped() || !!late.value),
           undefined,
         );
         this.stopIfCancelled(job);
@@ -889,6 +910,12 @@ export class JobManager {
           placedOnSpeech = true;
           chosen = moved;
         }
+      }
+      // The video's own subtitle came while the timing was being checked: it is exact, use it.
+      if (late.value && chosen !== late.value && !(chosen.exact && !placedOnSpeech)) {
+        log.info({ stage: 'SOURCE', embedded: 'late' }, 'subtitle inside the video arrived late');
+        chosen = late.value;
+        placedOnSpeech = false;
       }
     }
     // Only a subtitle known to match this video goes under the main key.
