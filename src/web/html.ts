@@ -911,8 +911,7 @@ const drawNews = () => {
   if (!newsData) { body.append(el('p', 'text-sm text-warm-mu', T.newsOffline)); return; }
   const seen = new Set(newsData.seen);
   if (!newsData.online) body.append(el('p', 'rounded-xl border border-warm-ln px-3 py-2 text-xs text-warm-mu', T.newsOffline));
-  body.append(el('h3', 'text-xs font-bold uppercase tracking-wide text-warm-ac', T.newsFromCreator));
-  if (!newsData.items.length) body.append(el('p', 'text-sm text-warm-mu', T.newsEmptyMsgs));
+  if (newsData.items.length) body.append(el('h3', 'text-xs font-bold uppercase tracking-wide text-warm-ac', T.newsFromCreator));
   for (const i of newsData.items) {
     const card = el('div', 'rounded-2xl border border-warm-ln bg-warm-bg p-3.5');
     const head = el('div', 'flex items-start justify-between gap-3');
