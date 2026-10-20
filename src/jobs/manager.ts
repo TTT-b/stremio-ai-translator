@@ -19,6 +19,7 @@ import { cinemetaTitle, kitsuTitles, makeTitleResolver, parseFilename } from '..
 import type { Library } from './library';
 import type { SourceSubtitleProvider, SubtitleCandidate, VideoRef } from '../sources/types';
 import { type ConsensusItem, pickByConsensus } from '../subtitles/consensus';
+import { cleanSubtitle } from '../subtitles/clean';
 import { parseSubtitle } from '../subtitles/parse';
 import { serializeSubtitle } from '../subtitles/serialize';
 import type { ChunkCue } from '../subtitles/chunk';
@@ -179,7 +180,7 @@ interface ChosenSource {
  * 7: lines placed on the speech stay on screen at least one second.
  * 8: stray letters of any foreign alphabet are removed, also from subtitles made before.
  */
-const SOURCE_LOGIC_VERSION = 9;
+const SOURCE_LOGIC_VERSION = 10;
 
 /** Files compared for timing when there is no hash match. Each uncached one costs a download. */
 const CONSENSUS_POOL_SIZE = 3;
@@ -763,6 +764,7 @@ export class JobManager {
       rtl,
       ...(dual ? { dual } : {}),
       ...(syncOn ? { sync: true } : {}),
+      ...(cfg.cleanSubtitles ? { clean: true } : {}),
       sourceLogic: SOURCE_LOGIC_VERSION,
       kind: 'job',
     });
@@ -774,6 +776,7 @@ export class JobManager {
       rtl,
       ...(dual ? { dual } : {}),
       ...(syncOn ? { sync: true } : {}),
+      ...(cfg.cleanSubtitles ? { clean: true } : {}),
       sourceLogic: SOURCE_LOGIC_VERSION,
       kind: 'job-fallback',
     });
@@ -928,7 +931,8 @@ export class JobManager {
         : 'estimated';
     this.stopIfCancelled(job);
     const raw = chosen.raw;
-    const parsed = parseSubtitle(raw);
+    const file = parseSubtitle(raw);
+    const parsed = cfg.cleanSubtitles ? cleanSubtitle(file) : file;
     log.info({ stage: 'PARSER', cues: parsed.cues.length, format: parsed.format }, 'source parsed');
     job.progress = { done: 0, total: parsed.cues.length };
     job.stage = 'translate';

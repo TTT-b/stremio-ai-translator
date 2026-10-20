@@ -58,6 +58,14 @@ const envSchema = z.object({
     .pipe(z.enum(['', 'true', 'false', '1', '0']))
     .transform((v) => v !== 'false' && v !== '0'),
   /** Use text subtitle tracks stored inside the playing video file (default on). */
+  /** Remove speaker names and sound notes from subtitles before translating (default on). */
+  CLEAN_SUBTITLES: z
+    .string()
+    .optional()
+    .transform((v) => (v ?? '').trim().toLowerCase())
+    .pipe(z.enum(['', 'true', 'false', '1', '0']))
+    .transform((v) => v !== 'false' && v !== '0'),
+  /** Use text subtitle tracks stored inside the playing video file (default on). */
   EMBEDDED_SUBTITLES: z
     .string()
     .optional()
@@ -120,6 +128,8 @@ export interface Config {
   dualSubtitles: boolean;
   /** Prefer a text subtitle track inside the playing video file (exact timing). */
   embeddedSubtitles: boolean;
+  /** Remove speaker names and sound notes before translating. Set on the config page. */
+  cleanSubtitles: boolean;
   stremioServerUrl: string;
   ffmpegPath: string;
   /** Put the subtitle on the spoken words (see src/sync). */
@@ -176,6 +186,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     logDialogue: e.LOG_DIALOGUE,
     dualSubtitles: false,
     embeddedSubtitles: e.EMBEDDED_SUBTITLES,
+    cleanSubtitles: e.CLEAN_SUBTITLES,
     stremioServerUrl: e.STREMIO_SERVER_URL,
     ffmpegPath: e.FFMPEG_PATH,
     newsEnabled: e.NEWS_ENABLED,

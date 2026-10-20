@@ -22,6 +22,7 @@ export interface StatusPageData {
   dualSubtitles: boolean;
   /** Use subtitle tracks stored inside the video file (default on). */
   embeddedSubtitles?: boolean;
+  cleanSubtitles?: boolean;
   /** auto: translate right away. ask: wait for the user's OK first. */
   translationMode?: 'auto' | 'ask';
   /** Which subtitle source is asked first. */
@@ -382,6 +383,7 @@ ${group(
 <div><label class="${labelCls}" for="d-lang">${tt('langLabel')}</label><select class="${field}" id="d-lang">${langOptions}</select></div>
 ${dualSwitch('d-dual', d.dualSubtitles, false)}
 ${toggle('d-emb', d.embeddedSubtitles ?? true, 'embLabel', 'embHint')}
+${toggle('d-clean', d.cleanSubtitles ?? true, 'cleanLabel', 'cleanHint')}
 ${toggle('d-ask', d.translationMode === 'ask', 'askLabel', 'askHint')}
 <div><label class="${labelCls}" for="d-src">${tt('srcLabel')}</label><select class="${field}" id="d-src"><option value="opensubtitles"${d.subtitleSource === 'subdl' ? '' : ' selected'}>${tt('srcOs')}</option><option value="subdl"${d.subtitleSource === 'subdl' ? ' selected' : ''}>${tt('srcSubdl')}</option></select><p class="mt-1 text-xs text-warm-mu">${tt('srcHint')}</p></div>`,
 )}
@@ -474,8 +476,8 @@ const saveKeys = async (body, resultId) => {
     return r.ok;
   } catch { show(resultId, false, FAILED); toast(false, FAILED); return false; }
 };
-const saveSettings = async (lang, dual, ui, embedded, sync, ask) => {
-  const r = await post('/api/settings', {targetLanguage: lang, dualSubtitles: dual, ...(ui ? {uiLanguage: ui} : {}), ...(embedded === undefined ? {} : {embeddedSubtitles: embedded}), ...(sync === undefined ? {} : {preciseSync: sync}), ...(ask === undefined ? {} : {translationMode: ask ? 'ask' : 'auto'})});
+const saveSettings = async (lang, dual, ui, embedded, sync, ask, clean) => {
+  const r = await post('/api/settings', {targetLanguage: lang, dualSubtitles: dual, ...(ui ? {uiLanguage: ui} : {}), ...(embedded === undefined ? {} : {embeddedSubtitles: embedded}), ...(sync === undefined ? {} : {preciseSync: sync}), ...(ask === undefined ? {} : {translationMode: ask ? 'ask' : 'auto'}), ...(clean === undefined ? {} : {cleanSubtitles: clean})});
   return {...r, message: r.ok ? T.settingsSaved : T.settingsInvalid};
 };
 const setUiLang = async (ui) => {
@@ -552,7 +554,7 @@ $('save').addEventListener('click', async () => {
   try {
     const body = readKeys('d-');
     if (Object.keys(body).length && !(await saveKeys(body, 'save-result'))) return;
-    const r = await saveSettings($('d-lang').value, $('d-dual').checked, $('d-ui').value, $('d-emb').checked, syncState === 'ready' ? $('d-sync').checked : undefined, $('d-ask').checked);
+    const r = await saveSettings($('d-lang').value, $('d-dual').checked, $('d-ui').value, $('d-emb').checked, syncState === 'ready' ? $('d-sync').checked : undefined, $('d-ask').checked, $('d-clean').checked);
     show('save-result', r.ok, r.message);
     toast(r.ok, r.message);
     if (r.ok) { clearKeys('d-'); setTimeout(() => location.reload(), 1000); }

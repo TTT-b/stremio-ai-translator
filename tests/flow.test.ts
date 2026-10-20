@@ -177,6 +177,36 @@ describe('Stremio manifest', () => {
   });
 });
 
+describe('speaker names and sound notes', () => {
+  const SDH = [
+    '1\n00:00:01,000 --> 00:00:02,000\nKATARA: Water.\n',
+    '2\n00:00:03,000 --> 00:00:04,000\n(groans)\n',
+    '3\n00:00:05,000 --> 00:00:06,000\n- (thud)\n- Aang!\n',
+  ].join('\n');
+  const fetchSrt = async (h: Harness) => {
+    const body = (await (await h.get('/subtitles/movie/tt0111161.json')).json()) as SubsResponse;
+    return (await h.get(new URL(body.subtitles[0]!.url).pathname)).text();
+  };
+
+  it('are removed before translation by default, and a sound-only line disappears', async () => {
+    current = await start({ content: SDH });
+    const srt = await fetchSrt(current);
+    expect(srt).toContain('HE:Water.');
+    expect(srt).toContain('HE:Aang!');
+    expect(srt).not.toContain('KATARA');
+    expect(srt).not.toContain('groans');
+    expect(srt).not.toContain('thud');
+    expect(srt.match(/-->/g)).toHaveLength(2);
+  });
+
+  it('stay when the setting is switched off', async () => {
+    current = await start({ content: SDH, settings: { cleanSubtitles: false } });
+    const srt = await fetchSrt(current);
+    expect(srt).toContain('HE:KATARA: Water.');
+    expect(srt).toContain('HE:(groans)');
+  });
+});
+
 describe('subtitle request flow', () => {
   it('movie: returns a local URL immediately and then serves the translated SRT', async () => {
     current = await start({});

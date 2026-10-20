@@ -292,6 +292,7 @@ export function createApp(deps: ServerDeps): express.Express {
         aiModel: c.aiModel,
         dualSubtitles: c.dualSubtitles,
         embeddedSubtitles: c.embeddedSubtitles,
+        cleanSubtitles: c.cleanSubtitles,
         translationMode: c.translationMode,
         openSubtitlesKeyConfigured: c.openSubtitlesApiKey !== '',
         subdlKeyConfigured: c.subdlApiKey !== '',

@@ -349,6 +349,14 @@ const S = {
     he: 'השתמש בכתוביות שמוטמעות בקובץ הווידאו',
     en: 'Use subtitles embedded in the video file',
   },
+  cleanLabel: {
+    he: 'הסר שמות דוברים והערות קול מהכתוביות',
+    en: 'Remove speaker names and sound notes from subtitles',
+  },
+  cleanHint: {
+    he: 'למשל "קטארה:" או "(גונח)" בכתוביות שנכתבו גם לכבדי שמיעה. שורה שהיא רק הערת קול נמחקת.',
+    en: 'For example "KATARA:" or "(groans)" in subtitles made for the hard of hearing. A line that is only a sound note is removed.',
+  },
   embHint: {
     he: 'מתאים בדיוק לקובץ שמנגן (בלי הפרשי תזמון ובלי הורדה). עובד עם טורנטים דרך Stremio.',
     en: 'Matches the playing file exactly (no timing drift, no download). Works with torrents through Stremio.',

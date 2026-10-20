@@ -264,6 +264,14 @@ prefix `HE:`. Besides the built-in samples, it picks from any `.srt` files you p
 folder inside the app's data folder (`data\test-subtitles` when run from the project). Test subtitles are
 not added to the library. While test mode is on, real translations are paused, so turn it off when done.
 
+### Speaker names and sound notes are removed
+
+Subtitles made for the hard of hearing contain more than speech: who is talking (`KATARA: Water.`)
+and sounds (`(groans)`, `[door slams]`). Before translating, the add-on removes a capital-letter
+speaker label at the start of a line and a short note in brackets at the start or end of a line, and
+deletes a line that was only a sound. Words inside a sentence are never touched. Turn it off in
+**Settings → Remove speaker names and sound notes from subtitles** (or `CLEAN_SUBTITLES=false`).
+
 ### Timing from the sound of the video (automatic, no download)
 
 When a subtitle has only a guessed timing (no own subtitle in the video, no hash match), the add-on

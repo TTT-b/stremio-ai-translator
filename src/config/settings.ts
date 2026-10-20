@@ -12,6 +12,7 @@ const settingsSchema = z.object({
     .optional(),
   dualSubtitles: z.boolean().optional(),
   embeddedSubtitles: z.boolean().optional(),
+  cleanSubtitles: z.boolean().optional(),
   preciseSync: z.boolean().optional(),
   /** auto: translate right away. ask: wait for the user's OK in the app. */
   translationMode: z.enum(['auto', 'ask']).optional(),
@@ -55,6 +56,7 @@ export function effectiveConfig(config: Config, settings: Settings): Config {
     targetLanguage: settings.targetLanguage ?? config.targetLanguage,
     dualSubtitles: settings.dualSubtitles ?? config.dualSubtitles,
     embeddedSubtitles: settings.embeddedSubtitles ?? config.embeddedSubtitles,
+    cleanSubtitles: settings.cleanSubtitles ?? config.cleanSubtitles,
     preciseSync: settings.preciseSync ?? config.preciseSync,
     translationMode: settings.translationMode ?? config.translationMode,
   };
