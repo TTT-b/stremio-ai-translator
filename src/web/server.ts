@@ -16,6 +16,7 @@ import {
 } from '../stremio/placeholder';
 import { SyncService } from '../sync/service';
 import { fitSubtitleToVideo } from '../sync/videoFit';
+import { openStremio } from '../stremio/launcher';
 import { pickSample, readableLines } from './sample';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { findLanguage, LANGUAGES } from '../config/languages';
@@ -86,6 +87,8 @@ export interface ServerDeps {
   /** Test hook: how soon a guessed-timing subtitle is checked again. */
   refreshGuessAfterMs?: number;
   stallAfterMs?: number;
+  /** Test hook: opens the Stremio app. */
+  openStremio?: () => Promise<{ ok: boolean; code?: string }>;
   cancelCooldownMs?: number;
   /** Test hook: receives the job manager and cache. */
   onReady?: (ctx: { jobs: JobManager; cache: FileCache }) => void;
@@ -364,6 +367,13 @@ export function createApp(deps: ServerDeps): express.Express {
       action === 'approve' ? jobs.approve(id) : action === 'skip' ? jobs.skip(id) : jobs.cancel(id);
     logger.info({ stage: 'API', jobId: id.slice(0, 8), action, done }, 'queue action');
     res.json({ ok: done });
+  });
+
+  // The Open Stremio button: starts the Stremio app through its stremio:// link type.
+  app.post('/api/open-stremio', async (_req, res) => {
+    const result = await (deps.openStremio ?? openStremio)();
+    logger.info({ stage: 'API', ok: result.ok, code: result.code }, 'open stremio');
+    res.json(result);
   });
 
   // The Continue button: cut a translation that is not being answered, or restart a cancelled/failed one.

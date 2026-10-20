@@ -30,9 +30,9 @@ describe('config page', () => {
       /href=["']https?:\/\/(?!127\.0\.0\.1|web\.stremio\.com\/|aistudio\.google\.com\/|platform\.claude\.com\/|platform\.openai\.com\/|www\.opensubtitles\.com\/|subdl\.com\/)/i,
     );
     expect(page).not.toMatch(/cdn\.tailwindcss\.com|<canvas/i);
-    // The only drawings are the two small language flags (no QR code).
+    // The only drawings are the two small flags and the menu arrow (no QR code).
     const drawings = page.match(/<svg[^>]*>/gi) ?? [];
-    expect(drawings.every((tag) => /viewBox="0 0 (22 16|60 30)"/.test(tag))).toBe(true);
+    expect(drawings.every((tag) => /viewBox="0 0 (22 16|60 30|10 6)"/.test(tag))).toBe(true);
   });
 
   it('has styled key-creation buttons that open safely and mark the free ones', () => {
@@ -125,6 +125,19 @@ describe('main screen layout', () => {
     expect(html).toContain('js-lang-btn');
     expect(html).toContain('data-ui="en"');
     expect(html).not.toContain('id="d-ui"');
+  });
+
+  it('asks before leaving for another site, and can open Stremio', () => {
+    const html = renderStatusPage(base);
+    expect(html).toContain('id="ext-modal"');
+    expect(html).toContain('id="ext-open"');
+    expect(html).toContain('id="open-stremio"');
+  });
+
+  it('uses two columns on a wide window and one on a narrow one', () => {
+    const html = renderStatusPage(base);
+    expect(html).toContain('lg:max-w-[1040px]');
+    expect(html).toContain('lg:grid-cols-2');
   });
 
   it('puts the Continue button inside the status card', () => {

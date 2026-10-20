@@ -20,6 +20,7 @@ describe('local web server', () => {
   let hostHeader: string;
   let providerFailsWith: AppError | undefined;
   let freePort = 0;
+  let stremioOpened = 0;
   let envPath: string;
 
   beforeAll(async () => {
@@ -66,6 +67,10 @@ describe('local web server', () => {
         ],
       }),
       // Stand-in for the providers' own answer: the key text decides who "accepts" it.
+      openStremio: async () => {
+        stremioOpened++;
+        return { ok: true };
+      },
       verifyAiKey: async (key) => {
         if (key.startsWith('offline')) return { ok: false, reason: 'unreachable' };
         if (key.startsWith('bad')) return { ok: false, reason: 'invalid' };
@@ -254,6 +259,15 @@ describe('local web server', () => {
     expect(res.status).toBe(401);
     expect(await res.text()).toContain('INVALID_API_KEY');
     providerFailsWith = undefined;
+  });
+
+  it('Open Stremio starts the app through the launcher, and only for the local page', async () => {
+    const res = await post('/api/open-stremio', {});
+    expect(await res.json()).toEqual({ ok: true });
+    expect(stremioOpened).toBe(1);
+    const foreign = await post('/api/open-stremio', {}, { Origin: 'https://evil.example' });
+    expect(foreign.status).toBe(403);
+    expect(stremioOpened).toBe(1);
   });
 
   it('sample translation endpoint returns a preview', async () => {

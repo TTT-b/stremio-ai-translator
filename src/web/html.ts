@@ -204,7 +204,7 @@ export function renderStatusPage(d: StatusPageData): string {
   const langMenu = () => {
     const option = (code: 'he' | 'en', flag: string, name: string) =>
       `<button type="button" role="option" data-ui="${code}" aria-selected="${lang === code}" class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-warm-tx transition hover:bg-warm-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${flag}<span>${name}</span></button>`;
-    return `<div class="js-lang-wrap relative"><button type="button" class="js-lang-btn ${btn} flex items-center gap-1.5 !px-2.5 !py-2 !text-xs" aria-haspopup="listbox" aria-expanded="false" aria-label="${tt('uiLangLabel')}" title="${tt('uiLangLabel')}">${lang === 'he' ? FLAG_IL : FLAG_EN}<span dir="ltr" class="font-bold">${lang === 'he' ? 'HE' : 'EN'}</span><span class="text-[10px] leading-none" aria-hidden="true">&#9662;</span></button><div class="js-lang-menu absolute end-0 top-full z-50 mt-1 hidden min-w-[150px] rounded-xl border border-warm-ln bg-warm-sf p-1 shadow-lg shadow-black/40" role="listbox">${option('he', FLAG_IL, 'עברית')}${option('en', FLAG_EN, 'English')}</div></div>`;
+    return `<div class="js-lang-wrap relative"><button type="button" dir="ltr" class="js-lang-btn ${btn} flex items-center gap-1.5 !px-2.5 !py-2 !text-xs" aria-haspopup="listbox" aria-expanded="false" aria-label="${tt('uiLangLabel')}" title="${tt('uiLangLabel')}">${lang === 'he' ? FLAG_IL : FLAG_EN}<span dir="ltr" class="font-bold">${lang === 'he' ? 'HE' : 'EN'}</span><svg class="h-1.5 w-2.5 shrink-0" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="js-lang-menu absolute end-0 top-full z-50 mt-1 hidden min-w-[150px] rounded-xl border border-warm-ln bg-warm-sf p-1 shadow-lg shadow-black/40" role="listbox">${option('he', FLAG_IL, 'עברית')}${option('en', FLAG_EN, 'English')}</div></div>`;
   };
 
   /** Wizard steps: short label (progress bar), title and one-line explanation. */
@@ -256,7 +256,7 @@ export function renderStatusPage(d: StatusPageData): string {
   /** Short install box for the main screen, so the link is at hand without reopening the wizard. */
   const installCompact = d.stremioReady
     ? `<section class="${tile} flex flex-col gap-2.5"><div class="text-sm font-bold text-warm-tx">${tt('installTitle')}</div>
-<a id="install-d" class="${btn} text-center" href="${escapeHtml(d.installUrl)}" target="_blank" rel="noopener noreferrer">${tt('installBtn')}</a>
+<div class="grid grid-cols-2 gap-2.5"><a id="install-d" class="${btn} text-center" href="${escapeHtml(d.installUrl)}" target="_blank" rel="noopener noreferrer">${tt('installBtn')}</a><button type="button" id="open-stremio" class="${btn}">${tt('openStremio')}</button></div>
 <div class="flex gap-2"><input id="manifest-d" readonly dir="ltr" class="${field} min-w-0 flex-1 font-mono text-[13px]" value="${escapeHtml(d.manifestUrl)}" aria-label="${tt('manifestAria')}"><button type="button" id="copy-d" class="${btn}">${tt('copy')}</button></div></section>`
     : '';
 
@@ -337,10 +337,11 @@ ${checks('r-', 'sample', 'sample-out')}
 </section>
 </div>
 
-<div id="dash" class="${startStep ? 'hidden' : 'flex'} w-full max-w-[560px] flex-col gap-[18px]">
+<div id="dash" class="${startStep ? 'hidden' : 'flex'} w-full max-w-[560px] flex-col gap-[18px] lg:max-w-[1040px]">
 <div class="-mb-2 flex w-full justify-end">${langMenu()}</div>
 <div class="flex items-center justify-between gap-3"><div><h1 class="text-[26px] font-extrabold text-warm-tx">${tt('dashTitle')}</h1>${d.testMode ? `<div class="mt-1.5 inline-block rounded-full bg-amber-400/15 px-2.5 py-0.5 text-xs font-bold text-amber-300">${tt('testBanner')}</div>` : ''}<div class="mt-1 text-[13px] text-warm-mu">${d.aiConfigured ? `${tt('providerLine')} <span dir="ltr">${escapeHtml(providerLine(d.aiProviderLabel, d.aiModel))}</span>` : tt('noKeyYet')}</div></div>
 <div class="flex flex-wrap items-center justify-end gap-2"><button type="button" class="js-news ${btn} relative !px-3 !py-2" aria-label="${tt('newsBell')}" title="${tt('newsBell')}"><span class="text-base leading-none" aria-hidden="true">&#128276;</span><span class="js-news-badge absolute -top-1 -end-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-warm-ac px-1 text-[10px] font-bold text-warm-on"></span></button><button type="button" id="open-library" class="${btn} !py-2">${tt('mySubs')}</button><button type="button" id="open-settings" class="${btn} flex items-center gap-2 !py-2"><span class="text-base leading-none" aria-hidden="true">&#9881;</span>${tt('settings')}</button></div></div>
+<div class="flex flex-col gap-[18px] lg:grid lg:grid-cols-2 lg:items-start lg:gap-5"><div class="flex flex-col gap-[18px]">
 <section class="flex flex-col gap-3.5 rounded-[22px] border border-warm-ln bg-warm-sf p-6">
 <div class="flex items-center justify-between gap-3"><div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px] disabled:cursor-not-allowed disabled:opacity-40" disabled title="${tt('resumeHint')}">${tt('resumeBtn')}</button></div>
 <div id="st-progress-text" class="text-[26px] font-extrabold leading-tight text-warm-tx">${tt('noSub')}</div>
@@ -353,11 +354,12 @@ ${checks('r-', 'sample', 'sample-out')}
 <div id="st-subdl" class="${tile}"><div class="flex items-baseline justify-between gap-3"><div class="flex items-center gap-2 text-xs text-warm-mu"><span>${tt('stSubdl')}</span>${srcBadge('subdl')}</div><div id="st-subdl-text" class="text-sm font-bold ${d.subdlKeyConfigured ? '' : 'text-warm-mu'}" dir="auto">${d.subdlKeyConfigured ? '0' : tt('stSubdlNoKey')}</div></div><div id="st-subdl-nokey" class="mt-1.5 text-xs text-warm-mu ${d.subdlKeyConfigured ? 'hidden' : ''}">${tt('stSubdlNoKeyHint')}<div class="mt-2">${keyLink('https://subdl.com/panel/api', t(lang, 'getSubdlKey'))}</div></div><div id="st-subdl-info" class="${d.subdlKeyConfigured ? '' : 'hidden'}"><div class="mt-1.5 text-xs text-warm-mu">${tt('stSubdlHint')}</div><div class="mt-2">${keyLink('https://subdl.com/panel/api', t(lang, 'stSubdlPanel'))}</div></div></div>
 <div class="${tile} flex items-center justify-between gap-3"><div class="min-w-0 flex-1"><label class="text-xs text-warm-mu" for="q-lang">${tt('stTarget')}</label><select class="${field} mt-1" id="q-lang">${langOptions}</select></div><label class="flex shrink-0 cursor-pointer flex-col items-center gap-1.5"><span class="text-xs text-warm-mu">${tt('stDual')}</span><input type="checkbox" id="q-dual" class="peer sr-only"${d.dualSubtitles ? ' checked' : ''}><span class="relative h-[23px] w-10 shrink-0 rounded-full bg-warm-ln transition peer-checked:bg-warm-ac peer-focus-visible:ring-2 peer-focus-visible:ring-warm-ac/60 after:absolute after:start-[3px] after:top-[3px] after:h-[17px] after:w-[17px] after:rounded-full after:bg-white after:transition rtl:peer-checked:after:-translate-x-[17px] ltr:peer-checked:after:translate-x-[17px]"></span></label></div>
 </div>
+</div><div class="flex flex-col gap-[18px]">
 <section class="${tile} flex flex-col gap-2.5"><div><div class="text-sm font-bold text-warm-tx">${tt('checksTitle')}</div><div class="mt-0.5 text-xs text-warm-mu">${tt('checksSub')}</div></div>
 ${checks('dr-', 'dsample', 'dsample-out')}
 </section>
 ${installCompact}
-<div class="flex items-center gap-2.5 text-[13px] text-warm-mu"><span class="text-warm-ok" aria-hidden="true">&#10003;</span>${tt('keepRunning')}</div>
+<div class="flex items-center gap-2.5 text-[13px] text-warm-mu"><span class="text-warm-ok" aria-hidden="true">&#10003;</span>${tt('keepRunning')}</div></div></div>
 </div>
 
 <div id="lib" class="hidden w-full max-w-[640px] flex-col gap-4">
@@ -456,6 +458,13 @@ ${group('menuAbout', `<p class="text-xs text-warm-mu">${tt('aboutDesc')}</p>${d.
 <div class="mt-auto grid gap-2"><span class="${result} text-center" id="save-result"></span><button type="button" id="save" class="${btnPrimary} w-full !py-3">${tt('save')}</button></div>
 </div></div>
 
+<div id="ext-modal" class="no-drag fixed inset-0 z-[65] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="ext-title">
+<div class="w-full max-w-sm rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
+<h2 id="ext-title" class="text-lg font-bold text-warm-tx">${tt('extTitle')}</h2>
+<p class="mt-1 text-sm text-warm-mu">${tt('extBody')}</p>
+<div id="ext-host" dir="ltr" class="mt-3 break-all rounded-xl border border-warm-ln bg-warm-bg px-3 py-2 font-mono text-[13px] text-warm-tx"></div>
+<div class="mt-5 grid grid-cols-2 gap-2.5"><button type="button" id="ext-open" class="${btnPrimary}">${tt('extOpen')}</button><button type="button" id="ext-cancel" class="${btn}">${tt('cancel')}</button></div>
+</div></div>
 <div id="toast" role="status" aria-live="polite" class="pointer-events-none fixed bottom-6 left-1/2 z-[70] max-w-[90vw] -translate-x-1/2 translate-y-8 rounded-2xl border px-5 py-3 text-sm font-semibold opacity-0 shadow-2xl transition duration-300"></div>
 <script nonce="${escapeHtml(d.nonce)}">
 // Every response also carries its HTTP status, so the page can pick the matching message.
@@ -470,6 +479,27 @@ const FAILED = T.failed;
 const errText = (r, fallback) => (r.code && ERRORS[r.code]) || fallback;
 const TONE = {ok:'text-warm-ok', bad:'text-rose-400', info:'text-warm-mu'};
 let toastTimer;
+// Links to other sites ask first, so a click never leaves the app by surprise.
+const extModal = $('ext-modal');
+let extUrl = '';
+const closeExt = () => { extModal.classList.add('hidden'); extModal.classList.remove('flex'); extUrl = ''; };
+document.addEventListener('click', (e) => {
+  const a = e.target instanceof Element ? e.target.closest('a[href]') : null;
+  if (!a) return;
+  let u;
+  try { u = new URL(a.href, location.href); } catch { return; }
+  if (!/^https?:$/.test(u.protocol) || u.origin === location.origin || u.hostname === '127.0.0.1' || u.hostname === 'localhost') return;
+  e.preventDefault();
+  extUrl = u.href;
+  $('ext-host').textContent = u.hostname;
+  extModal.classList.remove('hidden'); extModal.classList.add('flex');
+  $('ext-open').focus();
+}, true);
+$('ext-open').addEventListener('click', () => { const url = extUrl; closeExt(); if (url) window.open(url, '_blank', 'noopener,noreferrer'); });
+$('ext-cancel').addEventListener('click', closeExt);
+extModal.addEventListener('click', (e) => { if (e.target === extModal) closeExt(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && extUrl) closeExt(); });
+
 const toast = (ok, msg) => {
   const t = $('toast');
   t.textContent = (ok ? '\\u2714\\uFE0E ' : '\\u2716\\uFE0E ') + msg;
@@ -608,6 +638,15 @@ const quickSave = async () => {
     if (r.ok) { $('d-lang').value = lang; $('d-dual').checked = dual; }
   } catch { toast(false, FAILED); }
 };
+const openStremioBtn = $('open-stremio');
+if (openStremioBtn) openStremioBtn.addEventListener('click', async () => {
+  openStremioBtn.disabled = true;
+  try {
+    const r = await post('/api/open-stremio', {});
+    toast(r.ok, r.ok ? T.openStremioOk : r.code === 'NOT_INSTALLED' ? T.openStremioMissing : FAILED);
+  } catch { toast(false, FAILED); }
+  setTimeout(() => { openStremioBtn.disabled = false; }, 2000);
+});
 $('resume-btn').addEventListener('click', async () => {
   const btn = $('resume-btn');
   btn.disabled = true;

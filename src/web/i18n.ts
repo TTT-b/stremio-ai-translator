@@ -410,6 +410,18 @@ const S = {
     he: 'חסר מפתח SubDL. הוסף אותו בהגדרות.',
     en: 'The SubDL key is missing. Add it in Settings.',
   },
+  openStremio: { he: 'פתח את Stremio', en: 'Open Stremio' },
+  openStremioOk: { he: 'פותח את Stremio', en: 'Opening Stremio' },
+  openStremioMissing: {
+    he: 'Stremio לא נמצא במחשב הזה.',
+    en: 'Stremio was not found on this computer.',
+  },
+  extTitle: { he: 'לפתוח קישור חיצוני?', en: 'Open an external link?' },
+  extBody: {
+    he: 'הקישור ייפתח בדפדפן שלך, באתר שמחוץ לאפליקציה:',
+    en: 'The link opens in your browser, on a site outside the app:',
+  },
+  extOpen: { he: 'פתח', en: 'Open' },
   stSubdlNoKey: { he: 'לא הוזן מפתח', en: 'No key entered' },
   stSubdlNoKeyHint: {
     he: 'SubDL הוא מקור גיבוי חינמי. הוסף מפתח בהגדרות כדי להפעיל אותו.',
