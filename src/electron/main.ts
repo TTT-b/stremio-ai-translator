@@ -63,6 +63,17 @@ function createWindow(port: number): void {
     },
   });
   win.removeMenu();
+  // F11 toggles full screen; Esc leaves it.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !win) return;
+    if (input.key === 'F11') {
+      event.preventDefault();
+      win.setFullScreen(!win.isFullScreen());
+    } else if (input.key === 'Escape' && win.isFullScreen()) {
+      event.preventDefault();
+      win.setFullScreen(false);
+    }
+  });
   // The window may only show our own page; anything else opens in the default browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\//.test(url) || isStremioInstallUrl(url)) void shell.openExternal(url);

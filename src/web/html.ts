@@ -71,6 +71,8 @@ function languageName(ui: UiLang, code: string, fallback: string): string {
 // left-to-right like Windows. Direction-sensitive styles use logical (start/end) classes.
 const field =
   'w-full rounded-2xl border border-warm-ln bg-warm-bg px-3.5 py-2.5 text-sm text-warm-tx placeholder-warm-mu/70 outline-none transition focus:border-warm-ac focus:ring-2 focus:ring-warm-ac/25';
+const selectField = (id: string, options: string): string =>
+  `<div class="relative"><select class="${field} cursor-pointer appearance-none !pe-10" id="${id}">${options}</select><svg class="pointer-events-none absolute end-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-warm-mu" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8l5 5 5-5"/></svg></div>`;
 const labelCls = 'mb-1.5 block text-[13px] font-semibold text-warm-tx';
 const btn =
   'rounded-2xl border border-warm-ln bg-transparent px-4 py-2.5 text-sm font-semibold text-warm-tx transition hover:border-warm-ac/60 hover:bg-warm-bg active:translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac disabled:cursor-wait disabled:opacity-60';
@@ -322,7 +324,7 @@ ${d.desktop ? titleBar : ''}
 </div>
 
 <div data-pane="3" class="hidden flex-col gap-4">
-<div><label class="${labelCls}" for="lang">${tt('langLabel')}</label><select class="${field}" id="lang">${langOptions}</select></div>
+<div><label class="${labelCls}" for="lang">${tt('langLabel')}</label>${selectField('lang', langOptions)}</div>
 ${dualSwitch('dual', d.dualSubtitles, true)}
 </div>
 
@@ -415,12 +417,12 @@ ${group(
 )}
 ${group(
   'secTranslate',
-  `<div><label class="${labelCls}" for="d-lang">${tt('langLabel')}</label><select class="${field}" id="d-lang">${langOptions}</select></div>
+  `<div><label class="${labelCls}" for="d-lang">${tt('langLabel')}</label>${selectField('d-lang', langOptions)}</div>
 <div class="flex flex-col divide-y divide-warm-ln overflow-hidden rounded-2xl border border-warm-ln">${toggle('d-dual', d.dualSubtitles, 'dualLabel', undefined, true)}
 ${toggle('d-emb', d.embeddedSubtitles ?? true, 'embLabel', 'embHint', true)}
 ${toggle('d-clean', d.cleanSubtitles ?? true, 'cleanLabel', 'cleanHint', true)}
 ${toggle('d-ask', d.translationMode === 'ask', 'askLabel', 'askHint', true)}</div>
-<div><label class="${labelCls}" for="d-src">${tt('srcLabel')}</label><select class="${field}" id="d-src"><option value="opensubtitles"${d.subtitleSource === 'subdl' ? '' : ' selected'}>${tt('srcOs')}</option><option value="subdl"${d.subtitleSource === 'subdl' ? ' selected' : ''}>${tt('srcSubdl')}</option></select><p class="mt-1 text-xs text-warm-mu">${tt('srcHint')}</p></div>`,
+<div><label class="${labelCls}" for="d-src">${tt('srcLabel')}</label>${selectField('d-src', `<option value="opensubtitles"${d.subtitleSource === 'subdl' ? '' : ' selected'}>${tt('srcOs')}</option><option value="subdl"${d.subtitleSource === 'subdl' ? ' selected' : ''}>${tt('srcSubdl')}</option>`)}<p class="mt-1 text-xs text-warm-mu">${tt('srcHint')}</p></div>`,
 )}
 ${group(
   'secMaintenance',

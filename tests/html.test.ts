@@ -32,7 +32,7 @@ describe('config page', () => {
     expect(page).not.toMatch(/cdn\.tailwindcss\.com|<canvas/i);
     // The only drawings are the two small flags and the menu arrow (no QR code).
     const drawings = page.match(/<svg[^>]*>/gi) ?? [];
-    expect(drawings.every((tag) => /viewBox="0 0 (22 16|60 30|10 6)"/.test(tag))).toBe(true);
+    expect(drawings.every((tag) => /viewBox="0 0 (22 16|60 30|10 6|20 20)"/.test(tag))).toBe(true);
   });
 
   it('has styled key-creation buttons that open safely and mark the free ones', () => {
