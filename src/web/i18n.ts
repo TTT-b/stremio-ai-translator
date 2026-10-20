@@ -353,6 +353,11 @@ const S = {
     he: 'בחר את קובץ הסרטון שבמחשב. התוכנה שומרת לידו עותק (MKV) עם הכתובית בפנים, בלי לפגוע באיכות ובלי לגעת במקור.',
     en: 'Choose the video file on this computer. A copy (MKV) with the subtitle inside is saved next to it, with no loss of quality and the original untouched.',
   },
+  libMuxMp4: { he: 'שמור כ-MP4', en: 'Save as MP4' },
+  libMuxMp4Tip: {
+    he: 'עותק MP4 עם הכתובית בפנים, שנפתח בנגן הרגיל של אייפד, אייפון וטלפונים. נשמרת רק הכתובית הזו (בלי שאר הכתוביות), והאיכות לא נפגעת. בנגן יש ללחוץ על כפתור הכתוביות ולבחור עברית.',
+    en: 'An MP4 copy with the subtitle inside that opens in the built-in player of iPad, iPhone and phones. Only this subtitle is kept (not the other tracks) and the picture quality is untouched. In the player, press the subtitles button and pick it.',
+  },
   libMuxBusy: { he: 'שומר…', en: 'Saving…' },
   libMuxDone: {
     he: 'נשמר: {name} (וגם קובץ SRT לידו)',

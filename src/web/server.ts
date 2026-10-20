@@ -475,6 +475,7 @@ export function createApp(deps: ServerDeps): express.Express {
         video: z.string().max(1000).optional(),
         stremio: z.boolean().optional(),
         output: z.string().max(1000).optional(),
+        format: z.enum(['mkv', 'mp4']).optional(),
       })
       .strict()
       .safeParse(req.body);
@@ -492,6 +493,7 @@ export function createApp(deps: ServerDeps): express.Express {
         ffmpeg: locateTools(current().ffmpegPath)?.ffmpeg,
         ...(stream ? { url: stream.url } : { video: body.data.video }),
         ...(body.data.output ? { output: body.data.output } : {}),
+        ...(body.data.format ? { format: body.data.format } : {}),
         srt: content,
         language: entry.language,
         ...(deps.muxRun ? { run: deps.muxRun } : {}),

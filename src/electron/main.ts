@@ -295,16 +295,17 @@ if (!app.requestSingleInstanceLock()) {
     });
     return result.canceled ? null : (result.filePaths[0] ?? null);
   });
-  ipcMain.handle('video:save', async (_e, name: unknown) => {
+  ipcMain.handle('video:save', async (_e, name: unknown, format: unknown) => {
     if (!win) return null;
+    const ext = format === 'mp4' ? 'mp4' : 'mkv';
     const stem = (typeof name === 'string' ? name : 'video')
       .replace(/[\\/:*?"<>|\r\n]+/g, ' ')
       .trim()
       .slice(0, 120);
     const result = await dialog.showSaveDialog(win, {
       title: uiLang === 'he' ? 'איפה לשמור את הסרטון?' : 'Where to save the video?',
-      defaultPath: join(app.getPath('videos'), `${stem || 'video'}.mkv`),
-      filters: [{ name: 'Video', extensions: ['mkv'] }],
+      defaultPath: join(app.getPath('videos'), `${stem || 'video'}.${ext}`),
+      filters: [{ name: 'Video', extensions: [ext] }],
     });
     return result.canceled ? null : (result.filePath ?? null);
   });

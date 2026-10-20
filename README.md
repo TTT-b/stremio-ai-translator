@@ -401,3 +401,12 @@ translated subtitle as an extra, switchable track. Picture and sound are copied 
 re-encoding, so it takes seconds and loses no quality) and the original file is never changed or
 overwritten. It uses the ffmpeg that comes with Stremio. The subtitle is the first track and is set
 as the default one.
+
+The **Save as MP4** button next to it makes the same copy as an MP4
+(`Name.heb.mp4`). iPad, iPhone and many phones play MKV only in an app such as VLC, but they open an
+MP4 in the built-in player, where the subtitle shows under the subtitles button (choose Hebrew; it is
+not switched on by itself). The MP4 keeps only the translated subtitle (not the other subtitle
+tracks), copies the picture (HEVC is tagged `hvc1`, which Apple players need), and copies the sound
+when it is AAC, AC3, E-AC3, MP3 or ALAC, otherwise it converts the sound to AAC. Videos in other
+picture formats (such as VP9 or AV1) may not play on an iPad even as MP4. Not every player shows
+Hebrew punctuation in the right place; VLC is the fallback.

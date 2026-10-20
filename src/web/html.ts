@@ -882,31 +882,35 @@ const episodeRow = (e) => {
   });
   row.append(dl);
   if (window.desktop && window.desktop.pickVideo) {
-    const mux = el('button', dl.className, T.libMux);
-    mux.type = 'button';
-    mux.title = T.libMuxTip;
-    mux.addEventListener('click', async () => {
-      let payload = null;
-      try {
-        const s = await (await fetch('/api/library/' + e.id + '/stream')).json();
-        if (s.ok) {
-          const out = await window.desktop.saveVideo(e.kind === 'series' ? e.title + ' S' + String(e.season ?? 0).padStart(2, '0') + 'E' + String(e.episode ?? 0).padStart(2, '0') : e.title);
-          if (!out) return;
-          payload = {stremio: true, output: out};
-        }
-      } catch { payload = null; }
-      const video = payload ? 'stremio' : await window.desktop.pickVideo(e.kind === 'series' ? e.title + ' S' + String(e.season ?? 0).padStart(2, '0') + 'E' + String(e.episode ?? 0).padStart(2, '0') : e.title);
-      if (!video) return;
-      mux.disabled = true; mux.textContent = T.libMuxBusy;
-      try {
-        const r = await fetch('/api/library/' + e.id + '/mux', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload || {video})});
-        const j = await r.json();
-        if (j.ok) toast(true, f(T.libMuxDone, {name: j.name}));
-        else toast(false, j.code === 'NO_FFMPEG' ? T.libMuxNoFfmpeg : (j.code === 'NOT_A_VIDEO' || j.code === 'BAD_PATH') ? T.libMuxBadFile : T.libMuxFail);
-      } catch { toast(false, T.libMuxFail); }
-      mux.disabled = false; mux.textContent = T.libMux;
-    });
-    row.append(mux);
+    const muxButton = (label, tip, format) => {
+      const mux = el('button', dl.className, label);
+      mux.type = 'button';
+      mux.title = tip;
+      mux.addEventListener('click', async () => {
+        let payload = null;
+        const name = e.kind === 'series' ? e.title + ' S' + String(e.season ?? 0).padStart(2, '0') + 'E' + String(e.episode ?? 0).padStart(2, '0') : e.title;
+        try {
+          const s = await (await fetch('/api/library/' + e.id + '/stream')).json();
+          if (s.ok) {
+            const out = await window.desktop.saveVideo(name, format);
+            if (!out) return;
+            payload = {stremio: true, output: out};
+          }
+        } catch { payload = null; }
+        const video = payload ? 'stremio' : await window.desktop.pickVideo(name);
+        if (!video) return;
+        mux.disabled = true; mux.textContent = T.libMuxBusy;
+        try {
+          const r = await fetch('/api/library/' + e.id + '/mux', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload || {video, format})});
+          const j = await r.json();
+          if (j.ok) toast(true, f(T.libMuxDone, {name: j.name}));
+          else toast(false, j.code === 'NO_FFMPEG' ? T.libMuxNoFfmpeg : (j.code === 'NOT_A_VIDEO' || j.code === 'BAD_PATH') ? T.libMuxBadFile : T.libMuxFail);
+        } catch { toast(false, T.libMuxFail); }
+        mux.disabled = false; mux.textContent = label;
+      });
+      return mux;
+    };
+    row.append(muxButton(T.libMux, T.libMuxTip, 'mkv'), muxButton(T.libMuxMp4, T.libMuxMp4Tip, 'mp4'));
   }
   return row;
 };
