@@ -12,6 +12,36 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '1.7.0': {
+    en: [
+      {
+        title: 'Save a video with the subtitle inside',
+        text: 'In My subtitles, the new button saves a copy of the video (MKV) with the translated subtitle as an extra track, plus an SRT file next to it. If the video is on Stremio, it is taken from there; otherwise you pick the file. Picture and sound are copied with no loss of quality.',
+      },
+      {
+        title: 'No more waiting on a stuck sound check',
+        text: 'If the video does not send its sound for 45 seconds, the app goes on with the subtitle as it is. The Continue button also skips that step.',
+      },
+      {
+        title: 'Cleaner subtitles and clearer window buttons',
+        text: 'Translator credits and site adverts are removed from subtitles, and the window buttons are bigger.',
+      },
+    ],
+    he: [
+      {
+        title: 'שמירת סרטון עם הכתובית בתוכו',
+        text: 'ב"הכתוביות שלי" הכפתור החדש שומר עותק של הסרטון (MKV) עם הכתובית המתורגמת כרצועה נוספת, וגם קובץ SRT לידו. אם הסרטון ב-Stremio הוא נלקח משם, ואחרת בוחרים את הקובץ. התמונה והקול מועתקים בלי פגיעה באיכות.',
+      },
+      {
+        title: 'לא מחכים יותר על בדיקת קול תקועה',
+        text: 'אם הסרטון לא שולח שמע במשך 45 שניות, האפליקציה ממשיכה עם הכתובית כמו שהיא. גם כפתור "המשך תרגום" מדלג על השלב הזה.',
+      },
+      {
+        title: 'כתוביות נקיות יותר וכפתורי חלון ברורים',
+        text: 'קרדיט של מתרגמים ופרסומות אתרים מוסרים מהכתוביות, וכפתורי החלון גדולים יותר.',
+      },
+    ],
+  },
   '1.6.0': {
     en: [
       {
