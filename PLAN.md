@@ -64,3 +64,11 @@ tests/                     Vitest, all external APIs mocked; tests/live is opt-i
 - Windows 11 + PowerShell, Node.js >= 22 (24 installed).
 - User has (or will create) a Gemini API key and an OpenSubtitles.com account + API consumer key.
 - Stremio desktop (plain `http://127.0.0.1` add-ons work there).
+
+## Ideas for later
+
+- **Home server mode** (saved 2026-10-20, not started): a settings toggle that serves only the Stremio endpoints
+  (`/manifest.json`, `/subtitles/...`, `/sub/...`) to the home network, so phones, TVs and laptops can use one PC as
+  the translator. Keep the settings page and `/api/*` loopback-only; show the LAN manifest URL and a Firewall note.
+  Limit: embedded-subtitle lookup and the sound-based timing check need Stremio's streaming server on the same
+  machine, so other devices only get the OpenSubtitles path. About a day with tests; a Docker image can follow.
