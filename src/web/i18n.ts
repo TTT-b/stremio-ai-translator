@@ -406,6 +406,10 @@ const S = {
   },
   resumeStarted: { he: 'ממשיך את התרגום', en: 'Continuing the translation' },
   resumeNone: { he: 'אין כרגע מה להמשיך', en: 'Nothing to continue right now' },
+  testNoKeySubdl: {
+    he: 'חסר מפתח SubDL. הוסף אותו בהגדרות.',
+    en: 'The SubDL key is missing. Add it in Settings.',
+  },
   stSubdlNoKey: { he: 'לא הוזן מפתח', en: 'No key entered' },
   stSubdlNoKeyHint: {
     he: 'SubDL הוא מקור גיבוי חינמי. הוסף מפתח בהגדרות כדי להפעיל אותו.',

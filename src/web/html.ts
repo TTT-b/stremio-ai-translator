@@ -268,7 +268,7 @@ export function renderStatusPage(d: StatusPageData): string {
   const checks = (rp: string, sampleId: string, outId: string) =>
     `<div class="grid grid-cols-2 gap-2.5">${testRow(tt('testAi'), testBtn(`data-test="ai" data-rp="${rp}"`), `${rp}ai`)}
 ${testRow(tt('testOs'), testBtn(`data-test="opensubtitles" data-rp="${rp}"`), `${rp}opensubtitles`)}
-${testRow(tt('testSubdl'), testBtn(`data-test="subdl" data-rp="${rp}"`), `${rp}subdl`, d.subdlKeyConfigured ? 'js-subdl-row ' : 'js-subdl-row hidden ')}
+${testRow(tt('testSubdl'), testBtn(`data-test="subdl" data-rp="${rp}"`), `${rp}subdl`)}
 ${testRow(tt('testSample'), testBtn(`id="${sampleId}" data-sample data-res="${rp}sample" data-out="${outId}"`), `${rp}sample`)}
 <pre id="${outId}" hidden dir="auto" class="col-span-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-2xl border border-warm-ln bg-warm-bg p-3 text-xs"></pre></div>`;
 
@@ -514,7 +514,6 @@ const saveKeys = async (body, resultId) => {
     show(resultId, r.ok, msg);
     if (!r.ok) toast(false, msg);
     if (r.ok && body.subdlApiKey) {
-      document.querySelectorAll('.js-subdl-row').forEach((row) => row.classList.remove('hidden'));
       subdlOn = true;
       $('st-subdl-nokey').classList.add('hidden'); $('st-subdl-info').classList.remove('hidden');
       $('st-subdl-text').classList.remove('text-warm-mu'); $('st-subdl-text').textContent = f(T.stSubdlCount, {n: 0});
@@ -638,7 +637,9 @@ $('save').addEventListener('click', async () => {
 // Connection checks (wizard step 4 and the main screen).
 const TEST_OK = {ai: T.testOkAi, opensubtitles: T.testOkOs, subdl: T.testOkSubdl};
 document.querySelectorAll('[data-test]').forEach(b => b.addEventListener('click', async () => {
-  const name = b.dataset.test, id = b.dataset.rp + name; show(id, null, T.testing);
+  const name = b.dataset.test, id = b.dataset.rp + name;
+  if (name === 'subdl' && !subdlOn) { show(id, false, T.testNoKeySubdl); return; }
+  show(id, null, T.testing);
   try { const r = await post('/api/test/' + name); show(id, r.ok, r.ok ? TEST_OK[name] : errText(r, FAILED)); }
   catch { show(id, false, FAILED); }
 }));

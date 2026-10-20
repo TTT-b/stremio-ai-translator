@@ -49,7 +49,7 @@ describe('config page', () => {
     expect(page.match(/>חינם</g)).toHaveLength(4);
   });
 
-  it('shows the SubDL check only when a SubDL key is saved', () => {
+  it('always shows the SubDL check, and says the key is missing when pressed without one', () => {
     const withKey = renderStatusPage({
       nonce: 'abc',
       aiConfigured: true,
@@ -69,8 +69,10 @@ describe('config page', () => {
     });
     const rowOf = (html: string) =>
       /<div class="([^"]*)js-subdl-row ([^"]*)flex items-center/.exec(html);
-    expect(rowOf(page)?.[2]).toContain('hidden');
-    expect(rowOf(withKey)?.[2] ?? '').not.toContain('hidden');
+    expect(page).toContain('id="dr-subdl"');
+    expect(withKey).toContain('id="dr-subdl"');
+    expect(page).toContain('חסר מפתח SubDL');
+    expect(rowOf(page)).toBeNull();
   });
 
   it('inlines the locally built CSS with the nonce', () => {
