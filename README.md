@@ -290,6 +290,11 @@ about 15 seconds at most. After that it goes on with the best downloaded subtitl
 timing against the sound of the video (below); if the video's own subtitle still arrives before the
 translation starts, that one is used instead. The **Skip** button ends the wait at once.
 
+If the video's own subtitle arrives only after the job has finished (the video was still loading), it
+is translated in the background and replaces the subtitle Stremio shows, with no "translating" message
+in between. Look for `subtitle upgraded to the exact timing` in the log. Reselect the subtitle in
+Stremio once to load the better one.
+
 ### Timing from the sound of the video (automatic, no download)
 
 When a subtitle has only a guessed timing (no own subtitle in the video, no hash match), the add-on

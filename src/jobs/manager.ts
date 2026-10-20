@@ -67,6 +67,8 @@ export interface Job {
   stage?: 'queued' | 'local' | 'sync' | 'search' | 'translate';
   /** When the translation last moved (a step started or a part finished); a long silence is a stall. */
   progressAt?: number;
+  /** The search inside the video, still running after the job went on without it (see upgradeLater). */
+  lateEmbedded?: Promise<ChosenSource | undefined>;
   /** Cuts the requests that are waiting for the AI so they are asked again (set while translating). */
   kick?: () => number;
   /** Progress of listening to the video while the stage is 'sync', 0..100. */
@@ -764,6 +766,7 @@ export class JobManager {
       this.lastFailed = false;
       this.lastErrorCode = null;
       void this.record(job, job.result, log);
+      if (job.result.exact === false) void this.upgradeLater(job, log);
       log.info(
         {
           stage: 'ASSEMBLY',
@@ -796,12 +799,72 @@ export class JobManager {
     }
   }
 
+  /** A finished subtitle whose timing is only a guess, and that is still the current one. */
+  private canUpgrade(job: Job): boolean {
+    return this.jobs.get(job.id) === job && job.status === 'done' && job.result?.exact === false;
+  }
+
+  /**
+   * The video's own subtitle (exact timing) can arrive after the job already finished with a
+   * downloaded one. It is then translated in the background and swapped in: the address Stremio
+   * holds keeps working, and no "translating" message shows in between.
+   */
+  private async upgradeLater(job: Job, log: Logger): Promise<void> {
+    const pending = job.lateEmbedded;
+    if (!pending) return;
+    let exact: ChosenSource | undefined;
+    try {
+      exact = await pending;
+    } catch {
+      return;
+    }
+    if (!exact || !this.canUpgrade(job)) return;
+    log.info(
+      { stage: 'SOURCE', upgrade: 'start' },
+      'the subtitle inside the video arrived late; translating it in the background',
+    );
+    await this.acquire();
+    try {
+      if (!this.canUpgrade(job)) return;
+      const shadow: Job = {
+        id: job.id,
+        spec: job.spec,
+        status: 'running',
+        startedAt: this.now(),
+        stage: 'translate',
+        promise: Promise.resolve(),
+      };
+      const result = await withCap(
+        this.run(shadow, log, exact),
+        this.deps.limits?.jobCapMs ?? 60 * 60_000,
+        () => {
+          throw new AppError('PROVIDER_TIMEOUT', 'background upgrade timed out');
+        },
+      );
+      if (!this.canUpgrade(job)) return;
+      job.result = result;
+      job.finishedAt = this.now();
+      void this.record(job, result, log);
+      log.info(
+        { stage: 'ASSEMBLY', upgrade: 'done', via: result.via, cues: result.cues },
+        'subtitle upgraded to the exact timing',
+      );
+    } catch (err) {
+      log.warn(
+        { stage: 'SOURCE', upgrade: 'failed', errorCode: isAppError(err) ? err.code : 'UNKNOWN' },
+        'background upgrade failed; the downloaded subtitle stays',
+      );
+    } finally {
+      this.release();
+    }
+  }
+
   /** After the user cancelled, stop at the next step instead of finishing the whole lookup. */
   private stopIfCancelled(job: Job): void {
     if (job.cancelled) throw new CancelledError();
   }
 
-  private async run(job: Job, log: Logger): Promise<JobResult> {
+  private async run(job: Job, log: Logger, preset?: ChosenSource): Promise<JobResult> {
     const cfg = this.deps.config();
     const { cache } = this.deps;
     const lang = findLanguage(job.spec.targetLanguage);
@@ -852,38 +915,44 @@ export class JobManager {
     // skips it: the job goes on with the downloaded subtitle (timing checked against the sound). If
     // the video's own subtitle still arrives before the translation starts, it is exact, so it wins.
     const late: { value?: ChosenSource } = {};
-    let chosen = await this.skippable(
-      job,
-      'local',
-      (wasSkipped) => {
-        const attempt = withCap(
-          this.embeddedSource(
-            job,
-            cfg,
-            lang.code,
-            log,
-            !!fallback || this.episodeServed(job),
-            wasSkipped,
-          ),
-          this.deps.limits?.embeddedCapMs ?? 140_000, // one try is 30 s; a loading video gets up to 2 min
-          () => {
-            log.warn({ stage: 'SOURCE', embedded: 'cap' }, 'embedded lookup took too long');
+    let chosen =
+      preset ??
+      (await this.skippable(
+        job,
+        'local',
+        (wasSkipped) => {
+          const attempt = withCap(
+            this.embeddedSource(
+              job,
+              cfg,
+              lang.code,
+              log,
+              !!fallback || this.episodeServed(job),
+              wasSkipped,
+            ),
+            this.deps.limits?.embeddedCapMs ?? 140_000, // one try is 30 s; a loading video gets up to 2 min
+            () => {
+              log.warn({ stage: 'SOURCE', embedded: 'cap' }, 'embedded lookup took too long');
+              return undefined;
+            },
+          );
+          job.lateEmbedded = attempt;
+          void attempt.then(
+            (found) => {
+              if (found) late.value = found;
+            },
+            () => undefined,
+          );
+          return withCap(attempt, this.deps.limits?.embeddedSoftMs ?? EMBEDDED_SOFT_MS, () => {
+            log.info(
+              { stage: 'SOURCE', embedded: 'soft-limit' },
+              'not waiting longer for the video',
+            );
             return undefined;
-          },
-        );
-        void attempt.then(
-          (found) => {
-            if (found) late.value = found;
-          },
-          () => undefined,
-        );
-        return withCap(attempt, this.deps.limits?.embeddedSoftMs ?? EMBEDDED_SOFT_MS, () => {
-          log.info({ stage: 'SOURCE', embedded: 'soft-limit' }, 'not waiting longer for the video');
-          return undefined;
-        });
-      },
-      undefined,
-    );
+          });
+        },
+        undefined,
+      ));
     this.stopIfCancelled(job);
     if (!chosen && fallback) {
       // Still not available: keep what OpenSubtitles gave last time.

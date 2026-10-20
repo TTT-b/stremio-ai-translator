@@ -248,6 +248,80 @@ describe('the Continue button', () => {
   });
 });
 
+describe('an exact subtitle that arrives after the job finished', () => {
+  const at = (s: number) =>
+    '00:' +
+    String(Math.floor(s / 60)).padStart(2, '0') +
+    ':' +
+    String(s % 60).padStart(2, '0') +
+    ',000';
+  const own = Array.from(
+    { length: 25 },
+    (_, i) =>
+      i + 1 + '\n' + at(10 + i * 3) + ' --> ' + at(11 + i * 3) + '\nOWN line ' + (i + 1) + '\n',
+  ).join('\n');
+  const FILE = '/subtitles/series/tt0944947%3A1%3A1/filename=late.mkv.json';
+  const until = async (check: () => Promise<boolean>) => {
+    for (let i = 0; i < 160 && !(await check()); i++) await new Promise((r) => setTimeout(r, 25));
+  };
+
+  it('is translated in the background and replaces the shown subtitle, with no "translating" text in between', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    current = await start({
+      subWaitMs: 50,
+      limits: { embeddedSoftMs: 30 },
+      loadEmbedded: (async () => {
+        await gate;
+        return { raw: own, language: 'en', source: 'track', cues: 25 };
+      }) as never,
+    });
+    const sub = ((await (await current.get(FILE)).json()) as SubsResponse).subtitles[0]!;
+    const path = new URL(sub.url).pathname;
+    let first = '';
+    await until(async () => {
+      first = await (await current!.get(path)).text();
+      return first.includes('HE:');
+    });
+    expect(first).toContain('HE:Hello there.'); // the downloaded subtitle, translated
+    expect(first).not.toContain('OWN line');
+
+    release(); // the video's own subtitle arrives after the job finished
+    let text = '';
+    const seen: string[] = [];
+    await until(async () => {
+      text = await (await current!.get(path)).text();
+      seen.push(text);
+      return text.includes('HE:OWN line 1');
+    });
+    expect(text).toContain('HE:OWN line 1');
+    expect(seen.every((t) => t.includes('HE:'))).toBe(true); // never a placeholder
+    let lib: { items: { timing?: string }[] } = { items: [] };
+    await until(async () => {
+      lib = (await (await current!.get('/api/library')).json()) as typeof lib;
+      return lib.items[0]?.timing === 'exact';
+    });
+    expect(lib.items[0]?.timing).toBe('exact');
+  });
+
+  it('changes nothing when the video never gives its own subtitle', async () => {
+    current = await start({
+      subWaitMs: 50,
+      limits: { embeddedSoftMs: 30 },
+      loadEmbedded: (async () => undefined) as never,
+    });
+    const sub = ((await (await current.get(FILE)).json()) as SubsResponse).subtitles[0]!;
+    const path = new URL(sub.url).pathname;
+    let text = '';
+    await until(async () => {
+      text = await (await current!.get(path)).text();
+      return text.includes('HE:');
+    });
+    await new Promise((r) => setTimeout(r, 150));
+    expect(await (await current.get(path)).text()).toBe(text);
+  });
+});
+
 describe('saving a subtitle as an SRT file', () => {
   it('serves a finished subtitle as a download, and says 404 for anything else', async () => {
     current = await start({});
