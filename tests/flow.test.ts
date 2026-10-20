@@ -1427,6 +1427,51 @@ describe('ask mode (translate only after the user says yes)', () => {
       expect(text).toContain('HE:OWN line 1');
     });
 
+    it("does not wait long for the video's own subtitle: goes on with the download, and the own one still wins if it comes in time", async () => {
+      const at = (s: number) =>
+        '00:' +
+        String(Math.floor(s / 60)).padStart(2, '0') +
+        ':' +
+        String(s % 60).padStart(2, '0') +
+        ',000';
+      const own = Array.from(
+        { length: 25 },
+        (_, i) =>
+          i + 1 + '\n' + at(10 + i * 3) + ' --> ' + at(11 + i * 3) + '\nOWN line ' + (i + 1) + '\n',
+      ).join('\n');
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      let searches = 0;
+      current = await start({
+        subWaitMs: 50,
+        limits: { embeddedSoftMs: 40 },
+        findStream: async () => ({
+          infoHash: 'a'.repeat(40),
+          fileIdx: 0,
+          url: 'http://127.0.0.1:11470/x/0',
+          videoPath: 'soft.mkv',
+          files: [],
+        }),
+        speechFit: async (o) => {
+          searches++;
+          release(); // the video's own subtitle arrives while the timing is being checked
+          await new Promise<void>((resolve) => {
+            if (o.signal.aborted) resolve();
+            o.signal.addEventListener('abort', () => resolve(), { once: true });
+          });
+          return undefined;
+        },
+        loadEmbedded: (async () => {
+          await gate;
+          return { raw: own, language: 'en', source: 'track', cues: 25 };
+        }) as never,
+      });
+      const url = await requestFile(current, 'soft.mkv');
+      await done(current, url);
+      expect(searches).toBe(1); // the job did go on without waiting for the video
+      expect(await (await current.get(new URL(url).pathname)).text()).toContain('HE:OWN line 1');
+    });
+
     it('one Skip applies to every request for the episode (another file of the same video)', async () => {
       current = await start(slowOpts);
       const a = await requestFile(current, 'slow.mkv');

@@ -130,6 +130,8 @@ export interface JobManagerDeps {
   stallAfterMs?: number;
   /** Hard caps so one stuck step can never block the queue (defaults: 2 min 20 s, 2 min, 1 hour). */
   limits?: {
+    /** Wait this long for the subtitle inside the video before going on without it (default 15 s). */
+    embeddedSoftMs?: number;
     embeddedCapMs?: number;
     sourceCapMs?: number;
     jobCapMs?: number;
@@ -190,6 +192,9 @@ const SOURCE_LOGIC_VERSION = 10;
 
 /** A translation with no news for this long counts as stuck (12 s). */
 const STALL_AFTER_MS = 12_000;
+
+/** How long the job waits for the subtitle inside the video before it goes on without it. */
+const EMBEDDED_SOFT_MS = 15_000;
 
 /** Files compared for timing when there is no hash match. Each uncached one costs a download. */
 const CONSENSUS_POOL_SIZE = 3;
@@ -480,22 +485,17 @@ export class JobManager {
     step: 'local' | 'sync',
     start: (wasSkipped: () => boolean) => Promise<T>,
     fallback: T,
-    /** Called when the user skips, with the work that is still running (its late result may be wanted). */
-    onSkipped?: (work: Promise<T>) => void,
   ): Promise<T> {
     // Already skipped for this episode by an earlier click: do not even start.
     if (this.skipped.get(videoKey(job.spec))?.has(step)) return fallback;
     let flag = false;
-    const running: { work?: Promise<T> } = {};
     const skipped = new Promise<T>((resolve) => {
       job.skipNow = () => {
         flag = true;
-        if (running.work) onSkipped?.(running.work);
         resolve(fallback);
       };
     });
     const work = start(() => flag);
-    running.work = work;
     work.catch(() => undefined); // if skipped, it ends by itself in the background
     try {
       return await Promise.race([work, skipped]);
@@ -865,14 +865,15 @@ export class JobManager {
     // 2. Find the best subtitle: the one inside the playing video file first (exact timing, no
     // download), then OpenSubtitles.
     job.stage = 'local';
-    // If the user skips the search inside the video but it still finishes a moment later, its
-    // exact subtitle is better than anything downloaded: it is used as soon as it is there.
+    // The search inside the video is not waited for beyond a few seconds, and not when the user
+    // skips it: the job goes on with the downloaded subtitle (timing checked against the sound). If
+    // the video's own subtitle still arrives before the translation starts, it is exact, so it wins.
     const late: { value?: ChosenSource } = {};
     let chosen = await this.skippable(
       job,
       'local',
-      (wasSkipped) =>
-        withCap(
+      (wasSkipped) => {
+        const attempt = withCap(
           this.embeddedSource(
             job,
             cfg,
@@ -886,16 +887,19 @@ export class JobManager {
             log.warn({ stage: 'SOURCE', embedded: 'cap' }, 'embedded lookup took too long');
             return undefined;
           },
-        ),
-      undefined,
-      (work) => {
-        work.then(
+        );
+        void attempt.then(
           (found) => {
             if (found) late.value = found;
           },
           () => undefined,
         );
+        return withCap(attempt, this.deps.limits?.embeddedSoftMs ?? EMBEDDED_SOFT_MS, () => {
+          log.info({ stage: 'SOURCE', embedded: 'soft-limit' }, 'not waiting longer for the video');
+          return undefined;
+        });
       },
+      undefined,
     );
     this.stopIfCancelled(job);
     if (!chosen && fallback) {

@@ -283,6 +283,13 @@ speaker label at the start of a line and a short note in brackets at the start o
 deletes a line that was only a sound. Words inside a sentence are never touched. Turn it off in
 **Settings → Remove speaker names and sound notes from subtitles** (or `CLEAN_SUBTITLES=false`).
 
+### The video's own subtitle is not waited for long
+
+The add-on looks for a subtitle inside the playing video first (exact timing). It waits for it for
+about 15 seconds at most. After that it goes on with the best downloaded subtitle and checks its
+timing against the sound of the video (below); if the video's own subtitle still arrives before the
+translation starts, that one is used instead. The **Skip** button ends the wait at once.
+
 ### Timing from the sound of the video (automatic, no download)
 
 When a subtitle has only a guessed timing (no own subtitle in the video, no hash match), the add-on
