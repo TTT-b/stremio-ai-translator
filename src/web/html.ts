@@ -391,7 +391,8 @@ ${group(
   'secMaintenance',
   `<p class="text-xs text-warm-mu">${tt('clearNote')}</p>
 <div class="grid grid-cols-2 gap-2.5"><button type="button" id="clear-cache" class="${btn}">${tt('clearCache')}</button><button type="button" id="rerun" class="${btn}">${tt('rerun')}</button></div>
-<span class="${result} text-center" id="clear-result"></span>`,
+<span class="${result} text-center" id="clear-result"></span>
+<div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><p class="text-xs text-warm-mu">${tt('diagNote')}</p><button type="button" id="copy-diag" class="${btn}">${tt('diagBtn')}</button></div>`,
 )}
 ${group(
   'advanced',
@@ -405,7 +406,6 @@ ${group(
 <span id="sync-note" class="text-xs font-medium text-rose-300"></span>
 </div>
 <p class="text-xs text-warm-mu">${tt('rtlNote', { state: t(lang, d.rtlFix ? 'on' : 'off') })}</p>
-<div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><p class="text-xs text-warm-mu">${tt('diagNote')}</p><button type="button" id="copy-diag" class="${btn}">${tt('diagBtn')}</button></div>
 <div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><div class="text-sm font-bold text-warm-tx">${tt('testTitle')}</div><p class="text-xs text-warm-mu">${tt('testDesc')}</p>
 ${toggle('d-test', d.testMode === true, 'testOn')}
 <div id="test-run" class="${d.testMode ? 'flex' : 'hidden'} flex-col gap-2"><button type="button" id="test-run-btn" class="${btn}">${tt('testRun')}</button></div></div>`,
