@@ -67,15 +67,18 @@ export class Library {
     }
     const keys = [...new Set([...old.keys, ...entry.keys])].slice(0, 5000);
     const timing = entry.timing ?? old.timing;
+    const filename = entry.filename ?? old.filename;
     const merged: LibraryEntry = {
       ...entry,
       ...(timing ? { timing } : {}),
+      ...(filename ? { filename } : {}),
       createdAt: old.createdAt,
       keys,
     };
     const same =
       keys.length === old.keys.length &&
       merged.timing === old.timing &&
+      merged.filename === old.filename &&
       merged.cues === old.cues &&
       merged.bytes === old.bytes &&
       merged.title === old.title;

@@ -32,6 +32,16 @@ describe('Library', () => {
     expect(e?.cues).toBe(120);
   });
 
+  it('learns the video file name when an older entry is made again', () => {
+    const lib = new Library(file());
+    lib.add(entry());
+    expect(lib.list()[0]?.filename).toBeUndefined();
+    lib.add(entry({ filename: 'Show.S01E02.mkv' }));
+    expect(lib.list()[0]?.filename).toBe('Show.S01E02.mkv');
+    lib.add(entry());
+    expect(lib.list()[0]?.filename).toBe('Show.S01E02.mkv');
+  });
+
   it('does not rewrite the file when nothing changed', () => {
     const path = file();
     const lib = new Library(path);
