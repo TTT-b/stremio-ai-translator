@@ -248,6 +248,31 @@ describe('the Continue button', () => {
   });
 });
 
+describe('saving a subtitle as an SRT file', () => {
+  it('serves a finished subtitle as a download, and says 404 for anything else', async () => {
+    current = await start({});
+    const body = (await (
+      await current.get('/subtitles/movie/tt0111161.json')
+    ).json()) as SubsResponse;
+    await (await current.get(new URL(body.subtitles[0]!.url).pathname)).text();
+    let id = '';
+    for (let i = 0; i < 60 && !id; i++) {
+      const lib = (await (await current.get('/api/library')).json()) as { items: { id: string }[] };
+      id = lib.items[0]?.id ?? '';
+      if (!id) await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(id).not.toBe('');
+    const res = await current.get('/api/library/' + id + '/srt');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-disposition')).toMatch(
+      /^attachment; filename\*=UTF-8''.+\.srt$/,
+    );
+    expect(await res.text()).toContain('HE:Hello there.');
+    expect((await current.get('/api/library/' + 'a'.repeat(32) + '/srt')).status).toBe(404);
+    expect((await current.get('/api/library/not-an-id/srt')).status).toBe(404);
+  });
+});
+
 describe('the old speech tool', () => {
   it('is removed from the data folder at start', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'old-sync-'));

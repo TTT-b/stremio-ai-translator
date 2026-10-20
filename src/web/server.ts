@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { FileCache } from '../cache/fileCache';
-import { Library } from '../jobs/library';
+import { Library, srtFileName } from '../jobs/library';
 import { RELEASE_NOTES } from '../electron/whatsNew';
 import { recentLogLines } from '../logging/diagnostics';
 import { locateTools } from '../sources/embedded';
@@ -402,6 +402,38 @@ export function createApp(deps: ServerDeps): express.Express {
   app.get('/api/library', (_req, res) => {
     const items = library.list().map(({ keys: _keys, ...rest }) => rest);
     res.json({ ok: true, items, totalBytes: items.reduce((n, e) => n + e.bytes, 0) });
+  });
+
+  // Save a finished subtitle as a plain SRT file.
+  app.get('/api/library/:id/srt', (req, res) => {
+    const id = req.params.id ?? '';
+    const entry = isJobId(id) ? library.get(id) : undefined;
+    let content = entry ? jobs.get(id)?.result?.content : undefined;
+    if (entry && !content) {
+      for (const key of entry.keys) {
+        const hit = cache.get(key);
+        if (
+          hit &&
+          hit.kind === 'translation' &&
+          hit.cues === entry.cues &&
+          hit.content.includes('-->')
+        ) {
+          content = hit.content;
+          break;
+        }
+      }
+    }
+    if (!entry || !content) {
+      res.status(404).json({ ok: false, message: 'Subtitle not found.' });
+      return;
+    }
+    res.setHeader('Content-Type', 'application/x-subrip; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(srtFileName(entry))}`,
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(content);
   });
 
   const deleteSchema = z.union([

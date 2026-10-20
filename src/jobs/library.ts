@@ -44,6 +44,10 @@ export class Library {
     return this.entries.has(id);
   }
 
+  get(id: string): LibraryEntry | undefined {
+    return this.entries.get(id);
+  }
+
   list(): LibraryEntry[] {
     return [...this.entries.values()].sort((a, b) => b.createdAt - a.createdAt);
   }
@@ -106,4 +110,26 @@ export class Library {
       /* the list is a convenience; translations keep working without it */
     }
   }
+}
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+/** A safe file name for saving a subtitle: "Title S01E15.he.srt" (no characters Windows refuses). */
+export function srtFileName(
+  entry: Pick<LibraryEntry, 'title' | 'season' | 'episode' | 'language'>,
+): string {
+  const title =
+    [...entry.title]
+      .filter((ch) => ch.charCodeAt(0) >= 32)
+      .join('')
+      .replace(/[\\/:*?"<>|]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 80) || 'subtitle';
+  const episode =
+    entry.season !== undefined && entry.episode !== undefined
+      ? ` S${pad2(entry.season)}E${pad2(entry.episode)}`
+      : '';
+  const language = entry.language.replace(/[^A-Za-z0-9-]/g, '').slice(0, 16);
+  return `${title}${episode}${language ? '.' + language : ''}.srt`;
 }

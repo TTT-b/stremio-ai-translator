@@ -843,6 +843,22 @@ const episodeRow = (e) => {
   }
   meta.append(el('span', '', f(T.libLines, {n: e.cues})), ltr(dateText(e.createdAt)), ltr(sizeText(e.bytes)));
   row.append(meta);
+  const dl = el('a', 'shrink-0 rounded-lg border border-warm-ln px-2.5 py-1 text-xs font-semibold text-warm-mu transition hover:border-warm-ac/60 hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac', T.libSrt);
+  dl.href = '/api/library/' + e.id + '/srt';
+  dl.title = T.libSrtTip;
+  dl.addEventListener('click', async (ev) => {
+    ev.preventDefault();
+    try {
+      const r = await fetch(dl.href);
+      if (!r.ok) throw new Error('no file');
+      const a = el('a');
+      a.href = URL.createObjectURL(await r.blob());
+      a.download = (e.title.replace(/[/:*?"<>|]/g, ' ').trim() || 'subtitle') + (e.kind === 'series' ? ' S' + String(e.season ?? 0).padStart(2, '0') + 'E' + String(e.episode ?? 0).padStart(2, '0') : '') + '.' + e.language + '.srt';
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    } catch { toast(false, T.libSrtFail); }
+  });
+  row.append(dl);
   return row;
 };
 const section = (key, title, count, items, body) => {

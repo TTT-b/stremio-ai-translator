@@ -343,6 +343,12 @@ const S = {
     he: 'הן יתורגמו מחדש בפעם הבאה שתנגן אותן. אי אפשר לבטל.',
     en: 'They will be translated again the next time you play them. This cannot be undone.',
   },
+  libSrt: { he: 'הורד SRT', en: 'Download SRT' },
+  libSrtTip: {
+    he: 'שמור את הכתובית כקובץ SRT שאפשר לטעון בכל נגן',
+    en: 'Save the subtitle as an SRT file you can load in any player',
+  },
+  libSrtFail: { he: 'לא ניתן להוריד את הכתובית.', en: 'Could not download the subtitle.' },
   libDelete: { he: 'מחק', en: 'Delete' },
   libDeleted: { he: 'נמחקו {n} כתוביות', en: 'Deleted {n} subtitles' },
   embLabel: {

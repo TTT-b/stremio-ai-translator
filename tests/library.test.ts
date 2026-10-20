@@ -2,7 +2,7 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { Library, type LibraryEntry } from '../src/jobs/library';
+import { Library, type LibraryEntry, srtFileName } from '../src/jobs/library';
 
 const entry = (over: Partial<LibraryEntry> = {}): LibraryEntry => ({
   id: 'a'.repeat(32),
@@ -48,5 +48,24 @@ describe('Library', () => {
     expect(again.list()).toHaveLength(1);
     expect(again.remove(['a'.repeat(32)])).toHaveLength(1);
     expect(new Library(path).list()).toHaveLength(0);
+  });
+});
+
+describe('srtFileName', () => {
+  it('names an episode with season, episode and language', () => {
+    expect(
+      srtFileName({ title: 'Avatar: The Last Airbender', season: 1, episode: 15, language: 'he' }),
+    ).toBe('Avatar The Last Airbender S01E15.he.srt');
+  });
+
+  it('names a movie without episode numbers', () => {
+    expect(srtFileName({ title: 'The Shawshank Redemption', language: 'en' })).toBe(
+      'The Shawshank Redemption.en.srt',
+    );
+  });
+
+  it('removes characters Windows refuses, and never returns an empty name', () => {
+    expect(srtFileName({ title: 'A/B\\C*D?"<>|', language: 'he' })).toBe('A B C D.he.srt');
+    expect(srtFileName({ title: '???', language: '' })).toBe('subtitle.srt');
   });
 });
