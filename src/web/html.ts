@@ -881,6 +881,24 @@ const episodeRow = (e) => {
     } catch { toast(false, T.libSrtFail); }
   });
   row.append(dl);
+  if (window.desktop && window.desktop.pickVideo) {
+    const mux = el('button', dl.className, T.libMux);
+    mux.type = 'button';
+    mux.title = T.libMuxTip;
+    mux.addEventListener('click', async () => {
+      const video = await window.desktop.pickVideo();
+      if (!video) return;
+      mux.disabled = true; mux.textContent = T.libMuxBusy;
+      try {
+        const r = await fetch('/api/library/' + e.id + '/mux', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({video})});
+        const j = await r.json();
+        if (j.ok) toast(true, f(T.libMuxDone, {name: j.name}));
+        else toast(false, j.code === 'NO_FFMPEG' ? T.libMuxNoFfmpeg : (j.code === 'NOT_A_VIDEO' || j.code === 'BAD_PATH') ? T.libMuxBadFile : T.libMuxFail);
+      } catch { toast(false, T.libMuxFail); }
+      mux.disabled = false; mux.textContent = T.libMux;
+    });
+    row.append(mux);
+  }
   return row;
 };
 const section = (key, title, count, items, body) => {

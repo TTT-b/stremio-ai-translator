@@ -280,6 +280,18 @@ if (!app.requestSingleInstanceLock()) {
   });
   ipcMain.on('whatsnew:dismiss', () => writeLastSeen(app.getVersion()));
   // Only our own add-on link may be handed to the operating system (opens Stremio desktop).
+  // The "save video with subtitle" button: the user picks the video file they have on this computer.
+  ipcMain.handle('video:pick', async () => {
+    if (!win) return null;
+    const result = await dialog.showOpenDialog(win, {
+      title: uiLang === 'he' ? 'בחר את קובץ הסרטון' : 'Choose the video file',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Video', extensions: ['mkv', 'mp4', 'avi', 'mov', 'm4v', 'webm', 'ts', 'wmv'] },
+      ],
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
   ipcMain.on('app:open-stremio', (_e, url: unknown) => {
     if (typeof url === 'string' && isStremioInstallUrl(url)) void shell.openExternal(url);
   });

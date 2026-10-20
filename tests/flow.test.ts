@@ -361,6 +361,33 @@ describe('saving a subtitle as an SRT file', () => {
   });
 });
 
+describe('saving a video with the subtitle inside', () => {
+  it('refuses unknown subtitles and video paths that are not usable', async () => {
+    current = await start({});
+    const post = (id: string, body: unknown) =>
+      fetch(current!.base + '/api/library/' + id + '/mux', {
+        method: 'POST',
+        headers: { Host: current!.host, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    expect((await post('a'.repeat(32), { video: 'C:\v.mkv' })).status).toBe(404);
+    const made = (await (
+      await current.get('/subtitles/movie/tt0111161.json')
+    ).json()) as SubsResponse;
+    await (await current.get(new URL(made.subtitles[0]!.url).pathname)).text();
+    let id = '';
+    for (let i = 0; i < 60 && !id; i++) {
+      const lib = (await (await current.get('/api/library')).json()) as { items: { id: string }[] };
+      id = lib.items[0]?.id ?? '';
+      if (!id) await new Promise((r) => setTimeout(r, 25));
+    }
+    expect((await post(id, {})).status).toBe(400);
+    const relative = await post(id, { video: 'relative.mkv' });
+    expect(relative.status).toBe(400);
+    expect(((await relative.json()) as { code: string }).code).toBe('BAD_PATH');
+  });
+});
+
 describe('the old speech tool', () => {
   it('is removed from the data folder at start', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'old-sync-'));

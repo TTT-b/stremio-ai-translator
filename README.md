@@ -383,3 +383,12 @@ config ID in the manifest URL, authentication, rate limiting, SSRF hardening and
   [structured output](https://ai.google.dev/gemini-api/docs/structured-output)
 - [`@google/genai`](https://github.com/googleapis/js-genai)
 - [OpenSubtitles REST API](https://opensubtitles.stoplight.io/docs/opensubtitles-api)
+
+### Save a video with the subtitle inside
+
+In **My subtitles**, the **Save video with subtitles** button (desktop app) asks you to choose the
+video file you have on this computer, then saves a copy next to it (`Name.heb.mkv`) with the
+translated subtitle as an extra, switchable track. Picture and sound are copied as they are (no
+re-encoding, so it takes seconds and loses no quality) and the original file is never changed or
+overwritten. It uses the ffmpeg that comes with Stremio. The subtitle is the first track and is set
+as the default one.

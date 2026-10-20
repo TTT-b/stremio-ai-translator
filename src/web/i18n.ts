@@ -348,6 +348,22 @@ const S = {
     he: 'שמור את הכתובית כקובץ SRT שאפשר לטעון בכל נגן',
     en: 'Save the subtitle as an SRT file you can load in any player',
   },
+  libMux: { he: 'שמור סרטון עם כתוביות', en: 'Save video with subtitles' },
+  libMuxTip: {
+    he: 'בחר את קובץ הסרטון שבמחשב. התוכנה שומרת לידו עותק (MKV) עם הכתובית בפנים, בלי לפגוע באיכות ובלי לגעת במקור.',
+    en: 'Choose the video file on this computer. A copy (MKV) with the subtitle inside is saved next to it, with no loss of quality and the original untouched.',
+  },
+  libMuxBusy: { he: 'שומר…', en: 'Saving…' },
+  libMuxDone: { he: 'נשמר: {name}', en: 'Saved: {name}' },
+  libMuxNoFfmpeg: {
+    he: 'לא נמצא ffmpeg. הוא מגיע עם Stremio.',
+    en: 'ffmpeg was not found. It comes with Stremio.',
+  },
+  libMuxBadFile: {
+    he: 'זה לא קובץ סרטון שאפשר לפתוח.',
+    en: 'That is not a video file that can be opened.',
+  },
+  libMuxFail: { he: 'לא ניתן לשמור את הסרטון.', en: 'Could not save the video.' },
   libSrtFail: { he: 'לא ניתן להוריד את הכתובית.', en: 'Could not download the subtitle.' },
   libDelete: { he: 'מחק', en: 'Delete' },
   libDeleted: { he: 'נמחקו {n} כתוביות', en: 'Deleted {n} subtitles' },

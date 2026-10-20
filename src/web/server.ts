@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { FileCache } from '../cache/fileCache';
 import { Library, srtFileName } from '../jobs/library';
 import { RELEASE_NOTES } from '../electron/whatsNew';
@@ -17,6 +17,7 @@ import {
 } from '../stremio/placeholder';
 import { fitSubtitleToVideo } from '../sync/videoFit';
 import { openStremio } from '../stremio/launcher';
+import { MuxError, muxSubtitle, type RunFfmpeg } from '../video/mux';
 import { pickSample, readableLines } from './sample';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { findLanguage, LANGUAGES } from '../config/languages';
@@ -88,6 +89,8 @@ export interface ServerDeps {
   stallAfterMs?: number;
   /** Test hook: opens the Stremio app. */
   openStremio?: () => Promise<{ ok: boolean; code?: string }>;
+  /** Test hook: stands in for ffmpeg when a video is saved with its subtitle. */
+  muxRun?: RunFfmpeg;
   cancelCooldownMs?: number;
   /** Test hook: receives the job manager and cache. */
   onReady?: (ctx: { jobs: JobManager; cache: FileCache }) => void;
@@ -407,8 +410,7 @@ export function createApp(deps: ServerDeps): express.Express {
   });
 
   // Save a finished subtitle as a plain SRT file.
-  app.get('/api/library/:id/srt', (req, res) => {
-    const id = req.params.id ?? '';
+  const savedSubtitle = (id: string) => {
     const entry = isJobId(id) ? library.get(id) : undefined;
     let content = entry ? jobs.get(id)?.result?.content : undefined;
     if (entry && !content) {
@@ -425,6 +427,11 @@ export function createApp(deps: ServerDeps): express.Express {
         }
       }
     }
+    return { entry, content };
+  };
+
+  app.get('/api/library/:id/srt', (req, res) => {
+    const { entry, content } = savedSubtitle(req.params.id ?? '');
     if (!entry || !content) {
       res.status(404).json({ ok: false, message: 'Subtitle not found.' });
       return;
@@ -436,6 +443,38 @@ export function createApp(deps: ServerDeps): express.Express {
     );
     res.setHeader('Cache-Control', 'no-store');
     res.send(content);
+  });
+
+  // Save a copy of a video file that has the subtitle inside it as an extra track (picture and sound are copied).
+  app.post('/api/library/:id/mux', async (req, res) => {
+    const { entry, content } = savedSubtitle(req.params.id ?? '');
+    if (!entry || !content) {
+      res.status(404).json({ ok: false, code: 'NOT_FOUND', message: 'Subtitle not found.' });
+      return;
+    }
+    const body = z
+      .object({ video: z.string().max(1000) })
+      .strict()
+      .safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ ok: false, code: 'BAD_PATH', message: 'No video file chosen.' });
+      return;
+    }
+    try {
+      const output = await muxSubtitle({
+        ffmpeg: locateTools(current().ffmpegPath)?.ffmpeg,
+        video: body.data.video,
+        srt: content,
+        language: entry.language,
+        ...(deps.muxRun ? { run: deps.muxRun } : {}),
+      });
+      logger.info({ stage: 'API', mux: 'done' }, 'video with subtitle saved');
+      res.json({ ok: true, name: basename(output), folder: dirname(output) });
+    } catch (err) {
+      const code = err instanceof MuxError ? err.code : 'FAILED';
+      logger.warn({ stage: 'API', mux: 'failed', code }, 'could not save the video');
+      res.status(code === 'FAILED' ? 500 : 400).json({ ok: false, code });
+    }
   });
 
   const deleteSchema = z.union([
