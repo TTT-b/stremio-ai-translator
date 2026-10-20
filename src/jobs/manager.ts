@@ -680,6 +680,7 @@ export class JobManager {
         createdAt: this.now(),
         keys: result.cacheKeys.slice(0, 5000),
         ...(result.timing ? { timing: result.timing } : {}),
+        ...(job.spec.filename ? { filename: job.spec.filename.slice(0, 300) } : {}),
       });
     } catch {
       log.warn({ stage: 'CACHE', errorCode: 'CACHE_WRITE_FAILED' }, 'library entry not saved');

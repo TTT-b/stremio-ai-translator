@@ -5,7 +5,7 @@ import { FileCache } from '../cache/fileCache';
 import { Library, srtFileName } from '../jobs/library';
 import { RELEASE_NOTES } from '../electron/whatsNew';
 import { recentLogLines } from '../logging/diagnostics';
-import { locateTools } from '../sources/embedded';
+import { findStream, locateTools } from '../sources/embedded';
 import { compareVersionsDesc, NEWS_URL, NewsFeed } from '../news/news';
 import { isJobId, JobManager, type JobManagerDeps } from '../jobs/manager';
 import { createStremioRouter } from '../stremio/addon';
@@ -445,6 +445,24 @@ export function createApp(deps: ServerDeps): express.Express {
     res.send(content);
   });
 
+  // Is the video of this subtitle on Stremio's server right now (so it can be saved without picking a file)?
+  const streamFor = async (filename: string | undefined) => {
+    if (!filename) return undefined;
+    try {
+      return await (deps.findStream ?? findStream)(
+        current().stremioServerUrl,
+        filename,
+        deps.fetchImpl,
+      );
+    } catch {
+      return undefined;
+    }
+  };
+  app.get('/api/library/:id/stream', async (req, res) => {
+    const { entry } = savedSubtitle(req.params.id ?? '');
+    res.json({ ok: !!entry && !!(await streamFor(entry.filename)) });
+  });
+
   // Save a copy of a video file that has the subtitle inside it as an extra track (picture and sound are copied).
   app.post('/api/library/:id/mux', async (req, res) => {
     const { entry, content } = savedSubtitle(req.params.id ?? '');
@@ -453,17 +471,27 @@ export function createApp(deps: ServerDeps): express.Express {
       return;
     }
     const body = z
-      .object({ video: z.string().max(1000) })
+      .object({
+        video: z.string().max(1000).optional(),
+        stremio: z.boolean().optional(),
+        output: z.string().max(1000).optional(),
+      })
       .strict()
       .safeParse(req.body);
     if (!body.success) {
       res.status(400).json({ ok: false, code: 'BAD_PATH', message: 'No video file chosen.' });
       return;
     }
+    const stream = body.data.stremio ? await streamFor(entry.filename) : undefined;
+    if (body.data.stremio && !stream) {
+      res.status(404).json({ ok: false, code: 'NO_STREAM' });
+      return;
+    }
     try {
       const output = await muxSubtitle({
         ffmpeg: locateTools(current().ffmpegPath)?.ffmpeg,
-        video: body.data.video,
+        ...(stream ? { url: stream.url } : { video: body.data.video }),
+        ...(body.data.output ? { output: body.data.output } : {}),
         srt: content,
         language: entry.language,
         ...(deps.muxRun ? { run: deps.muxRun } : {}),

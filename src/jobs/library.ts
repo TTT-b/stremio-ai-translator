@@ -20,6 +20,8 @@ const entrySchema = z.object({
   createdAt: z.number(),
   /** Timing from the video itself or a hash match ('exact'), placed on the speech ('speech'), or guessed ('estimated'). */
   timing: z.enum(['exact', 'speech', 'estimated']).optional(),
+  /** File name of the video this was made for, to find it again on Stremio's server. */
+  filename: z.string().max(300).optional(),
   /** Cache entries removed together with this subtitle. */
   keys: z.array(z.string().regex(/^[0-9a-f]{64}$/)).max(5000),
 });

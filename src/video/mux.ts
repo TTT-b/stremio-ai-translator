@@ -72,6 +72,25 @@ export function checkVideoPath(
   return video;
 }
 
+/** Only Stremio's own server on this computer may be read as a video address. */
+export function checkLocalUrl(url: string): string {
+  if (!/^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d{1,5}\//.test(url)) {
+    throw new MuxError('BAD_PATH', 'The video address is not on this computer.');
+  }
+  return url;
+}
+
+/** A place chosen in a save dialog: absolute, an .mkv name, in a folder that exists. */
+export function checkOutputPath(
+  output: string,
+  exists: (p: string) => boolean = existsSync,
+): string {
+  if (!isAbsolute(output) || extname(output).toLowerCase() !== '.mkv' || !exists(dirname(output))) {
+    throw new MuxError('BAD_PATH', 'That place to save the video is not usable.');
+  }
+  return output;
+}
+
 /** Next to the video, named after it, never over an existing file: "Show S01E01.heb.mkv", then "... (2).mkv". */
 export function outputPathFor(
   video: string,
@@ -142,7 +161,12 @@ const realRun: RunFfmpeg = (ffmpeg, args, signal) =>
 
 export interface MuxRequest {
   ffmpeg: string | undefined;
-  video: unknown;
+  /** A file on this computer (checked) ... */
+  video?: unknown;
+  /** ... or the address of the video on Stremio's own server (loopback only). */
+  url?: string;
+  /** Exact output file chosen by the user (a save dialog); default: next to the video. */
+  output?: string;
   srt: string;
   language: string;
   signal?: AbortSignal;
@@ -151,9 +175,11 @@ export interface MuxRequest {
 
 /** Writes the copy and returns its path. A half-written file is removed when something fails. */
 export async function muxSubtitle(req: MuxRequest): Promise<string> {
-  const video = checkVideoPath(req.video);
+  const video = req.url ? checkLocalUrl(req.url) : checkVideoPath(req.video);
+  if (req.url && !req.output)
+    throw new MuxError('BAD_PATH', 'No place to save the video was chosen.');
   if (!req.ffmpeg) throw new MuxError('NO_FFMPEG', 'ffmpeg was not found (it comes with Stremio).');
-  const output = outputPathFor(video, req.language);
+  const output = req.output ? checkOutputPath(req.output) : outputPathFor(video, req.language);
   const dir = mkdtempSync(join(tmpdir(), 'ai-sub-mux-'));
   const srtFile = join(dir, 'subtitle.srt');
   try {

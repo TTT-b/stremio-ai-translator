@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  checkLocalUrl,
+  checkOutputPath,
   checkVideoPath,
   languageCode3,
   MuxError,
@@ -117,5 +119,48 @@ describe('muxSubtitle', () => {
     await expect(
       muxSubtitle({ ffmpeg: undefined, video: video(), srt: 'x', language: 'he' }),
     ).rejects.toMatchObject({ code: 'NO_FFMPEG' });
+  });
+});
+
+describe('saving from Stremio’s own server', () => {
+  it('accepts only a loopback address and an .mkv place that exists', () => {
+    expect(checkLocalUrl('http://127.0.0.1:11470/abc/0')).toContain('127.0.0.1');
+    expect(() => checkLocalUrl('http://example.com:11470/abc/0')).toThrow(MuxError);
+    expect(() => checkLocalUrl('file:///C:/x.mkv')).toThrow(MuxError);
+    const dir = tmp();
+    expect(checkOutputPath(join(dir, 'a.mkv'))).toBe(join(dir, 'a.mkv'));
+    expect(() => checkOutputPath(join(dir, 'a.exe'))).toThrow(MuxError);
+    expect(() => checkOutputPath(join(dir, 'missing', 'a.mkv'))).toThrow(MuxError);
+    expect(() => checkOutputPath('relative.mkv')).toThrow(MuxError);
+  });
+
+  it('reads the video from the address and writes where the user chose', async () => {
+    const out = join(tmp(), 'Episode.heb.mkv');
+    let input = '';
+    const saved = await muxSubtitle({
+      ffmpeg: 'ffmpeg',
+      url: 'http://127.0.0.1:11470/abc/0',
+      output: out,
+      srt: '1\n00:00:01,000 --> 00:00:02,000\nשלום\n',
+      language: 'he',
+      run: async (_f, args) => {
+        input = args[args.indexOf('-i') + 1] as string;
+        writeFileSync(args.at(-1) as string, 'muxed');
+      },
+    });
+    expect(saved).toBe(out);
+    expect(input).toBe('http://127.0.0.1:11470/abc/0');
+    expect(existsSync(out.replace(/\.mkv$/, '.srt'))).toBe(true);
+  });
+
+  it('needs a place to save when the video comes from an address', async () => {
+    await expect(
+      muxSubtitle({
+        ffmpeg: 'ffmpeg',
+        url: 'http://127.0.0.1:11470/abc/0',
+        srt: 'x',
+        language: 'he',
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_PATH' });
   });
 });

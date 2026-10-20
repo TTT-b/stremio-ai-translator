@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('desktop', {
   quit: () => ipcRenderer.send('window:quit'),
   openStremio: (url: string) => ipcRenderer.send('app:open-stremio', url),
   pickVideo: (name: string): Promise<string | null> => ipcRenderer.invoke('video:pick', name),
+  saveVideo: (name: string): Promise<string | null> => ipcRenderer.invoke('video:save', name),
   version: (): Promise<string> => ipcRenderer.invoke('app:version'),
   updater: {
     state: (): Promise<unknown> => ipcRenderer.invoke('updater:state'),
