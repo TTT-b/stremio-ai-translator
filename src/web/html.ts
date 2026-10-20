@@ -105,6 +105,48 @@ const TITLE_BAR_KEYS = new Set<string>([
 const winBtn =
   'no-drag flex h-9 w-12 items-center justify-center text-warm-mu transition hover:bg-warm-ln/70 hover:text-warm-tx focus:outline-none';
 
+/** Tiny flags drawn as SVG (emoji flags do not show on Windows). */
+const FLAG_IL =
+  '<svg class="h-3.5 w-5 shrink-0 rounded-[2px]" viewBox="0 0 22 16" aria-hidden="true"><rect width="22" height="16" fill="#fff"/><rect y="2" width="22" height="2.2" fill="#0038b8"/><rect y="11.8" width="22" height="2.2" fill="#0038b8"/><path d="M11 5 13.5 9.4H8.5ZM11 11 8.5 6.6H13.5Z" fill="none" stroke="#0038b8" stroke-width="0.7"/></svg>';
+const FLAG_EN =
+  '<svg class="h-3.5 w-5 shrink-0 rounded-[2px]" viewBox="0 0 60 30" aria-hidden="true"><rect width="60" height="30" fill="#012169"/><path d="M0 0 60 30M60 0 0 30" stroke="#fff" stroke-width="6"/><path d="M0 0 60 30M60 0 0 30" stroke="#c8102e" stroke-width="2"/><path d="M30 0V30M0 15H60" stroke="#fff" stroke-width="10"/><path d="M30 0V30M0 15H60" stroke="#c8102e" stroke-width="6"/></svg>';
+
+/** "gemini-3.5-flash-lite" becomes "Gemini 3.5 Flash Lite". */
+export function prettyModel(id: string): string {
+  const words = id
+    .split(/[-_\s]+/)
+    .filter((w) => w !== '')
+    .reduce<string[]>((out, word) => {
+      const last = out[out.length - 1];
+      // "5-5" is version 5.5, not two numbers
+      if (last !== undefined && /^\d+$/.test(last) && /^\d+$/.test(word)) {
+        out[out.length - 1] = last + '.' + word;
+      } else {
+        out.push(word);
+      }
+      return out;
+    }, []);
+  return words
+    .map((w) =>
+      w.toLowerCase() === 'gpt'
+        ? 'GPT'
+        : /^\d/.test(w)
+          ? w
+          : w.charAt(0).toUpperCase() + w.slice(1),
+    )
+    .join(' ');
+}
+
+/** The provider and model for the header line: "Google Gemini 3.5 Flash Lite". */
+export function providerLine(providerLabel: string, model: string): string {
+  const pretty = prettyModel(model);
+  const lastWord = providerLabel.trim().split(/\s+/).pop() ?? '';
+  if (lastWord !== '' && pretty.toLowerCase().startsWith(lastWord.toLowerCase() + ' ')) {
+    return providerLabel + ' ' + pretty.slice(lastWord.length + 1);
+  }
+  return providerLabel === '' ? pretty : providerLabel + ' · ' + pretty;
+}
+
 export function renderStatusPage(d: StatusPageData): string {
   const lang: UiLang = d.uiLang ?? 'he';
   const dir = lang === 'he' ? 'rtl' : 'ltr';
@@ -158,6 +200,13 @@ export function renderStatusPage(d: StatusPageData): string {
   /** Settings drawer footer (desktop only): app version and a manual update check, result on its own line below. */
   const updatesRow = `<div class="flex flex-col gap-3"><div class="flex items-center justify-between gap-3"><div><div class="text-xs text-warm-mu">${tt('version')}</div><div id="app-version" dir="ltr" class="font-mono text-base font-bold text-warm-tx"></div></div><button type="button" id="check-update" class="${btn} flex items-center gap-2 !px-5"><span aria-hidden="true">&#8635;</span>${tt('checkUpdates')}</button></div><span class="${result}" id="update-result"></span></div>`;
 
+  /** Interface language: a button with the current flag and code, and a small menu. */
+  const langMenu = () => {
+    const option = (code: 'he' | 'en', flag: string, name: string) =>
+      `<button type="button" role="option" data-ui="${code}" aria-selected="${lang === code}" class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-warm-tx transition hover:bg-warm-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${flag}<span>${name}</span></button>`;
+    return `<div class="js-lang-wrap relative"><button type="button" class="js-lang-btn ${btn} flex items-center gap-1.5 !px-2.5 !py-2 !text-xs" aria-haspopup="listbox" aria-expanded="false" aria-label="${tt('uiLangLabel')}" title="${tt('uiLangLabel')}">${lang === 'he' ? FLAG_IL : FLAG_EN}<span dir="ltr" class="font-bold">${lang === 'he' ? 'HE' : 'EN'}</span><span class="text-[10px] leading-none" aria-hidden="true">&#9662;</span></button><div class="js-lang-menu absolute end-0 top-full z-50 mt-1 hidden min-w-[150px] rounded-xl border border-warm-ln bg-warm-sf p-1 shadow-lg shadow-black/40" role="listbox">${option('he', FLAG_IL, 'עברית')}${option('en', FLAG_EN, 'English')}</div></div>`;
+  };
+
   /** Wizard steps: short label (progress bar), title and one-line explanation. */
   const STEPS = [1, 2, 3, 4, 5].map((n) => [
     t(lang, `step${n}Label` as StrKey),
@@ -166,8 +215,8 @@ export function renderStatusPage(d: StatusPageData): string {
   ]);
 
   /** Switch (a styled checkbox, so it works with the keyboard and screen readers). */
-  const toggle = (id: string, checked: boolean, label: StrKey, hint?: StrKey) =>
-    `<label class="flex cursor-pointer min-h-14 items-center gap-3.5 rounded-2xl border border-warm-ln p-4 transition hover:border-warm-ac/50"><input type="checkbox" id="${id}" class="peer sr-only"${checked ? ' checked' : ''}><span class="relative h-[23px] w-10 shrink-0 rounded-full bg-warm-ln transition peer-checked:bg-warm-ac peer-focus-visible:ring-2 peer-focus-visible:ring-warm-ac/60 after:absolute after:start-[3px] after:top-[3px] after:h-[17px] after:w-[17px] after:rounded-full after:bg-white after:transition rtl:peer-checked:after:-translate-x-[17px] ltr:peer-checked:after:translate-x-[17px]"></span><span><span class="block text-sm font-semibold text-warm-tx">${tt(label)}</span>${
+  const toggle = (id: string, checked: boolean, label: StrKey, hint?: StrKey, plain = false) =>
+    `<label class="flex cursor-pointer min-h-14 items-center gap-3.5 ${plain ? 'p-4 transition hover:bg-warm-bg/40' : 'rounded-2xl border border-warm-ln p-4 transition hover:border-warm-ac/50'}"><input type="checkbox" id="${id}" class="peer sr-only"${checked ? ' checked' : ''}><span class="relative h-[23px] w-10 shrink-0 rounded-full bg-warm-ln transition peer-checked:bg-warm-ac peer-focus-visible:ring-2 peer-focus-visible:ring-warm-ac/60 after:absolute after:start-[3px] after:top-[3px] after:h-[17px] after:w-[17px] after:rounded-full after:bg-white after:transition rtl:peer-checked:after:-translate-x-[17px] ltr:peer-checked:after:translate-x-[17px]"></span><span><span class="block text-sm font-semibold text-warm-tx">${tt(label)}</span>${
       hint ? `<span class="mt-0.5 block text-xs text-warm-mu">${tt(hint)}</span>` : ''
     }</span></label>`;
   /** Marks which source is asked first ("in use") and which is the backup. */
@@ -185,12 +234,6 @@ export function renderStatusPage(d: StatusPageData): string {
     .map(
       (l) =>
         `<option value="${escapeHtml(l.code)}"${l.code === d.targetLanguage ? ' selected' : ''}>${escapeHtml(languageName(lang, l.code, l.name))} (${escapeHtml(l.code)})</option>`,
-    )
-    .join('');
-  const uiLangOptions = (['he', 'en'] as const)
-    .map(
-      (code) =>
-        `<option value="${code}"${code === lang ? ' selected' : ''}>${tt(code === 'he' ? 'langHe' : 'langEn')}</option>`,
     )
     .join('');
   const keysDone = d.aiConfigured && d.openSubtitlesKeyConfigured && d.openSubtitlesLoginConfigured;
@@ -223,11 +266,11 @@ export function renderStatusPage(d: StatusPageData): string {
     `<button type="button" class="${btn} shrink-0 !py-2 !text-[13px]" ${attr}>${tt('testBtn')}</button>`;
   /** The three checks, used in the last wizard step and on the main screen (ids differ by prefix). */
   const checks = (rp: string, sampleId: string, outId: string) =>
-    `${testRow(tt('testAi'), testBtn(`data-test="ai" data-rp="${rp}"`), `${rp}ai`)}
+    `<div class="grid grid-cols-2 gap-2.5">${testRow(tt('testAi'), testBtn(`data-test="ai" data-rp="${rp}"`), `${rp}ai`)}
 ${testRow(tt('testOs'), testBtn(`data-test="opensubtitles" data-rp="${rp}"`), `${rp}opensubtitles`)}
 ${testRow(tt('testSubdl'), testBtn(`data-test="subdl" data-rp="${rp}"`), `${rp}subdl`, d.subdlKeyConfigured ? 'js-subdl-row ' : 'js-subdl-row hidden ')}
 ${testRow(tt('testSample'), testBtn(`id="${sampleId}" data-sample data-res="${rp}sample" data-out="${outId}"`), `${rp}sample`)}
-<pre id="${outId}" hidden dir="auto" class="max-h-40 overflow-auto whitespace-pre-wrap rounded-2xl border border-warm-ln bg-warm-bg p-3 text-xs"></pre>`;
+<pre id="${outId}" hidden dir="auto" class="col-span-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-2xl border border-warm-ln bg-warm-bg p-3 text-xs"></pre></div>`;
 
   // The script only needs the texts it writes itself; the title-bar texts live in the markup.
   const clientDict = Object.fromEntries(
@@ -247,7 +290,7 @@ ${d.desktop ? titleBar : ''}
 <main class="mx-auto flex min-h-screen w-full flex-col items-center px-4 pb-10 sm:px-10 ${d.desktop ? 'pt-[76px]' : 'pt-10'}">
 
 <div id="wizard" class="${startStep ? 'flex' : 'hidden'} w-full max-w-[520px] flex-col items-center">
-<div class="mb-3 flex w-full items-center justify-end gap-2"><button type="button" class="js-news ${btn} relative !px-3 !py-2 !border-transparent" aria-label="${tt('newsBell')}" title="${tt('newsBell')}"><span class="text-base leading-none" aria-hidden="true">&#128276;</span><span class="js-news-badge absolute -top-1 -end-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-warm-ac px-1 text-[10px] font-bold text-warm-on"></span></button><button type="button" id="ui-toggle" class="rounded-lg px-2.5 py-1 text-xs font-semibold text-warm-mu transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${tt('switchLang')}</button></div>
+<div class="mb-3 flex w-full items-center justify-end gap-2"><button type="button" class="js-news ${btn} relative !px-3 !py-2 !border-transparent" aria-label="${tt('newsBell')}" title="${tt('newsBell')}"><span class="text-base leading-none" aria-hidden="true">&#128276;</span><span class="js-news-badge absolute -top-1 -end-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-warm-ac px-1 text-[10px] font-bold text-warm-on"></span></button>${langMenu()}</div>
 <ol id="w-bars" class="mb-7 flex w-full gap-1.5" aria-label="${tt('setupProgress')}">${STEPS.map(
     (s, i) =>
       `<li class="h-[5px] flex-1 rounded-full bg-warm-ln transition-colors" data-bar="${i + 1}" title="${escapeHtml(s[0])}"><span class="sr-only">${escapeHtml(s[0])}</span></li>`,
@@ -295,10 +338,11 @@ ${checks('r-', 'sample', 'sample-out')}
 </div>
 
 <div id="dash" class="${startStep ? 'hidden' : 'flex'} w-full max-w-[560px] flex-col gap-[18px]">
-<div class="flex items-center justify-between gap-3"><div><h1 class="text-[26px] font-extrabold text-warm-tx">${tt('dashTitle')}</h1>${d.testMode ? `<div class="mt-1.5 inline-block rounded-full bg-amber-400/15 px-2.5 py-0.5 text-xs font-bold text-amber-300">${tt('testBanner')}</div>` : ''}<div class="mt-1 text-[13px] text-warm-mu">${d.aiConfigured ? `${tt('providerLine')} <span dir="ltr">${escapeHtml(d.aiProviderLabel)} &middot; ${escapeHtml(d.aiModel)}</span>` : tt('noKeyYet')}</div></div>
-<div class="flex flex-wrap items-center justify-end gap-2"><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !py-2 disabled:cursor-not-allowed disabled:opacity-40" disabled title="${tt('resumeHint')}">${tt('resumeBtn')}</button><button type="button" class="js-news ${btn} relative !px-3 !py-2" aria-label="${tt('newsBell')}" title="${tt('newsBell')}"><span class="text-base leading-none" aria-hidden="true">&#128276;</span><span class="js-news-badge absolute -top-1 -end-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-warm-ac px-1 text-[10px] font-bold text-warm-on"></span></button><button type="button" id="open-library" class="${btn} !py-2">${tt('mySubs')}</button><button type="button" id="open-settings" class="${btn} flex items-center gap-2 !py-2"><span class="text-base leading-none" aria-hidden="true">&#9881;</span>${tt('settings')}</button></div></div>
+<div class="-mb-2 flex w-full justify-end">${langMenu()}</div>
+<div class="flex items-center justify-between gap-3"><div><h1 class="text-[26px] font-extrabold text-warm-tx">${tt('dashTitle')}</h1>${d.testMode ? `<div class="mt-1.5 inline-block rounded-full bg-amber-400/15 px-2.5 py-0.5 text-xs font-bold text-amber-300">${tt('testBanner')}</div>` : ''}<div class="mt-1 text-[13px] text-warm-mu">${d.aiConfigured ? `${tt('providerLine')} <span dir="ltr">${escapeHtml(providerLine(d.aiProviderLabel, d.aiModel))}</span>` : tt('noKeyYet')}</div></div>
+<div class="flex flex-wrap items-center justify-end gap-2"><button type="button" class="js-news ${btn} relative !px-3 !py-2" aria-label="${tt('newsBell')}" title="${tt('newsBell')}"><span class="text-base leading-none" aria-hidden="true">&#128276;</span><span class="js-news-badge absolute -top-1 -end-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-warm-ac px-1 text-[10px] font-bold text-warm-on"></span></button><button type="button" id="open-library" class="${btn} !py-2">${tt('mySubs')}</button><button type="button" id="open-settings" class="${btn} flex items-center gap-2 !py-2"><span class="text-base leading-none" aria-hidden="true">&#9881;</span>${tt('settings')}</button></div></div>
 <section class="flex flex-col gap-3.5 rounded-[22px] border border-warm-ln bg-warm-sf p-6">
-<div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div>
+<div class="flex items-center justify-between gap-3"><div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px] disabled:cursor-not-allowed disabled:opacity-40" disabled title="${tt('resumeHint')}">${tt('resumeBtn')}</button></div>
 <div id="st-progress-text" class="text-[26px] font-extrabold leading-tight text-warm-tx">${tt('noSub')}</div>
 <div class="h-2 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('progressAria')}" aria-valuemin="0" aria-valuemax="100"><div id="st-progress" class="h-full w-0 rounded-full bg-warm-ac transition-[width] duration-500"></div></div>
 </section>
@@ -306,7 +350,7 @@ ${checks('r-', 'sample', 'sample-out')}
 <div class="grid gap-3.5">
 <div class="${tile} flex items-end justify-between gap-3"><div><div class="text-xs text-warm-mu">${tt('stLines')}</div><div id="st-lines" class="mt-1 text-[26px] font-extrabold">0</div></div><div class="text-end"><div class="text-xs text-warm-mu">${tt('stSize')}</div><div id="st-size" dir="ltr" class="mt-1 text-[26px] font-extrabold">0 KB</div></div></div>
 <div id="st-quota" class="${tile} hidden"><div class="flex items-baseline justify-between gap-3"><div class="flex items-center gap-2 text-xs text-warm-mu"><span>${tt('stQuota')}</span>${srcBadge('opensubtitles')}</div><div id="st-quota-text" class="text-sm font-bold" dir="ltr"></div></div><div class="mt-2 h-2 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('stQuota')}" aria-valuemin="0" aria-valuemax="100"><div id="st-quota-bar" class="h-full w-0 rounded-full bg-warm-ok transition-[width] duration-500"></div></div><div id="st-quota-hint" class="mt-1.5 hidden text-xs text-warm-mu"></div></div>
-<div id="st-subdl" class="${tile} js-subdl-row ${d.subdlKeyConfigured ? '' : 'hidden'}"><div class="flex items-baseline justify-between gap-3"><div class="flex items-center gap-2 text-xs text-warm-mu"><span>${tt('stSubdl')}</span>${srcBadge('subdl')}</div><div id="st-subdl-text" class="text-sm font-bold" dir="ltr">0</div></div><div class="mt-1.5 text-xs text-warm-mu">${tt('stSubdlHint')}</div><div class="mt-2">${keyLink('https://subdl.com/panel/api', t(lang, 'stSubdlPanel'))}</div></div>
+<div id="st-subdl" class="${tile}"><div class="flex items-baseline justify-between gap-3"><div class="flex items-center gap-2 text-xs text-warm-mu"><span>${tt('stSubdl')}</span>${srcBadge('subdl')}</div><div id="st-subdl-text" class="text-sm font-bold ${d.subdlKeyConfigured ? '' : 'text-warm-mu'}" dir="auto">${d.subdlKeyConfigured ? '0' : tt('stSubdlNoKey')}</div></div><div id="st-subdl-nokey" class="mt-1.5 text-xs text-warm-mu ${d.subdlKeyConfigured ? 'hidden' : ''}">${tt('stSubdlNoKeyHint')}<div class="mt-2">${keyLink('https://subdl.com/panel/api', t(lang, 'getSubdlKey'))}</div></div><div id="st-subdl-info" class="${d.subdlKeyConfigured ? '' : 'hidden'}"><div class="mt-1.5 text-xs text-warm-mu">${tt('stSubdlHint')}</div><div class="mt-2">${keyLink('https://subdl.com/panel/api', t(lang, 'stSubdlPanel'))}</div></div></div>
 <div class="${tile} flex items-center justify-between gap-3"><div class="min-w-0 flex-1"><label class="text-xs text-warm-mu" for="q-lang">${tt('stTarget')}</label><select class="${field} mt-1" id="q-lang">${langOptions}</select></div><label class="flex shrink-0 cursor-pointer flex-col items-center gap-1.5"><span class="text-xs text-warm-mu">${tt('stDual')}</span><input type="checkbox" id="q-dual" class="peer sr-only"${d.dualSubtitles ? ' checked' : ''}><span class="relative h-[23px] w-10 shrink-0 rounded-full bg-warm-ln transition peer-checked:bg-warm-ac peer-focus-visible:ring-2 peer-focus-visible:ring-warm-ac/60 after:absolute after:start-[3px] after:top-[3px] after:h-[17px] after:w-[17px] after:rounded-full after:bg-white after:transition rtl:peer-checked:after:-translate-x-[17px] ltr:peer-checked:after:translate-x-[17px]"></span></label></div>
 </div>
 <section class="${tile} flex flex-col gap-2.5"><div><div class="text-sm font-bold text-warm-tx">${tt('checksTitle')}</div><div class="mt-0.5 text-xs text-warm-mu">${tt('checksSub')}</div></div>
@@ -377,12 +421,11 @@ ${group(
 )}
 ${group(
   'secTranslate',
-  `<div><label class="${labelCls}" for="d-ui">${tt('uiLangLabel')}</label><select class="${field}" id="d-ui">${uiLangOptions}</select></div>
-<div><label class="${labelCls}" for="d-lang">${tt('langLabel')}</label><select class="${field}" id="d-lang">${langOptions}</select></div>
-${dualSwitch('d-dual', d.dualSubtitles, false)}
-${toggle('d-emb', d.embeddedSubtitles ?? true, 'embLabel', 'embHint')}
-${toggle('d-clean', d.cleanSubtitles ?? true, 'cleanLabel', 'cleanHint')}
-${toggle('d-ask', d.translationMode === 'ask', 'askLabel', 'askHint')}
+  `<div><label class="${labelCls}" for="d-lang">${tt('langLabel')}</label><select class="${field}" id="d-lang">${langOptions}</select></div>
+<div class="flex flex-col divide-y divide-warm-ln overflow-hidden rounded-2xl border border-warm-ln">${toggle('d-dual', d.dualSubtitles, 'dualLabel', undefined, true)}
+${toggle('d-emb', d.embeddedSubtitles ?? true, 'embLabel', 'embHint', true)}
+${toggle('d-clean', d.cleanSubtitles ?? true, 'cleanLabel', 'cleanHint', true)}
+${toggle('d-ask', d.translationMode === 'ask', 'askLabel', 'askHint', true)}</div>
 <div><label class="${labelCls}" for="d-src">${tt('srcLabel')}</label><select class="${field}" id="d-src"><option value="opensubtitles"${d.subtitleSource === 'subdl' ? '' : ' selected'}>${tt('srcOs')}</option><option value="subdl"${d.subtitleSource === 'subdl' ? ' selected' : ''}>${tt('srcSubdl')}</option></select><p class="mt-1 text-xs text-warm-mu">${tt('srcHint')}</p></div>`,
 )}
 ${group(
@@ -470,10 +513,16 @@ const saveKeys = async (body, resultId) => {
       : KEY_ERRORS[r.status] || T.keyErrOther;
     show(resultId, r.ok, msg);
     if (!r.ok) toast(false, msg);
-    if (r.ok && body.subdlApiKey) document.querySelectorAll('.js-subdl-row').forEach((row) => row.classList.remove('hidden'));
+    if (r.ok && body.subdlApiKey) {
+      document.querySelectorAll('.js-subdl-row').forEach((row) => row.classList.remove('hidden'));
+      subdlOn = true;
+      $('st-subdl-nokey').classList.add('hidden'); $('st-subdl-info').classList.remove('hidden');
+      $('st-subdl-text').classList.remove('text-warm-mu'); $('st-subdl-text').textContent = f(T.stSubdlCount, {n: 0});
+    }
     return r.ok;
   } catch { show(resultId, false, FAILED); toast(false, FAILED); return false; }
 };
+let subdlOn = ${d.subdlKeyConfigured ? 'true' : 'false'};
 const saveSettings = async (lang, dual, ui, embedded, sync, ask, clean) => {
   const r = await post('/api/settings', {targetLanguage: lang, dualSubtitles: dual, ...(ui ? {uiLanguage: ui} : {}), ...(embedded === undefined ? {} : {embeddedSubtitles: embedded}), ...(sync === undefined ? {} : {preciseSync: sync}), ...(ask === undefined ? {} : {translationMode: ask ? 'ask' : 'auto'}), ...(clean === undefined ? {} : {cleanSubtitles: clean})});
   return {...r, message: r.ok ? T.settingsSaved : T.settingsInvalid};
@@ -509,7 +558,14 @@ const render = () => {
 };
 const go = (n) => { step = Math.max(1, Math.min(5, n)); render(); };
 back.addEventListener('click', () => { if (step === 1) setView('dash'); else go(step - 1); });
-$('ui-toggle').addEventListener('click', () => setUiLang(UI === 'he' ? 'en' : 'he'));
+document.querySelectorAll('.js-lang-wrap').forEach((wrap) => {
+  const btn = wrap.querySelector('.js-lang-btn'), menu = wrap.querySelector('.js-lang-menu');
+  const close = () => { menu.classList.add('hidden'); btn.setAttribute('aria-expanded', 'false'); };
+  btn.addEventListener('click', (e) => { e.stopPropagation(); const open = menu.classList.toggle('hidden') === false; btn.setAttribute('aria-expanded', String(open)); });
+  menu.querySelectorAll('[data-ui]').forEach((o) => o.addEventListener('click', () => { close(); if (o.dataset.ui !== UI) setUiLang(o.dataset.ui); }));
+  document.addEventListener('click', close);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+});
 next.addEventListener('click', async () => {
   next.disabled = true;
   try {
@@ -571,7 +627,7 @@ $('save').addEventListener('click', async () => {
   try {
     const body = readKeys('d-');
     if (Object.keys(body).length && !(await saveKeys(body, 'save-result'))) return;
-    const r = await saveSettings($('d-lang').value, $('d-dual').checked, $('d-ui').value, $('d-emb').checked, syncState === 'ready' ? $('d-sync').checked : undefined, $('d-ask').checked, $('d-clean').checked);
+    const r = await saveSettings($('d-lang').value, $('d-dual').checked, undefined, $('d-emb').checked, syncState === 'ready' ? $('d-sync').checked : undefined, $('d-ask').checked, $('d-clean').checked);
     show('save-result', r.ok, r.message);
     toast(r.ok, r.message);
     if (r.ok) { clearKeys('d-'); setTimeout(() => location.reload(), 1000); }
@@ -726,7 +782,7 @@ const refreshStatus = async () => {
       hint.textContent = q.left === 0 ? T.stQuotaOut : q.left < 10 ? f(T.stQuotaLow, {n: q.left}) : '';
       hint.classList.toggle('hidden', !hint.textContent);
     }
-    $('st-subdl-text').textContent = f(T.stSubdlCount, {n: r.subdlDownloads || 0});
+    if (subdlOn) $('st-subdl-text').textContent = f(T.stSubdlCount, {n: r.subdlDownloads || 0});
     $('resume-btn').disabled = !r.resumable;
     renderQueue(r.queue || []);
   } catch { /* the app may be restarting */ }

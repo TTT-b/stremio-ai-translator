@@ -72,7 +72,7 @@ describe('page language', () => {
       .replace(/<style[\s\S]*?<\/style>/g, '')
       .replace(/<option[\s\S]*?<\/option>/g, '')
       .replace(/<script[\s\S]*?<\/script>/g, '')
-      .replace(/<button[^>]*id="ui-toggle"[\s\S]*?<\/button>/g, '');
+      .replace(/<div class="js-lang-menu[\s\S]*?<\/div>/g, '');
     expect(visible).not.toMatch(/[א-ת]/);
   });
 

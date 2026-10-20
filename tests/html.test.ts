@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ERROR_META } from '../src/errors';
-import { ERROR_MESSAGES_HE, renderStatusPage } from '../src/web/html';
+import { ERROR_MESSAGES_HE, renderStatusPage, prettyModel, providerLine } from '../src/web/html';
 
 const page = renderStatusPage({
   nonce: 'abc',
@@ -29,7 +29,10 @@ describe('config page', () => {
     expect(page).not.toMatch(
       /href=["']https?:\/\/(?!127\.0\.0\.1|web\.stremio\.com\/|aistudio\.google\.com\/|platform\.claude\.com\/|platform\.openai\.com\/|www\.opensubtitles\.com\/|subdl\.com\/)/i,
     );
-    expect(page).not.toMatch(/cdn\.tailwindcss\.com|<svg/i);
+    expect(page).not.toMatch(/cdn\.tailwindcss\.com|<canvas/i);
+    // The only drawings are the two small language flags (no QR code).
+    const drawings = page.match(/<svg[^>]*>/gi) ?? [];
+    expect(drawings.every((tag) => /viewBox="0 0 (22 16|60 30)"/.test(tag))).toBe(true);
   });
 
   it('has styled key-creation buttons that open safely and mark the free ones', () => {
@@ -72,6 +75,71 @@ describe('config page', () => {
 
   it('inlines the locally built CSS with the nonce', () => {
     expect(page).toMatch(/<style nonce="abc">[^<]*\.rounded-2xl/);
+  });
+});
+
+describe('model names and the header', () => {
+  it('writes the model in readable words', () => {
+    expect(prettyModel('gemini-3.5-flash-lite')).toBe('Gemini 3.5 Flash Lite');
+    expect(prettyModel('gpt-4o-mini')).toBe('GPT 4o Mini');
+    expect(prettyModel('claude-sonnet-5-5')).toBe('Claude Sonnet 5.5');
+  });
+
+  it('joins the provider and the model without repeating the name', () => {
+    expect(providerLine('Google Gemini', 'gemini-3.5-flash-lite')).toBe(
+      'Google Gemini 3.5 Flash Lite',
+    );
+    expect(providerLine('OpenAI', 'gpt-4o-mini')).toBe('OpenAI · GPT 4o Mini');
+    expect(providerLine('', 'gpt-4o')).toBe('GPT 4o');
+  });
+});
+
+describe('main screen layout', () => {
+  const base = {
+    nonce: 'abc',
+    aiConfigured: true,
+    aiProviderLabel: 'Google Gemini',
+    aiModel: 'gemini-3.5-flash-lite',
+    dualSubtitles: false,
+    openSubtitlesKeyConfigured: true,
+    openSubtitlesLoginConfigured: true,
+    openSubtitlesUsername: 'u',
+    languages: [{ code: 'he', name: 'Hebrew' }],
+    targetLanguage: 'he',
+    manifestUrl: 'http://127.0.0.1:7000/manifest.json',
+    installUrl: 'https://web.stremio.com/#/addons',
+    stremioReady: true,
+    rtlFix: false,
+  };
+
+  it('shows the model without dashes', () => {
+    const html = renderStatusPage(base);
+    expect(html).toContain('Google Gemini 3.5 Flash Lite');
+    expect(html).not.toContain('gemini-3.5-flash-lite');
+  });
+
+  it('has a language menu with flags, and no language choice inside the settings', () => {
+    const html = renderStatusPage(base);
+    expect(html).toContain('js-lang-btn');
+    expect(html).toContain('data-ui="en"');
+    expect(html).not.toContain('id="d-ui"');
+  });
+
+  it('puts the Continue button inside the status card', () => {
+    const html = renderStatusPage(base);
+    const card = html.indexOf('id="st-state"');
+    const button = html.indexOf('id="resume-btn"');
+    const next = html.indexOf('id="st-progress-text"');
+    expect(card).toBeGreaterThan(-1);
+    expect(button).toBeGreaterThan(card);
+    expect(button).toBeLessThan(next);
+  });
+
+  it('says no key was entered when there is no SubDL key, and counts when there is', () => {
+    const without = renderStatusPage({ ...base, subdlKeyConfigured: false });
+    expect(without).toContain('לא הוזן מפתח');
+    const withKey = renderStatusPage({ ...base, subdlKeyConfigured: true });
+    expect(withKey).toMatch(/id="st-subdl-nokey" class="[^"]*hidden/);
   });
 });
 

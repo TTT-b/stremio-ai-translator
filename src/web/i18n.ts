@@ -406,6 +406,11 @@ const S = {
   },
   resumeStarted: { he: 'ממשיך את התרגום', en: 'Continuing the translation' },
   resumeNone: { he: 'אין כרגע מה להמשיך', en: 'Nothing to continue right now' },
+  stSubdlNoKey: { he: 'לא הוזן מפתח', en: 'No key entered' },
+  stSubdlNoKeyHint: {
+    he: 'SubDL הוא מקור גיבוי חינמי. הוסף מפתח בהגדרות כדי להפעיל אותו.',
+    en: 'SubDL is a free backup source. Add a key in Settings to turn it on.',
+  },
   stSubdlPanel: { he: 'בדוק את המכסה בלוח SubDL', en: 'Check your quota in the SubDL panel' },
   stSubdlHint: {
     he: 'התוכנה לא מקבלת מ-SubDL נתון על מכסה, ולכן מוצג רק מספר ההורדות בסשן הנוכחי.',
