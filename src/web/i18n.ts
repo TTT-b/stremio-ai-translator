@@ -354,7 +354,10 @@ const S = {
     en: 'Choose the video file on this computer. A copy (MKV) with the subtitle inside is saved next to it, with no loss of quality and the original untouched.',
   },
   libMuxBusy: { he: 'שומר…', en: 'Saving…' },
-  libMuxDone: { he: 'נשמר: {name}', en: 'Saved: {name}' },
+  libMuxDone: {
+    he: 'נשמר: {name} (וגם קובץ SRT לידו)',
+    en: 'Saved: {name} (and an SRT file next to it)',
+  },
   libMuxNoFfmpeg: {
     he: 'לא נמצא ffmpeg. הוא מגיע עם Stremio.',
     en: 'ffmpeg was not found. It comes with Stremio.',

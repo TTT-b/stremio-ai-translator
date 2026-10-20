@@ -886,7 +886,7 @@ const episodeRow = (e) => {
     mux.type = 'button';
     mux.title = T.libMuxTip;
     mux.addEventListener('click', async () => {
-      const video = await window.desktop.pickVideo();
+      const video = await window.desktop.pickVideo(e.kind === 'series' ? e.title + ' S' + String(e.season ?? 0).padStart(2, '0') + 'E' + String(e.episode ?? 0).padStart(2, '0') : e.title);
       if (!video) return;
       mux.disabled = true; mux.textContent = T.libMuxBusy;
       try {

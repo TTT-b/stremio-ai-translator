@@ -163,6 +163,9 @@ export async function muxSubtitle(req: MuxRequest): Promise<string> {
       muxArgs(video, srtFile, output, req.language),
       req.signal ?? new AbortController().signal,
     );
+    // The SRT goes next to it with the same name, so any player can use it too.
+    const srtOut = output.replace(/\.mkv$/, '.srt');
+    if (!existsSync(srtOut)) writeFileSync(srtOut, req.srt, 'utf8');
     return output;
   } catch (err) {
     rmSync(output, { force: true });

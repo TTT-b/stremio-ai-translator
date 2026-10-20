@@ -94,6 +94,7 @@ describe('muxSubtitle', () => {
     expect(readFileSync(out, 'utf8')).toBe('muxed');
     expect(seen).toContain('שלום');
     expect(readFileSync(file, 'utf8')).toBe('video'); // the original is untouched
+    expect(readFileSync(out.replace(/\.mkv$/, '.srt'), 'utf8')).toContain('שלום'); // the SRT is saved too
   });
 
   it('removes a half-written file and reports FAILED when ffmpeg breaks', async () => {
