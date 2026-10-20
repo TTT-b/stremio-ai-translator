@@ -1,6 +1,6 @@
 {
   "name": "stremio-ai-subtitle-translator",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "private": true,
   "license": "MIT",
   "description": "Local Stremio add-on that translates subtitles with Gemini",

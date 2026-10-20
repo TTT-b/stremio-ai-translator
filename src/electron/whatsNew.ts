@@ -12,6 +12,52 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '1.6.0': {
+    en: [
+      {
+        title: 'Timing that follows the sound',
+        text: 'When the video has no subtitle of its own, the app listens to a few short parts of the audio and shifts or stretches the subtitle to match. If it is not sure, it leaves the subtitle as it is.',
+      },
+      {
+        title: 'Exact subtitle from the video, even if it arrives late',
+        text: 'The app waits up to 15 seconds for the subtitle inside the video. If it arrives later, it is translated in the background and replaces the shown one. You get a notice, then select the subtitle again in Stremio.',
+      },
+      {
+        title: 'Continue translation button',
+        text: 'If the AI gets stuck, the button nudges it or starts the job again.',
+      },
+      {
+        title: 'Cleaner subtitles',
+        text: 'Speaker names, sound notes and translator credits are removed before translation. You can turn this off in Settings.',
+      },
+      {
+        title: 'New look and more',
+        text: 'Wider two-column screen that fits any monitor, F11 for full screen, language picker with flags, target language on the main screen, a button that opens Stremio, and a Download SRT link for each subtitle in My subtitles.',
+      },
+    ],
+    he: [
+      {
+        title: 'תזמון לפי הקול',
+        text: 'כשאין לסרטון כתובית משלו, האפליקציה מאזינה לכמה קטעים קצרים מהשמע ומזיזה או מותחת את הכתובית שתתאים. אם היא לא בטוחה, היא משאירה את הכתובית כמו שהיא.',
+      },
+      {
+        title: 'כתובית מדויקת מהסרטון, גם אם היא מגיעה באיחור',
+        text: 'האפליקציה ממתינה עד 15 שניות לכתובית שבתוך הסרטון. אם היא מגיעה אחר כך, היא מתורגמת ברקע ומחליפה את המוצגת. תקבל הודעה, ואז תבחר שוב את הכתובית ב-Stremio.',
+      },
+      {
+        title: 'כפתור "המשך תרגום"',
+        text: 'אם ה-AI נתקע, הכפתור דוחף אותו או מתחיל את העבודה מחדש.',
+      },
+      {
+        title: 'כתוביות נקיות יותר',
+        text: 'שמות דוברים, הערות קול וקרדיט של מתרגמים מוסרים לפני התרגום. אפשר לכבות את זה בהגדרות.',
+      },
+      {
+        title: 'מראה חדש ועוד',
+        text: 'מסך רחב בשתי עמודות שמתאים לכל מסך, F11 למסך מלא, בחירת שפה עם דגלים, שפת יעד במסך הראשי, כפתור שפותח את Stremio וקישור "הורד SRT" לכל כתובית ב"הכתוביות שלי".',
+      },
+    ],
+  },
   '1.5.1': {
     en: [
       {

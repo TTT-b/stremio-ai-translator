@@ -280,7 +280,8 @@ subtitles… 45%`) in the interface language instead of one fixed sentence.
 Subtitles made for the hard of hearing contain more than speech: who is talking (`KATARA: Water.`)
 and sounds (`(groans)`, `[door slams]`). Before translating, the add-on removes a capital-letter
 speaker label at the start of a line and a short note in brackets at the start or end of a line, and
-deletes a line that was only a sound. Words inside a sentence are never touched. Turn it off in
+deletes a line that was only a sound. Words inside a sentence are never touched. Credit lines such
+as "Translated by ..." or a site's advert (`www.opensubtitles.org`) are deleted too. Turn it off in
 **Settings → Remove speaker names and sound notes from subtitles** (or `CLEAN_SUBTITLES=false`).
 
 ### The video's own subtitle is not waited for long

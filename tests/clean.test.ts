@@ -93,3 +93,34 @@ describe('cleanSubtitle', () => {
     expect(file.cues[0]?.text).toBe('KATARA: Water.');
   });
 });
+
+describe('credits and adverts', () => {
+  const cue = (index: number, text: string) => ({
+    index,
+    startMs: index * 1000,
+    endMs: index * 1000 + 800,
+    text,
+  });
+  const run = (texts: string[]) =>
+    cleanSubtitle({ format: 'srt', cues: texts.map((t, i) => cue(i + 1, t)) }).cues.map(
+      (c) => c.text,
+    );
+
+  it.each([
+    'תורגם ע"י נוי גמליאל',
+    '<i>תורגם על ידי דני</i>',
+    'תרגום: דני כהן\nסנכרון: רון',
+    'Translated by Noy',
+    'Subtitles by SubTeam',
+    'Synced & corrected by Foo',
+    'Downloaded from www.OpenSubtitles.org',
+  ])('removes the credit "%s"', (credit) => {
+    expect(run([credit, 'Hello there.'])).toEqual(['Hello there.']);
+  });
+
+  it('keeps speech that only looks similar', () => {
+    expect(
+      run(['The translation was wrong.', 'We need to sync our watches.', 'תרגום זה לא פשוט.']),
+    ).toEqual(['The translation was wrong.', 'We need to sync our watches.', 'תרגום זה לא פשוט.']);
+  });
+});

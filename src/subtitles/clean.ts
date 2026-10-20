@@ -3,8 +3,25 @@ import type { Cue, SubtitleFile } from './types';
 /**
  * Subtitles made for the hard of hearing carry more than speech: who is talking ("KATARA: Water.")
  * and sounds ("(groans)", "[door slams]"). They are removed before translation, so the viewer sees
- * only what is said, and a line that was only a sound disappears.
+ * only what is said, and a line that was only a sound disappears. Credits ("Translated by ...",
+ * "תורגם ע"י ...") and site adverts are removed too.
  */
+
+/** A credit or advert cue: who translated, synced or uploaded the subtitle, or a site's name. */
+const CREDIT = [
+  /^(?:translated|translation|subtitles?|subs|captions?|synced?|synchroni[sz]ed|sync|timed|timing|encoded|edited|ripped|proofread|resynced|corrected)(?:\s*(?:&|and|\/)\s*\w+)?\s*(?:by\b|:|-)/i,
+  /(?:www\.|https?:\/\/)\S+|\b(?:opensubtitles|subscene|addic7ed|podnapisi|yifysubtitles|subdl)\b/i,
+  /^(?:תורגם|תורגמו|תרגום|תירגום|סנכרון|סונכרן|סונכרנו|הוכן|עריכה|עריכת תרגום|הגהה|תזמון|כתוביות)\s*(?:ע["״”']?י|על[- ]ידי|:|-)/,
+];
+
+function isCredit(text: string): boolean {
+  const first =
+    text
+      .replace(/<[^>]*>/g, '')
+      .split('\n')[0]
+      ?.trim() ?? '';
+  return CREDIT.some((pattern) => pattern.test(first));
+}
 
 /** A speaker label at the start of a line: capital letters, then a colon ("MAN 1:", "SOKKA (O.S.):"). */
 const SPEAKER = /^(?:[-–—]\s*)?[A-Z][A-Z0-9 .'#&-]{0,24}(?:\s*\([A-Za-z. ]{1,12}\))?:\s+/;
@@ -70,7 +87,7 @@ export function cleanText(text: string): string {
 export function cleanSubtitle(file: SubtitleFile): SubtitleFile {
   const kept: Cue[] = [];
   for (const cue of file.cues) {
-    const text = cleanText(cue.text);
+    const text = isCredit(cue.text) ? '' : cleanText(cue.text);
     if (text !== '') kept.push({ ...cue, index: kept.length + 1, text });
   }
   return { ...file, cues: kept };
