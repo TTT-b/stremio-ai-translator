@@ -342,6 +342,7 @@ ${checks('r-', 'sample', 'sample-out')}
 <div class="flex items-center justify-between gap-3"><div><h1 class="text-[26px] font-extrabold text-warm-tx">${tt('dashTitle')}</h1>${d.testMode ? `<div class="mt-1.5 inline-block rounded-full bg-amber-400/15 px-2.5 py-0.5 text-xs font-bold text-amber-300">${tt('testBanner')}</div>` : ''}<div class="mt-1 text-[13px] text-warm-mu">${d.aiConfigured ? `${tt('providerLine')} <span dir="ltr">${escapeHtml(providerLine(d.aiProviderLabel, d.aiModel))}</span>` : tt('noKeyYet')}</div></div>
 <div class="flex flex-wrap items-center justify-end gap-2"><button type="button" class="js-news ${btn} relative !px-3 !py-2" aria-label="${tt('newsBell')}" title="${tt('newsBell')}"><span class="text-base leading-none" aria-hidden="true">&#128276;</span><span class="js-news-badge absolute -top-1 -end-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-warm-ac px-1 text-[10px] font-bold text-warm-on"></span></button><button type="button" id="open-library" class="${btn} !py-2">${tt('mySubs')}</button><button type="button" id="open-settings" class="${btn} flex items-center gap-2 !py-2"><span class="text-base leading-none" aria-hidden="true">&#9881;</span>${tt('settings')}</button></div></div>
 <div class="flex flex-col gap-[18px] lg:grid lg:grid-cols-2 lg:items-start lg:gap-5"><div class="flex flex-col gap-[18px]">
+<section id="st-upgrade" class="${tile} hidden items-start justify-between gap-3 !border-warm-ac/60" role="status"><div><div class="text-sm font-bold text-warm-tx">${tt('upgradeTitle')}</div><div id="st-upgrade-text" class="mt-0.5 text-xs text-warm-mu"></div></div><button type="button" id="st-upgrade-close" class="shrink-0 rounded-lg px-2 py-1 text-sm text-warm-mu transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac" aria-label="${tt('newsClose')}">&#10005;</button></section>
 <section class="flex flex-col gap-3.5 rounded-[22px] border border-warm-ln bg-warm-sf p-6">
 <div class="flex items-center justify-between gap-3"><div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('resumeHint')}">${tt('resumeBtn')}</button></div>
 <div id="st-progress-text" class="text-[26px] font-extrabold leading-tight text-warm-tx">${tt('noSub')}</div>
@@ -779,6 +780,14 @@ const renderQueue = (items) => {
     if (r.fill) r.fill.style.width = (it.percent ?? 0) + '%';
   }
 };
+// The "better subtitle is ready" notice can be closed; it comes back only for a newer one.
+let dismissedUpgrade = 0;
+try { dismissedUpgrade = Number(localStorage.getItem('upgradeDismissed')) || 0; } catch { /* no storage: it just shows again */ }
+$('st-upgrade-close').addEventListener('click', () => {
+  dismissedUpgrade = Date.now();
+  try { localStorage.setItem('upgradeDismissed', String(dismissedUpgrade)); } catch { /* not saved */ }
+  $('st-upgrade').classList.add('hidden'); $('st-upgrade').classList.remove('flex');
+});
 const refreshStatus = async () => {
   try {
     const r = await (await fetch('/api/status')).json();
@@ -807,6 +816,14 @@ const refreshStatus = async () => {
     }
     if (subdlOn) $('st-subdl-text').textContent = f(T.stSubdlCount, {n: r.subdlDownloads || 0});
     // Always a normal button; it only lights up when there is something to continue.
+    const up = r.upgrade;
+    const upVisible = !!up && up.at > dismissedUpgrade;
+    $('st-upgrade').classList.toggle('hidden', !upVisible);
+    $('st-upgrade').classList.toggle('flex', upVisible);
+    if (upVisible) {
+      const where = up.season !== undefined && up.episode !== undefined ? (UI === 'he' ? ' עונה ' + up.season + ' פרק ' + up.episode : ' S' + up.season + 'E' + up.episode) : '';
+      $('st-upgrade-text').textContent = f(T.upgradeText, {name: up.title + where});
+    }
     $('resume-btn').classList.toggle('!border-warm-ac', !!r.resumable);
     $('resume-btn').classList.toggle('!text-warm-ac', !!r.resumable);
     renderQueue(r.queue || []);

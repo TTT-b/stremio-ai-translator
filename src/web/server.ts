@@ -68,6 +68,7 @@ export interface ServerDeps {
   onConfigChange?: (config: Config) => void;
   /** Ask mode: a new request is waiting for the user's OK (the desktop app shows a notification). */
   onPending?: JobManagerDeps['onPending'];
+  onUpgraded?: JobManagerDeps['onUpgraded'];
   /** Where cache and job files live. Defaults to ./data */
   dataDir?: string;
   /** Reads a subtitle track from the playing video file. Injectable for tests. */
@@ -209,6 +210,7 @@ export function createApp(deps: ServerDeps): express.Express {
     ...(deps.ffmpegFor ? { ffmpegFor: deps.ffmpegFor } : {}),
     ...(deps.loadEmbedded ? { loadEmbedded: deps.loadEmbedded } : {}),
     ...(deps.onPending ? { onPending: deps.onPending } : {}),
+    ...(deps.onUpgraded ? { onUpgraded: deps.onUpgraded } : {}),
     ...(deps.limits ? { limits: deps.limits } : {}),
     ...(deps.cancelCooldownMs !== undefined ? { cancelCooldownMs: deps.cancelCooldownMs } : {}),
     ...(deps.stallAfterMs !== undefined ? { stallAfterMs: deps.stallAfterMs } : {}),

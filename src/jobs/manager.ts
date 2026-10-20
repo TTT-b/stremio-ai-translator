@@ -146,6 +146,8 @@ export interface JobManagerDeps {
   library?: Library;
   /** Ask mode: called once when a new request is waiting for the user's OK (for a notification). */
   onPending?: (item: { title: string; season?: number; episode?: number }) => void;
+  /** Called when a better (exact-timing) subtitle replaced the shown one in the background. */
+  onUpgraded?: (item: { title: string; season?: number; episode?: number }) => void;
   /** Developer test mode: made-up subtitles are not listed in the library. */
   testMode?: () => boolean;
   /** Reads a subtitle track from the playing video file. Injectable for tests. */
@@ -178,7 +180,10 @@ interface ChosenSource {
  */
 const SOURCE_LOGIC_VERSION = 11;
 
-/** A translation with no news for this long counts as stuck (12 s). */
+/** How long the "better subtitle is ready" notice stays on the main screen. */
+const UPGRADE_NOTICE_MS = 30 * 60_000;
+
+/** A translation with no news for this long counts as stuck. */
 const STALL_AFTER_MS = 12_000;
 
 /** How long the job waits for the subtitle inside the video before it goes on without it. */
@@ -255,6 +260,13 @@ export class JobManager {
   private readonly skipped = new Map<string, Set<'local' | 'sync'>>();
   private quotaCheckedAt = 0;
   private quotaChecking = false;
+  /** The latest background upgrade, for the notice on the main screen. */
+  private lastUpgrade: {
+    title: string;
+    season?: number;
+    episode?: number;
+    at: number;
+  } | null = null;
   /** Translations in progress, by translation cache key, so identical requests share one. */
   private readonly translating = new Map<
     string,
@@ -556,6 +568,8 @@ export class JobManager {
     quota: { limit: number; left: number } | null;
     /** Downloads from SubDL this session. */
     subdlDownloads: number;
+    /** A better subtitle replaced the shown one in the last half hour (Stremio needs a new selection). */
+    upgrade: { title: string; season?: number; episode?: number; at: number } | null;
     /** The Continue button has something to do: a stuck translation, or a cancelled/failed request. */
     resumable: boolean;
     queue: QueueItem[];
@@ -598,6 +612,10 @@ export class JobManager {
       lastError: state === 'error' ? this.lastErrorCode : null,
       quota: this.quota ? { ...this.quota } : null,
       resumable: this.resumable(),
+      upgrade:
+        this.lastUpgrade && this.now() - this.lastUpgrade.at < UPGRADE_NOTICE_MS
+          ? { ...this.lastUpgrade }
+          : null,
       subdlDownloads: this.subdlDownloads,
       queue: this.queue(),
     };
@@ -849,6 +867,14 @@ export class JobManager {
         { stage: 'ASSEMBLY', upgrade: 'done', via: result.via, cues: result.cues },
         'subtitle upgraded to the exact timing',
       );
+      const v = job.spec.video;
+      const notice = {
+        title: await this.titleFor(job),
+        ...(v.season !== undefined ? { season: v.season } : {}),
+        ...(v.episode !== undefined ? { episode: v.episode } : {}),
+      };
+      this.lastUpgrade = { ...notice, at: this.now() };
+      this.deps.onUpgraded?.(notice);
     } catch (err) {
       log.warn(
         { stage: 'SOURCE', upgrade: 'failed', errorCode: isAppError(err) ? err.code : 'UNKNOWN' },

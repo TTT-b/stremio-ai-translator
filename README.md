@@ -293,7 +293,7 @@ translation starts, that one is used instead. The **Skip** button ends the wait 
 If the video's own subtitle arrives only after the job has finished (the video was still loading), it
 is translated in the background and replaces the subtitle Stremio shows, with no "translating" message
 in between. Look for `subtitle upgraded to the exact timing` in the log. Reselect the subtitle in
-Stremio once to load the better one.
+Stremio once to load the better one. The main screen shows a notice (and the desktop app a notification) when that happens.
 
 ### Timing from the sound of the video (automatic, no download)
 

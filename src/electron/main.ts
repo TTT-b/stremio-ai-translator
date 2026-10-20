@@ -113,6 +113,24 @@ function notifyPending(item: { title: string; season?: number; episode?: number 
   note.show();
 }
 
+/** A better subtitle (exact timing) replaced the shown one: the user has to pick it again in Stremio. */
+function notifyUpgraded(item: { title: string; season?: number; episode?: number }): void {
+  if (!Notification.isSupported()) return;
+  const where =
+    item.season !== undefined && item.episode !== undefined
+      ? uiLang === 'he'
+        ? ` עונה ${item.season} פרק ${item.episode}`
+        : ` S${item.season}E${item.episode}`
+      : '';
+  const body =
+    uiLang === 'he'
+      ? `כתובית מדויקת מוכנה: ${item.title}${where}. בחר אותה שוב ב-Stremio.`
+      : `An exact subtitle is ready: ${item.title}${where}. Select it again in Stremio.`;
+  const note = new Notification({ title: TITLE, body, icon });
+  note.on('click', showWindow);
+  note.show();
+}
+
 function updateTrayMenu(): void {
   const labels = TRAY_LABELS[uiLang];
   tray?.setContextMenu(
@@ -246,7 +264,10 @@ if (!app.requestSingleInstanceLock()) {
         const upgrading = ['.env', 'settings.json'].some((f) => existsSync(join(userData, f)));
         writeLastSeen(upgrading ? '0.0.0' : app.getVersion());
       }
-      running = await startAddon(app.getPath('userData'), { onPending: notifyPending });
+      running = await startAddon(app.getPath('userData'), {
+        onPending: notifyPending,
+        onUpgraded: notifyUpgraded,
+      });
       createWindow(running.port);
       createTray();
       setupUpdater(running.logger);

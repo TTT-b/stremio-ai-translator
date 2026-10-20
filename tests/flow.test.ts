@@ -50,6 +50,7 @@ async function start(opts: {
   loadEmbedded?: NonNullable<Parameters<typeof createApp>[0]['loadEmbedded']>;
   refreshGuessAfterMs?: number;
   stallAfterMs?: number;
+  onUpgraded?: NonNullable<Parameters<typeof createApp>[0]['onUpgraded']>;
   /** Replaces the fake AI: gets the request and the call number. */
   translate?: ConstructorParameters<typeof FakeProvider>[0];
   cancelCooldownMs?: number;
@@ -132,6 +133,7 @@ async function start(opts: {
     ...(opts.onPending ? { onPending: opts.onPending } : {}),
     ...(opts.logDir ? { logDir: opts.logDir } : {}),
     ...(opts.cancelCooldownMs !== undefined ? { cancelCooldownMs: opts.cancelCooldownMs } : {}),
+    ...(opts.onUpgraded ? { onUpgraded: opts.onUpgraded } : {}),
     ...(opts.stallAfterMs !== undefined ? { stallAfterMs: opts.stallAfterMs } : {}),
     ...(opts.refreshGuessAfterMs !== undefined
       ? { refreshGuessAfterMs: opts.refreshGuessAfterMs }
@@ -268,9 +270,11 @@ describe('an exact subtitle that arrives after the job finished', () => {
   it('is translated in the background and replaces the shown subtitle, with no "translating" text in between', async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
+    const upgraded: { season?: number; episode?: number }[] = [];
     current = await start({
       subWaitMs: 50,
       limits: { embeddedSoftMs: 30 },
+      onUpgraded: (item) => upgraded.push(item),
       loadEmbedded: (async () => {
         await gate;
         return { raw: own, language: 'en', source: 'track', cues: 25 };
@@ -302,6 +306,14 @@ describe('an exact subtitle that arrives after the job finished', () => {
       return lib.items[0]?.timing === 'exact';
     });
     expect(lib.items[0]?.timing).toBe('exact');
+    // The main screen is told, once, so the user knows to select the subtitle again.
+    await until(async () => upgraded.length > 0);
+    expect(upgraded).toHaveLength(1);
+    expect(upgraded[0]).toMatchObject({ season: 1, episode: 1 });
+    const status = (await (await current.get('/api/status')).json()) as {
+      upgrade: { season?: number; episode?: number; at: number } | null;
+    };
+    expect(status.upgrade).toMatchObject({ season: 1, episode: 1 });
   });
 
   it('changes nothing when the video never gives its own subtitle', async () => {
@@ -319,6 +331,8 @@ describe('an exact subtitle that arrives after the job finished', () => {
     });
     await new Promise((r) => setTimeout(r, 150));
     expect(await (await current.get(path)).text()).toBe(text);
+    const status = (await (await current.get('/api/status')).json()) as { upgrade: unknown };
+    expect(status.upgrade).toBeNull();
   });
 });
 

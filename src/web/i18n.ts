@@ -416,6 +416,11 @@ const S = {
     he: 'חסר מפתח SubDL. הוסף אותו בהגדרות.',
     en: 'The SubDL key is missing. Add it in Settings.',
   },
+  upgradeTitle: { he: 'כתובית מדויקת מוכנה', en: 'An exact subtitle is ready' },
+  upgradeText: {
+    he: '{name}. בחר שוב את הכתובית ב-Stremio כדי לטעון את הגרסה המדויקת.',
+    en: '{name}. Select the subtitle again in Stremio to load the exact version.',
+  },
   openStremio: { he: 'פתח את Stremio', en: 'Open Stremio' },
   openStremioOk: { he: 'פותח את Stremio', en: 'Opening Stremio' },
   openStremioMissing: {
