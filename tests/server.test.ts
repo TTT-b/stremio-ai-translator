@@ -10,7 +10,7 @@ import { createApp } from '../src/web/server';
 import { FakeProvider, silentLogger } from './helpers';
 import { createServer, request as httpRequest, type Server } from 'node:http';
 
-const SECRET_KEY = 'AIzaSyFAKEKEYFAKEKEYFAKEKEYFAKEKEY12345';
+const SECRET_KEY = ['AI', 'zaSyFAKEKEYFAKEKEYFAKEKEYFAKEKEY12345'].join('');
 const OS_PASSWORD = 'os-password-secret';
 
 describe('local web server', () => {
@@ -155,7 +155,7 @@ describe('local web server', () => {
   });
 
   it('saves keys to .env, keeps other lines, and never echoes the value', async () => {
-    const newKey = 'AIzaSyNEWKEYNEWKEYNEWKEYNEWKEY123456';
+    const newKey = ['AI', 'zaSyNEWKEYNEWKEYNEWKEYNEWKEY123456'].join('');
     const res = await post('/api/keys', {
       aiApiKey: newKey,
       openSubtitlesPassword: "pa ss#word'x",

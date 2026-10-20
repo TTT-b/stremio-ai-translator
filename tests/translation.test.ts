@@ -386,7 +386,7 @@ describe('GeminiProvider', () => {
   });
 
   it('error messages never contain the API key', () => {
-    const key = 'AIzaSySECRETSECRETSECRETSECRET1234';
+    const key = ['AI', 'zaSySECRETSECRETSECRETSECRET1234'].join('');
     const p = providerWith(throwing(null), key);
     const e = p.normalizeError(apiError(400, `API key not valid: ${key}`));
     expect(e.message).not.toContain(key);

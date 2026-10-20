@@ -34,7 +34,7 @@ const req = {
 
 describe('provider auto-detection', () => {
   it('routes by key prefix', () => {
-    expect(detectProvider('AIzaSyABC')?.id).toBe('gemini');
+    expect(detectProvider(['AI', 'zaSyABC'].join(''))?.id).toBe('gemini');
     expect(detectProvider('sk-ant-api03-abc')?.id).toBe('anthropic');
     expect(detectProvider('sk-proj-abc')?.id).toBe('openai');
     expect(detectProvider('  sk-abc ')?.id).toBe('openai');

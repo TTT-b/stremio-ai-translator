@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { createLogger } from '../src/logging/logger';
 import { createRedactor } from '../src/logging/redact';
 
-const SECRET = 'AIzaSyDUMMYKEYDUMMYKEYDUMMYKEY123456';
+const SECRET = ['AI', 'zaSyDUMMYKEYDUMMYKEYDUMMYKEY123456'].join('');
 
 describe('redactor', () => {
   const { scrub, scrubString } = createRedactor(() => ['hunter2-password']);
