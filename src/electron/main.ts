@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import type { Logger } from 'pino';
 import { isAppError } from '../errors';
 import { startAddon, type RunningAddon } from '../startup';
+import { zoomFor } from './zoom';
 import { ICON_PNG_BASE64 } from './iconData';
 import { isStremioInstallUrl } from './links';
 import { pickWhatsNew } from './whatsNew';
@@ -79,6 +80,22 @@ function createWindow(port: number): void {
       event.preventDefault();
       win?.hide();
     }
+  });
+  // A bigger window gets a bigger picture (text, buttons, cards), so any monitor size looks right.
+  let appliedZoom = 1;
+  const fitZoom = () => {
+    if (!win || win.isDestroyed()) return;
+    const [width, height] = win.getContentSize();
+    const zoom = zoomFor(width ?? 0, height ?? 0);
+    if (zoom !== appliedZoom) {
+      appliedZoom = zoom;
+      win.webContents.setZoomFactor(zoom);
+    }
+  };
+  win.on('resize', fitZoom);
+  win.webContents.on('did-finish-load', () => {
+    appliedZoom = 0; // the page was reloaded: set it again
+    fitZoom();
   });
   const sendMaximized = () => win?.webContents.send('window:maximized', win.isMaximized());
   win.on('maximize', sendMaximized);
