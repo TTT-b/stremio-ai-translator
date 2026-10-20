@@ -193,8 +193,6 @@ export function renderStatusPage(d: StatusPageData): string {
         `<option value="${code}"${code === lang ? ' selected' : ''}>${tt(code === 'he' ? 'langHe' : 'langEn')}</option>`,
     )
     .join('');
-  const targetLang = d.languages.find((l) => l.code === d.targetLanguage);
-  const langName = languageName(lang, d.targetLanguage, targetLang?.name ?? d.targetLanguage);
   const keysDone = d.aiConfigured && d.openSubtitlesKeyConfigured && d.openSubtitlesLoginConfigured;
   // First visit (or a key is missing): the wizard opens at the first incomplete step.
   const startStep = keysDone ? 0 : d.aiConfigured ? 2 : 1;
@@ -308,8 +306,8 @@ ${checks('r-', 'sample', 'sample-out')}
 <div class="grid gap-3.5">
 <div class="${tile} flex items-end justify-between gap-3"><div><div class="text-xs text-warm-mu">${tt('stLines')}</div><div id="st-lines" class="mt-1 text-[26px] font-extrabold">0</div></div><div class="text-end"><div class="text-xs text-warm-mu">${tt('stSize')}</div><div id="st-size" dir="ltr" class="mt-1 text-[26px] font-extrabold">0 KB</div></div></div>
 <div id="st-quota" class="${tile} hidden"><div class="flex items-baseline justify-between gap-3"><div class="flex items-center gap-2 text-xs text-warm-mu"><span>${tt('stQuota')}</span>${srcBadge('opensubtitles')}</div><div id="st-quota-text" class="text-sm font-bold" dir="ltr"></div></div><div class="mt-2 h-2 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('stQuota')}" aria-valuemin="0" aria-valuemax="100"><div id="st-quota-bar" class="h-full w-0 rounded-full bg-warm-ok transition-[width] duration-500"></div></div><div id="st-quota-hint" class="mt-1.5 hidden text-xs text-warm-mu"></div></div>
-<div id="st-subdl" class="${tile} js-subdl-row ${d.subdlKeyConfigured ? '' : 'hidden'}"><div class="flex items-baseline justify-between gap-3"><div class="flex items-center gap-2 text-xs text-warm-mu"><span>${tt('stSubdl')}</span>${srcBadge('subdl')}</div><div id="st-subdl-text" class="text-sm font-bold" dir="ltr">0</div></div><div class="mt-1.5 text-xs text-warm-mu">${tt('stSubdlHint')}</div></div>
-<div class="${tile} flex items-center justify-between gap-3"><div><div class="text-xs text-warm-mu">${tt('stTarget')}</div><div class="mt-1 text-base font-bold">${escapeHtml(langName)}</div></div><div class="text-end"><div class="text-xs text-warm-mu">${tt('stDual')}</div><div class="mt-1 text-base font-bold">${d.dualSubtitles ? tt('on') : tt('off')}</div></div></div>
+<div id="st-subdl" class="${tile} js-subdl-row ${d.subdlKeyConfigured ? '' : 'hidden'}"><div class="flex items-baseline justify-between gap-3"><div class="flex items-center gap-2 text-xs text-warm-mu"><span>${tt('stSubdl')}</span>${srcBadge('subdl')}</div><div id="st-subdl-text" class="text-sm font-bold" dir="ltr">0</div></div><div class="mt-1.5 text-xs text-warm-mu">${tt('stSubdlHint')}</div><div class="mt-2">${keyLink('https://subdl.com/panel/api', t(lang, 'stSubdlPanel'))}</div></div>
+<div class="${tile} flex items-center justify-between gap-3"><div class="min-w-0 flex-1"><label class="text-xs text-warm-mu" for="q-lang">${tt('stTarget')}</label><select class="${field} mt-1" id="q-lang">${langOptions}</select></div><label class="flex shrink-0 cursor-pointer flex-col items-center gap-1.5"><span class="text-xs text-warm-mu">${tt('stDual')}</span><input type="checkbox" id="q-dual" class="peer sr-only"${d.dualSubtitles ? ' checked' : ''}><span class="relative h-[23px] w-10 shrink-0 rounded-full bg-warm-ln transition peer-checked:bg-warm-ac peer-focus-visible:ring-2 peer-focus-visible:ring-warm-ac/60 after:absolute after:start-[3px] after:top-[3px] after:h-[17px] after:w-[17px] after:rounded-full after:bg-white after:transition rtl:peer-checked:after:-translate-x-[17px] ltr:peer-checked:after:translate-x-[17px]"></span></label></div>
 </div>
 <section class="${tile} flex flex-col gap-2.5"><div><div class="text-sm font-bold text-warm-tx">${tt('checksTitle')}</div><div class="mt-0.5 text-xs text-warm-mu">${tt('checksSub')}</div></div>
 ${checks('dr-', 'dsample', 'dsample-out')}
@@ -547,6 +545,16 @@ const setDrawer = (open) => { drawer.classList.toggle('hidden', !open); drawer.c
 $('open-settings').addEventListener('click', () => setDrawer(true));
 $('close-settings').addEventListener('click', () => setDrawer(false));
 drawer.addEventListener('click', (e) => { if (e.target === drawer) setDrawer(false); });
+const quickSave = async () => {
+  const lang = $('q-lang').value, dual = $('q-dual').checked;
+  try {
+    const r = await saveSettings(lang, dual);
+    toast(r.ok, r.message);
+    if (r.ok) { $('d-lang').value = lang; $('d-dual').checked = dual; }
+  } catch { toast(false, FAILED); }
+};
+$('q-lang').addEventListener('change', quickSave);
+$('q-dual').addEventListener('change', quickSave);
 $('rerun').addEventListener('click', () => { setDrawer(false); fromDash = true; go(1); setView('wizard'); });
 $('save').addEventListener('click', async () => {
   const saveBtn = $('save');

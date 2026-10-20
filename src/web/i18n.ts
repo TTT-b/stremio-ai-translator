@@ -398,10 +398,11 @@ const S = {
   srcInUse: { he: 'בשימוש', en: 'In use' },
   srcBackup: { he: 'גיבוי', en: 'Backup' },
   stSubdl: { he: 'הורדות כתוביות מ-SubDL', en: 'SubDL downloads' },
-  stSubdlCount: { he: '{n} בהרצה הזו', en: '{n} this session' },
+  stSubdlCount: { he: '{n} בסשן הנוכחי', en: '{n} this session' },
+  stSubdlPanel: { he: 'בדוק את המכסה בלוח SubDL', en: 'Check your quota in the SubDL panel' },
   stSubdlHint: {
-    he: 'SubDL לא מדווח על מכסה יומית, ולכן מוצג רק מספר ההורדות מאז שהאפליקציה נפתחה.',
-    en: 'SubDL does not report a daily allowance, so only the downloads since the app was opened are shown.',
+    he: 'התוכנה לא מקבלת מ-SubDL נתון על מכסה, ולכן מוצג רק מספר ההורדות בסשן הנוכחי.',
+    en: 'The app does not get a quota figure from SubDL, so only the downloads in this session are shown.',
   },
   srcHint: {
     he: 'המקור השני משמש רק כשאין כתובית במקור הראשון. SubDL דורש מפתח SubDL (בחשבונות ומפתחות), בלי מפתח משתמשים ב-OpenSubtitles. ב-SubDL התזמון פחות מדויק, ואין הורדות יומיות שנספרות מול OpenSubtitles.',
