@@ -8,6 +8,9 @@ validated, cached and served to the player.
 > **Version 1 is a local, single-user app.** It runs on your own computer at `127.0.0.1` and is
 > designed for Stremio desktop.
 
+> Not affiliated with Stremio. License, third-party code and the Windows "blue window" warning:
+> see [LEGAL.md](LEGAL.md).
+
 ## Key features
 
 - **Real-time translation** - subtitles are translated on demand while you watch; later plays are
