@@ -373,7 +373,6 @@ const S = {
   newsVersion: { he: 'גרסה {v}', en: 'Version {v}' },
   newsNew: { he: 'חדש', en: 'New' },
   newsLink: { he: 'פתח', en: 'Open' },
-  newsEmptyMsgs: { he: 'אין הודעות כרגע.', en: 'No messages right now.' },
   newsOffline: {
     he: 'אין חיבור לשרת ההודעות. מוצגות הודעות שנשמרו.',
     en: 'Could not reach the message server. Showing saved messages.',

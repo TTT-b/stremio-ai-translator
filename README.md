@@ -163,7 +163,7 @@ the English meaning. Every release adds its What's new notes in both languages
 - **News bell** (top of the wizard and the dashboard): messages from the author to everyone who has
   the app, plus the release notes of every version. A dot with a number marks what is new; opening
   the bell marks it as read, and everything stays listed. The release notes are always in your
-  interface language.
+  interface language. When there are no messages from the author, only the release notes are shown.
 
 ### Posting a message to every user (for the author)
 
