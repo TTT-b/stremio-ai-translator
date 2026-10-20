@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { FileCache } from '../cache/fileCache';
 import { Library } from '../jobs/library';
@@ -14,7 +15,6 @@ import {
   placeholderSrt,
   progressMessage,
 } from '../stremio/placeholder';
-import { SyncService } from '../sync/service';
 import { fitSubtitleToVideo } from '../sync/videoFit';
 import { openStremio } from '../stremio/launcher';
 import { pickSample, readableLines } from './sample';
@@ -75,8 +75,6 @@ export interface ServerDeps {
   /** Test hooks for precise sync: where the video is on Stremio's server, and which ffmpeg. */
   findStream?: JobManagerDeps['findStream'];
   ffmpegFor?: JobManagerDeps['ffmpegFor'];
-  /** The speech tool for precise sync. Tests pass one with fake downloads. */
-  sync?: SyncService;
   speechFit?: JobManagerDeps['speechFit'];
   /** Where the author's news.json is downloaded from. Tests point it elsewhere. */
   newsUrl?: string;
@@ -186,14 +184,14 @@ export function createApp(deps: ServerDeps): express.Express {
 
   const cache = new FileCache(join(dataDir, 'cache'), envConfig.cacheTtlDays * 86_400_000, logger);
   const library = new Library(join(dataDir, 'library.json'));
-  const sync =
-    deps.sync ??
-    new SyncService({
-      dataDir,
-      logger,
-      model: envConfig.syncModel,
-      ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
-    });
+  // The old speech-sync tool (whisper) is gone: free the disk it used.
+  for (const old of ['tools/whisper', 'sync-cache']) {
+    try {
+      rmSync(join(dataDir, old), { recursive: true, force: true });
+    } catch (err) {
+      logger.warn({ stage: 'CONFIG', error: String(err) }, 'could not remove the old sync tool');
+    }
+  }
   const news = new NewsFeed({
     url: deps.newsUrl ?? NEWS_URL,
     cacheFile: join(dataDir, 'news-cache.json'),
@@ -206,7 +204,6 @@ export function createApp(deps: ServerDeps): express.Express {
     logger,
     cache,
     library,
-    sync,
     speechFit: deps.speechFit ?? fitSubtitleToVideo,
     ...(deps.findStream ? { findStream: deps.findStream } : {}),
     ...(deps.ffmpegFor ? { ffmpegFor: deps.ffmpegFor } : {}),
@@ -433,34 +430,6 @@ export function createApp(deps: ServerDeps): express.Express {
     }
   });
 
-  // Precise sync by speech: the free speech tool is downloaded once, only when the user asks for it.
-  app.get('/api/sync', (_req, res) => {
-    res.json({ ok: true, ...sync.status(), enabled: current().preciseSync });
-  });
-
-  app.post('/api/sync/install', (_req, res) => {
-    if (!sync.status().supported) {
-      res.status(400).json({ ok: false, message: 'Not supported on this computer.' });
-      return;
-    }
-    // Starts in the background; the page polls /api/sync. When it is done, precise sync is switched on.
-    void sync
-      .install()
-      .then(() =>
-        writeSettings({ ...readSettings(deps.settingsPath), preciseSync: true }, deps.settingsPath),
-      )
-      .catch(() => undefined);
-    res.json({ ok: true, ...sync.status(), enabled: current().preciseSync });
-  });
-
-  app.post('/api/sync/remove', (_req, res) => {
-    sync.remove();
-    writeSettings({ ...readSettings(deps.settingsPath), preciseSync: false }, deps.settingsPath);
-    logger.info({ stage: 'CONFIG', sync: 'removed' }, 'sync tool removed');
-    res.json({ ok: true, ...sync.status(), enabled: false });
-  });
-
-  // The bell: the author's messages plus the release notes of every version (text only).
   app.get('/api/news', async (_req, res) => {
     const { items, online } = await news.get();
     const releases = Object.entries(RELEASE_NOTES)
@@ -496,7 +465,6 @@ export function createApp(deps: ServerDeps): express.Express {
       `target language: ${c.targetLanguage}, dual: ${yes(c.dualSubtitles)}, embedded subtitles: ${yes(c.embeddedSubtitles)}`,
       `Stremio server (${c.stremioServerUrl}): ${stremio}`,
       `ffmpeg found: ${yes(locateTools(c.ffmpegPath) !== undefined)}`,
-      `precise sync: ${sync.status().state}, on: ${yes(c.preciseSync)}`,
       // Counters only: no titles of what the user watches (the queue is reduced to its length).
       `jobs: ${JSON.stringify({ ...jobs.stats(), queue: jobs.stats().queue.length })}`,
       '',

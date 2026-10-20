@@ -8,13 +8,11 @@ import type { Logger } from '../logging/logger';
 import { rankSameLanguage, selectSubtitle } from '../sources/select';
 import {
   findStream,
-  findStreamWaiting,
   loadEmbeddedSubtitle,
   locateTools,
+  type LocalStream,
 } from '../sources/embedded';
-import { alignCues, type SpokenWord } from '../sync/align';
 import { applyFit, type TimingFit } from '../sync/fit';
-import type { LocalStream } from '../sync/service';
 import { cinemetaTitle, kitsuTitles, makeTitleResolver, parseFilename } from '../sources/titles';
 import type { Library } from './library';
 import type { SourceSubtitleProvider, SubtitleCandidate, VideoRef } from '../sources/types';
@@ -96,16 +94,6 @@ export interface QueueItem {
   skippable?: 'local' | 'sync';
 }
 
-/** The speech tool, as the manager uses it (see sync/service.ts). */
-export interface SyncPort {
-  ready(): boolean;
-  readonly leadSec: number;
-  words(
-    stream: LocalStream,
-    o: { ffmpeg: string; onProgress?: (percent: number) => void },
-  ): Promise<SpokenWord[] | undefined>;
-}
-
 export interface JobManagerDeps {
   /** Effective config (env + settings.json), read fresh for every job. */
   config: () => Config;
@@ -137,8 +125,6 @@ export interface JobManagerDeps {
     jobCapMs?: number;
     speechCapMs?: number;
   };
-  /** Precise sync by speech (optional): listens to the video and puts the subtitle on the words. */
-  sync?: SyncPort;
   /** Test hooks: where the playing video is on Stremio's server, and which ffmpeg to use. */
   findStream?: (
     serverUrl: string,
@@ -188,7 +174,7 @@ interface ChosenSource {
  * 7: lines placed on the speech stay on screen at least one second.
  * 8: stray letters of any foreign alphabet are removed, also from subtitles made before.
  */
-const SOURCE_LOGIC_VERSION = 10;
+const SOURCE_LOGIC_VERSION = 11;
 
 /** A translation with no news for this long counts as stuck (12 s). */
 const STALL_AFTER_MS = 12_000;
@@ -825,12 +811,10 @@ export class JobManager {
 
     // 1. Whole-job cache: replay costs no network at all.
     const dual = cfg.dualSubtitles;
-    const syncOn = cfg.preciseSync && !!this.deps.sync?.ready();
     const jobKey = cacheKey({
       job: job.id,
       rtl,
       ...(dual ? { dual } : {}),
-      ...(syncOn ? { sync: true } : {}),
       ...(cfg.cleanSubtitles ? { clean: true } : {}),
       sourceLogic: SOURCE_LOGIC_VERSION,
       kind: 'job',
@@ -842,7 +826,6 @@ export class JobManager {
       job: job.id,
       rtl,
       ...(dual ? { dual } : {}),
-      ...(syncOn ? { sync: true } : {}),
       ...(cfg.cleanSubtitles ? { clean: true } : {}),
       sourceLogic: SOURCE_LOGIC_VERSION,
       kind: 'job-fallback',
@@ -916,54 +899,15 @@ export class JobManager {
     }
     let placedOnSpeech = false;
     if (!chosen) {
-      // Precise sync: listen to the video once (a few minutes, then remembered) and use the words.
-      if (syncOn && job.spec.filename) job.stage = 'sync';
-      const words =
-        syncOn && job.spec.filename
-          ? await this.skippable(job, 'sync', () => this.listen(job, cfg, log), undefined)
-          : undefined;
-      this.stopIfCancelled(job); // the speech tool itself cannot be stopped half way
+      this.stopIfCancelled(job);
       job.stage = 'search';
-      const search = (forceLanguage?: string) =>
-        withCap(
-          this.openSubtitlesSource(job, cfg, lang.code, log, forceLanguage),
-          this.deps.limits?.sourceCapMs ?? 120_000,
-          () => {
-            throw new AppError('SOURCE_DOWNLOAD_FAILED', 'source search timed out');
-          },
-        );
-      chosen = await search(words ? 'en' : undefined);
-      if (words && this.deps.sync) {
-        const aligned =
-          chosen.language === 'en'
-            ? alignCues(parseSubtitle(chosen.raw).cues, words, { leadSec: this.deps.sync.leadSec })
-            : undefined;
-        if (aligned) {
-          placedOnSpeech = true;
-          log.info(
-            {
-              stage: 'SOURCE',
-              sync: 'aligned',
-              matched: Math.round(aligned.matchedRatio * 100),
-              cues: aligned.cues.length,
-            },
-            'subtitle placed on the speech',
-          );
-          chosen = {
-            kind: chosen.kind,
-            language: 'en',
-            raw: serializeSubtitle({ format: 'srt', cues: aligned.cues }),
-            exact: true,
-          };
-        } else if (chosen.language === 'en' && lang.code !== 'en') {
-          // The English text did not match the speech: use what would have been chosen anyway.
-          log.info(
-            { stage: 'SOURCE', sync: 'not-matching' },
-            'subtitle text does not match the speech',
-          );
-          chosen = await search();
-        }
-      }
+      chosen = await withCap(
+        this.openSubtitlesSource(job, cfg, lang.code, log),
+        this.deps.limits?.sourceCapMs ?? 120_000,
+        () => {
+          throw new AppError('SOURCE_DOWNLOAD_FAILED', 'source search timed out');
+        },
+      );
       if (late.value && !chosen.exact) {
         log.info({ stage: 'SOURCE', embedded: 'late' }, 'subtitle inside the video arrived late');
         chosen = late.value;
@@ -1166,39 +1110,6 @@ export class JobManager {
       exact,
       timing,
     };
-  }
-
-  /** Listen to the playing video through Stremio's server; the words with times, or undefined. */
-  private async listen(job: Job, cfg: Config, log: Logger): Promise<SpokenWord[] | undefined> {
-    const sync = this.deps.sync;
-    if (!sync || !job.spec.filename) return undefined;
-    const ffmpeg = this.deps.ffmpegFor
-      ? this.deps.ffmpegFor(cfg)
-      : locateTools(cfg.ffmpegPath)?.ffmpeg;
-    if (!ffmpeg) return undefined;
-    try {
-      const stream = this.deps.findStream
-        ? await this.deps.findStream(cfg.stremioServerUrl, job.spec.filename, this.deps.fetchImpl)
-        : await findStreamWaiting(cfg.stremioServerUrl, job.spec.filename, {
-            fetchImpl: this.deps.fetchImpl,
-          });
-      if (!stream) {
-        log.info({ stage: 'SOURCE', sync: 'not-local' }, 'precise sync skipped');
-        return undefined;
-      }
-      job.stage = 'sync';
-      job.syncPercent = 0;
-      return await sync.words(stream, {
-        ffmpeg,
-        onProgress: (p) => {
-          job.syncPercent = p;
-        },
-      });
-    } catch {
-      return undefined;
-    } finally {
-      delete job.syncPercent;
-    }
   }
 
   /**

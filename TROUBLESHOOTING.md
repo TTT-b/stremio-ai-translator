@@ -66,13 +66,11 @@ subtitle's sync. In order of effect:
    inside the file could not be read because ffmpeg was not found, set `FFMPEG_PATH`). `retry` lines mean
    the video's tracks were found but the video is still loading: the add-on tries again every 10
    seconds for up to 2 minutes before it gives up and uses the next source.
-2. **Settings → Advanced settings → Precise sync by speech** (optional): for a torrent without its own subtitle, the
-   add-on listens to the speech and puts an English subtitle on the words. The main screen shows
-   "Syncing to the speech... N%". Log lines: `speech transcribed` (done), `subtitle placed on the
-speech` (matched), `subtitle text does not match the speech` (the English text is for another
-   cut, or the video is not in English: the normal choice is used), `precise sync skipped` with
-   `not-local` (the video is not on Stremio's local server). If the download fails, check the
-   internet connection and press the button again; **Remove the tool** starts over.
+2. For a torrent without its own subtitle, the add-on listens to a few short pieces of the video's sound and
+   moves the downloaded subtitle onto the speech. The main screen shows "Syncing to the speech... N%".
+   Log lines: `subtitle moved onto the speech` (done), `timing left as it was` (not sure, the subtitle is
+   untouched), `not waiting longer for the video` (the video's own subtitle took more than 15 seconds).
+   It needs the video to be on Stremio's local server and ffmpeg (see above).
 3. Otherwise, when OpenSubtitles reports plenty of downloads left today (30 or more), the add-on
    compares 3 downloaded subtitles and uses the one most agree with (`timing consensus` in the
    log). With a small daily quota it downloads a single file to save the quota.

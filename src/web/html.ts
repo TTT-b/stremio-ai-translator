@@ -389,15 +389,6 @@ ${installCompact}
 <button type="button" id="del-no" class="px-4 py-2 text-sm text-warm-mu transition hover:text-warm-tx focus:outline-none">${tt('cancel')}</button>
 </div></div></div>
 
-<div id="sync-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="sync-modal-title">
-<div class="w-full max-w-sm rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
-<h2 id="sync-modal-title" class="text-lg font-bold text-warm-tx">${tt('syncConfirmTitle')}</h2>
-<p class="mt-1 text-sm text-warm-mu">${tt('syncConfirmBody', { mb: 87 })}</p>
-<div class="mt-5 grid gap-2">
-<button type="button" id="sync-yes" class="${btnPrimary}">${tt('syncDownload', { mb: 87 })}</button>
-<button type="button" id="sync-no" class="px-4 py-2 text-sm text-warm-mu transition hover:text-warm-tx focus:outline-none">${tt('cancel')}</button>
-</div></div></div>
-
 <div id="news-panel" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="news-panel-title">
 <div class="flex max-h-[85vh] w-full max-w-lg flex-col gap-3 rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
 <div class="flex items-center justify-between"><h2 id="news-panel-title" class="text-lg font-bold text-warm-tx">${tt('newsBell')}</h2><button type="button" id="news-panel-close" class="rounded-lg px-2 text-lg text-warm-mu transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac" aria-label="${tt('newsClose')}">&#10005;</button></div>
@@ -439,16 +430,7 @@ ${group(
 )}
 ${group(
   'advanced',
-  `<div class="flex flex-col gap-2.5 rounded-xl border border-warm-ln bg-warm-bg/40 p-3.5">
-<div class="text-sm font-bold text-warm-tx">${tt('syncTitle')}</div>
-<p class="text-xs text-warm-mu">${tt('syncDesc')}</p>
-<p class="text-xs text-warm-mu">${tt('syncPrivacy')}</p>
-<div id="sync-missing" class="hidden"><button type="button" id="sync-install" class="${btn} w-full">${tt('syncDownload', { mb: 87 })}</button></div>
-<div id="sync-installing" class="hidden flex-col gap-1.5"><div class="h-2 overflow-hidden rounded-full bg-warm-bg"><div id="sync-bar" class="h-full w-0 rounded-full bg-warm-ac transition-[width] duration-500"></div></div><span id="sync-pct" class="text-xs text-warm-mu"></span></div>
-<div id="sync-ready" class="hidden flex-col gap-2">${toggle('d-sync', false, 'syncOn')}<button type="button" id="sync-remove" class="self-start rounded-lg px-2.5 py-1.5 text-xs font-medium text-warm-mu transition hover:bg-warm-bg hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${tt('syncRemove')}</button></div>
-<span id="sync-note" class="text-xs font-medium text-rose-300"></span>
-</div>
-<p class="text-xs text-warm-mu">${tt('rtlNote', { state: t(lang, d.rtlFix ? 'on' : 'off') })}</p>
+  `<p class="text-xs text-warm-mu">${tt('rtlNote', { state: t(lang, d.rtlFix ? 'on' : 'off') })}</p>
 <div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><div class="text-sm font-bold text-warm-tx">${tt('testTitle')}</div><p class="text-xs text-warm-mu">${tt('testDesc')}</p>
 ${toggle('d-test', d.testMode === true, 'testOn')}
 <div id="test-run" class="${d.testMode ? 'flex' : 'hidden'} flex-col gap-2"><button type="button" id="test-run-btn" class="${btn}">${tt('testRun')}</button></div></div>`,
@@ -665,7 +647,7 @@ $('save').addEventListener('click', async () => {
   try {
     const body = readKeys('d-');
     if (Object.keys(body).length && !(await saveKeys(body, 'save-result'))) return;
-    const r = await saveSettings($('d-lang').value, $('d-dual').checked, undefined, $('d-emb').checked, syncState === 'ready' ? $('d-sync').checked : undefined, $('d-ask').checked, $('d-clean').checked);
+    const r = await saveSettings($('d-lang').value, $('d-dual').checked, undefined, $('d-emb').checked, undefined, $('d-ask').checked, $('d-clean').checked);
     show('save-result', r.ok, r.message);
     toast(r.ok, r.message);
     if (r.ok) { clearKeys('d-'); setTimeout(() => location.reload(), 1000); }
@@ -953,39 +935,6 @@ $('del-yes').addEventListener('click', async () => {
   } catch { toast(false, T.libDeleteFail); }
   loadLib();
 });
-// Precise sync by speech: download the free tool once, then switch it on or off.
-let syncState = 'missing', syncTimer;
-const showSync = (st) => {
-  syncState = st.state;
-  for (const k of ['missing', 'installing', 'ready']) { const el = $('sync-' + k); el.classList.toggle('hidden', st.state !== k); el.classList.toggle('flex', st.state === k && k !== 'missing'); }
-  $('d-sync').checked = !!st.enabled;
-  $('sync-bar').style.width = (st.percent || 0) + '%';
-  $('sync-pct').textContent = f(T.syncDownloading, {p: st.percent || 0});
-  $('sync-note').textContent = st.state === 'unsupported' ? T.syncUnsupported : st.state === 'error' ? f(T.syncFailed, {e: st.error || ''}) : '';
-  // A failed download can be tried again.
-  if (st.state === 'error') $('sync-missing').classList.remove('hidden');
-};
-const loadSync = async () => {
-  clearTimeout(syncTimer);
-  try {
-    const st = await (await fetch('/api/sync')).json();
-    showSync(st);
-    if (st.state === 'installing') syncTimer = setTimeout(loadSync, 1000);
-  } catch { /* the app may be restarting */ }
-};
-const setSyncModal = (open) => { const m = $('sync-modal'); m.classList.toggle('hidden', !open); m.classList.toggle('flex', open); };
-$('sync-install').addEventListener('click', () => setSyncModal(true));
-$('sync-no').addEventListener('click', () => setSyncModal(false));
-$('sync-modal').addEventListener('click', (e) => { if (e.target === $('sync-modal')) setSyncModal(false); });
-$('sync-yes').addEventListener('click', async () => {
-  setSyncModal(false);
-  try { showSync(await post('/api/sync/install')); loadSync(); } catch { toast(false, FAILED); }
-});
-$('sync-remove').addEventListener('click', async () => {
-  try { showSync(await post('/api/sync/remove')); } catch { toast(false, FAILED); }
-});
-loadSync();
-
 // News and updates (the bell): messages from the author and the release notes of every version.
 const newsPanel = $('news-panel');
 const setNews = (open) => { newsPanel.classList.toggle('hidden', !open); newsPanel.classList.toggle('flex', open); };

@@ -455,29 +455,6 @@ const S = {
   },
   testDisabled: { he: 'מצב בדיקה כבוי', en: 'Test mode is off' },
   testStarted: { he: 'בקשת בדיקה נוספה לתור', en: 'Test request added to the queue' },
-  syncTitle: {
-    he: 'דיוק מרבי: סנכרון לפי הקול (אופציונלי)',
-    en: 'Maximum accuracy: sync by speech (optional)',
-  },
-  syncDesc: {
-    he: 'מקשיב לדיבור בסרטון ומציב כל שורה בדיוק ברגע שהיא נאמרת. עובד לסרטונים באנגלית שמנוגנים דרך Stremio. בפעם הראשונה לכל פרק זה לוקח כמה דקות, ואחר כך נשמר. בלי זה התרגום מהיר יותר (בערך חצי דקה), אבל התזמון משוער.',
-    en: 'Listens to the speech in the video and puts every line exactly when it is said. Works for English-language videos played through Stremio. The first time per episode takes a few minutes, then it is remembered. Without it translation is faster (about half a minute), but the timing is estimated.',
-  },
-  syncPrivacy: {
-    he: 'הכלי חינמי, בקוד פתוח (MIT) ורץ על המחשב שלך. האודיו לא יוצא מהמחשב.',
-    en: 'The tool is free, open source (MIT) and runs on your computer. The audio never leaves it.',
-  },
-  syncDownload: { he: 'הורד והפעל (\u2066{mb} MB\u2069)', en: 'Download and turn on ({mb} MB)' },
-  syncDownloading: { he: 'מוריד... {p}%', en: 'Downloading... {p}%' },
-  syncOn: { he: 'השתמש בסנכרון לפי הקול', en: 'Use precise sync by speech' },
-  syncRemove: { he: 'הסר את הכלי', en: 'Remove the tool' },
-  syncUnsupported: { he: 'זמין רק ב-Windows 64 ביט.', en: 'Only available on 64-bit Windows.' },
-  syncFailed: { he: 'ההורדה נכשלה: {e}', en: 'The download failed: {e}' },
-  syncConfirmTitle: { he: 'להוריד כלי זיהוי דיבור?', en: 'Download a speech tool?' },
-  syncConfirmBody: {
-    he: 'כלי חינמי (כ-\u2066{mb} MB\u2069) יורד פעם אחת מ-GitHub ומ-Hugging Face, נבדק מול סכום ביקורת, ורץ על המחשב שלך.',
-    en: 'A free tool (about {mb} MB) is downloaded once from GitHub and Hugging Face, checked against a checksum, and runs on your computer.',
-  },
   stageSync: { he: 'מסנכרן לפי הקול... {p}%', en: 'Syncing to the speech... {p}%' },
   libDeleteFail: { he: 'המחיקה נכשלה.', en: 'The delete failed.' },
 } as const satisfies Record<string, Pair>;

@@ -72,14 +72,8 @@ const envSchema = z.object({
     .transform((v) => (v ?? '').trim().toLowerCase())
     .pipe(z.enum(['', 'true', 'false', '1', '0']))
     .transform((v) => v !== 'false' && v !== '0'),
-  /** Precise sync: put the subtitle on the spoken words (needs the speech tool; default off). */
-  PRECISE_SYNC: boolish,
   /** auto: translate as soon as Stremio asks. ask: wait for the user's OK in the app first. */
   TRANSLATION_MODE: optionalString.transform((v) => (v.toLowerCase() === 'ask' ? 'ask' : 'auto')),
-  /** Speech model: tiny.en (fast, default) or base.en (a little more accurate, twice as slow). */
-  SYNC_MODEL: optionalString.transform((v) =>
-    v.toLowerCase() === 'base.en' ? 'base.en' : 'tiny.en',
-  ),
   /** Download the author's news.json now and then (default on). */
   NEWS_ENABLED: z
     .string()
@@ -132,10 +126,7 @@ export interface Config {
   cleanSubtitles: boolean;
   stremioServerUrl: string;
   ffmpegPath: string;
-  /** Put the subtitle on the spoken words (see src/sync). */
-  preciseSync: boolean;
   translationMode: 'auto' | 'ask';
-  syncModel: 'tiny.en' | 'base.en';
   /** Show the author's messages (news.json from GitHub). */
   newsEnabled: boolean;
   cacheTtlDays: number;
@@ -190,9 +181,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     stremioServerUrl: e.STREMIO_SERVER_URL,
     ffmpegPath: e.FFMPEG_PATH,
     newsEnabled: e.NEWS_ENABLED,
-    preciseSync: e.PRECISE_SYNC,
     translationMode: e.TRANSLATION_MODE,
-    syncModel: e.SYNC_MODEL,
     cacheTtlDays: e.CACHE_TTL_DAYS,
     subWaitMs: e.SUB_WAIT_MS,
     maxConcurrentJobs: e.MAX_CONCURRENT_JOBS,

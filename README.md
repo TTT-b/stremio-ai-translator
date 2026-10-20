@@ -245,7 +245,7 @@ translation again once 20 seconds have passed (Stremio's own immediate re-ask is
 **Skip a slow step.** While the app looks for a subtitle inside the video, or listens to the video
 (precise sync), the queue line on the main screen shows a **Skip** button. It gives up that step and goes
 on to the next one: the video's own subtitle, then listening, then the download from OpenSubtitles. Which
-steps run at all is set in Settings (embedded subtitles, precise sync).
+steps run at all is set in Settings (embedded subtitles).
 
 **First subtitle source.** Under Translation you can choose which source is asked first:
 OpenSubtitles (the default) or SubDL. The other one is used only when the first has no subtitle. SubDL
@@ -301,39 +301,6 @@ frame-rate stretch such as 25 vs 23.976 fps). If it is not sure, the subtitle st
 was. The **Skip** button on the main screen skips this step. Look for `subtitle moved onto the
 speech` or `timing left as it was` in the log (stage `SOURCE`). On real episodes the result was
 within about 0.1 second.
-
-### Precise sync by speech (optional, for videos without their own subtitle)
-
-For a video that has no subtitle of its own, the timing of a downloaded subtitle can be wrong.
-**Settings → Precise sync by speech** fixes that: the add-on listens to the video's speech with
-[whisper.cpp](https://github.com/ggml-org/whisper.cpp) and its small English model (`tiny.en`),
-matches the words of an English subtitle with the words that are spoken, and moves every cue to the
-moment it is said. The error does not have to be constant: a subtitle that is 2 s early, then 1 s
-late, then right is fixed cue by cue. Text, order and number of cues never change.
-
-- **Free and local.** Both tools are MIT-licensed and run on your computer; the audio never leaves
-  it. They are downloaded once (about 87 MB) after you press **Download and turn on** and confirm,
-  from `github.com` (the tool) and `huggingface.co` (the model). Each download is checked against a
-  SHA-256 checksum fixed in `src/sync/tools.ts` and refused if it differs; only the few files needed
-  are unpacked. Windows 64-bit only. **Remove the tool** in Settings deletes everything again.
-- **Works for weak computers.** The tool picks the right build for the processor (down to very old
-  ones), uses at most 4 threads at below-normal priority, and no graphics card. Measured with 2
-  threads: about 76 s for a 23-minute episode (4 threads: about 45 s); a slow computer takes a few
-  minutes, once. The words are saved, so each video is listened to once.
-- **How accurate.** On a real episode, a real English OpenSubtitles subtitle (median error 1.5 s, only
-  13% of cues within 0.5 s) was measured against the video's own embedded subtitle after syncing:
-  87% of cues within 0.3 s, 98% within 0.5 s, 100% within 1 s. A synthetic test with errors of up to
-  4 s in changing steps gave 85% / 96% / 99%.
-- **When it runs.** Only when the video plays through Stremio's local streaming server (torrents),
-  the video has no subtitle of its own, and the sync switch is on. The English subtitle from
-  OpenSubtitles is then used (translated by the AI, which keeps the exact timing) instead of a
-  Hebrew one, because only English text can be matched with the speech. If the text does not match
-  what is said (a different cut, or a video that is not in English), the normal choice is used. The
-  first subtitle of a video shows "Syncing the subtitle to the speech" for a few minutes; reselect
-  it afterwards.
-- `SYNC_MODEL=base.en` in `.env` uses the larger model (141 MB, twice as slow, a little more
-  accurate). `PRECISE_SYNC=true` switches the feature on from the start. Look for `sync` and
-  `speech transcribed` in the log (stage `SOURCE`).
 
 ### Timing consensus (fewer out-of-sync subtitles)
 

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -14,9 +14,7 @@ import {
   type SubtitleCandidate,
 } from '../src/sources/types';
 import { createApp } from '../src/web/server';
-import { createHash } from 'node:crypto';
-import { SyncService } from '../src/sync/service';
-import { FakeProvider, makeZip, silentLogger } from './helpers';
+import { FakeProvider, silentLogger } from './helpers';
 
 const SRC = readFileSync('tests/fixtures/sample.srt', 'utf8');
 
@@ -59,7 +57,6 @@ async function start(opts: {
   logDir?: string;
   /** The search for a subtitle never answers. */
   searchHangs?: boolean;
-  sync?: NonNullable<Parameters<typeof createApp>[0]['sync']>;
   findStream?: NonNullable<Parameters<typeof createApp>[0]['findStream']>;
   speechFit?: NonNullable<Parameters<typeof createApp>[0]['speechFit']>;
   settings?: object;
@@ -128,15 +125,8 @@ async function start(opts: {
     loadEmbedded: opts.loadEmbedded ?? (async () => undefined),
     // Tests never listen to a real video unless one supplies speechFit.
     speechFit: opts.speechFit ?? (async () => undefined),
-    ...(opts.speechFit && !opts.sync
+    ...(opts.speechFit
       ? { findStream: opts.findStream ?? (async () => undefined), ffmpegFor: () => 'ffmpeg.exe' }
-      : {}),
-    ...(opts.sync
-      ? {
-          sync: opts.sync,
-          findStream: opts.findStream ?? (async () => undefined),
-          ffmpegFor: () => 'ffmpeg.exe',
-        }
       : {}),
     ...(opts.limits ? { limits: opts.limits } : {}),
     ...(opts.onPending ? { onPending: opts.onPending } : {}),
@@ -255,6 +245,18 @@ describe('the Continue button', () => {
       return text.includes('T:');
     });
     expect(text).toContain('T:Hello there.');
+  });
+});
+
+describe('the old speech tool', () => {
+  it('is removed from the data folder at start', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'old-sync-'));
+    mkdirSync(join(dataDir, 'tools', 'whisper'), { recursive: true });
+    writeFileSync(join(dataDir, 'tools', 'whisper', 'model.bin'), 'x');
+    mkdirSync(join(dataDir, 'sync-cache'), { recursive: true });
+    current = await start({ dataDir });
+    expect(existsSync(join(dataDir, 'tools', 'whisper'))).toBe(false);
+    expect(existsSync(join(dataDir, 'sync-cache'))).toBe(false);
   });
 });
 
@@ -991,278 +993,6 @@ describe('timing from the sound of the video', () => {
     });
     await served('');
     expect(asked).toBe(0);
-  });
-});
-
-describe('precise sync by speech', () => {
-  const FILE_PATH = '/subtitles/movie/tt0111161/filename=Movie.2020.1080p.mkv.json';
-  const stream = {
-    infoHash: 'a'.repeat(40),
-    fileIdx: 0,
-    url: 'http://127.0.0.1:11470/x/0',
-    videoPath: 'Movie.2020.1080p.mkv',
-    files: [],
-  };
-
-  /** A made-up film: 60 cues of 6 words, 4 s apart, in the film's true timing. */
-  const WORDS = Array.from(
-    { length: 360 },
-    (_, i) =>
-      `w${String.fromCharCode(97 + (i % 26))}${String.fromCharCode(97 + (Math.floor(i / 26) % 26))}${i % 7}x`,
-  );
-  const TRUE_START = (c: number) => 10 + c * 4; // seconds
-  const srtAt = (shiftSec: number) =>
-    Array.from({ length: 60 }, (_, c) => {
-      const t = (n: number) => {
-        const ms = Math.round((n + shiftSec) * 1000);
-        const p = (v: number, w = 2) => String(v).padStart(w, '0');
-        return `${p(Math.floor(ms / 3_600_000))}:${p(Math.floor(ms / 60_000) % 60)}:${p(Math.floor(ms / 1000) % 60)},${p(ms % 1000, 3)}`;
-      };
-      return `${c + 1}\n${t(TRUE_START(c))} --> ${t(TRUE_START(c) + 3)}\n${WORDS.slice(c * 6, c * 6 + 6).join(' ')}\n`;
-    }).join('\n');
-  const speech = (words: string[]) => ({
-    transcription: [
-      {
-        tokens: words.map((w, i) => ({
-          text: ` ${w}`,
-          offsets: {
-            from: Math.round((TRUE_START(Math.floor(i / 6)) + (i % 6) * 0.4) * 1000),
-            to: Math.round((TRUE_START(Math.floor(i / 6)) + (i % 6) * 0.4) * 1000) + 300,
-          },
-          t_dtw: Math.round((TRUE_START(Math.floor(i / 6)) + 0.35 + (i % 6) * 0.4) * 100),
-        })),
-      },
-    ],
-  });
-
-  const readySync = async (
-    json: unknown,
-    log = { runs: 0, gate: undefined as Promise<void> | undefined },
-  ) => {
-    const zip = makeZip({
-      'bin/Release/whisper-cli.exe': 'cli',
-      'bin/Release/whisper.dll': 'w',
-      'bin/Release/ggml.dll': 'g',
-      'bin/Release/ggml-base.dll': 'gb',
-    });
-    const model = Buffer.from('m'.repeat(32));
-    const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
-    const svc = new SyncService({
-      dataDir: mkdtempSync(join(tmpdir(), 'sync-')),
-      logger: silentLogger(),
-      supported: true,
-      modelSpec: {
-        name: 'tiny.en',
-        file: 'ggml-tiny.en.bin',
-        url: 'https://huggingface.co/m',
-        sha256: sha(model),
-        bytes: model.length,
-        leadSec: 0.35,
-      },
-      zipSpec: { url: 'https://github.com/t.zip', sha256: sha(zip), bytes: zip.length },
-      fetchImpl: (async (u: string | URL | Request) =>
-        new Response(new Uint8Array(String(u).endsWith('.zip') ? zip : model))) as typeof fetch,
-      runner: {
-        extractAudio: async () => undefined,
-        transcribe: async (_c, args, _cwd, onLine) => {
-          log.runs++;
-          onLine('progress = 50%');
-          if (log.gate) await log.gate;
-          writeFileSync(`${args[args.indexOf('-of') + 1]}.json`, JSON.stringify(json));
-        },
-      },
-    });
-    await svc.install();
-    return { svc, log };
-  };
-
-  const onSpeech = (over: object = {}) => ({
-    settings: { preciseSync: true },
-    findStream: async () => stream,
-    ...over,
-  });
-
-  it('puts an English OpenSubtitles subtitle that is 3 s late on the real speech', async () => {
-    const { svc, log } = await readySync(speech(WORDS));
-    current = await start({
-      ...onSpeech(),
-      sync: svc,
-      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
-      content: srtAt(3),
-    });
-    const sub = ((await (await current.get(FILE_PATH)).json()) as SubsResponse).subtitles[0]!;
-    const srt = await (await current.get(new URL(sub.url).pathname)).text();
-    expect(log.runs).toBe(1);
-    // The 20th cue really starts at 10 + 19 * 4 = 86 s; the subtitle said 89 s.
-    expect(srt).toContain('00:01:26,000 --> ');
-    expect(srt).not.toContain('00:01:29,');
-    expect(srt).toContain('HE:');
-    // The library says it was placed on the speech, not that it is exact like the video's own.
-    let lib: { items: { timing?: string }[] } = { items: [] };
-    for (let i = 0; i < 40 && lib.items.length === 0; i++) {
-      await new Promise((r) => setTimeout(r, 25));
-      lib = (await (await current.get('/api/library')).json()) as typeof lib;
-    }
-    expect(lib.items[0]?.timing).toBe('speech');
-  });
-
-  it('also works when subtitles inside the video are switched off', async () => {
-    const { svc, log } = await readySync(speech(WORDS));
-    current = await start({
-      ...onSpeech({ settings: { preciseSync: true, embeddedSubtitles: false } }),
-      sync: svc,
-      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
-      content: srtAt(3),
-    });
-    const sub = ((await (await current.get(FILE_PATH)).json()) as SubsResponse).subtitles[0]!;
-    const srt = await (await current.get(new URL(sub.url).pathname)).text();
-    expect(log.runs).toBe(1);
-    expect(srt).toContain('00:01:26,000 --> ');
-  });
-
-  it('prefers the English subtitle over a Hebrew one, because only English can be placed on the speech', async () => {
-    const { svc } = await readySync(speech(WORDS));
-    current = await start({
-      ...onSpeech(),
-      sync: svc,
-      candidates: [
-        cand({ fileId: 1, language: 'he', downloadCount: 900 }),
-        cand({ fileId: 2, language: 'en', downloadCount: 10 }),
-      ],
-      contentFor: (c) => (c.language === 'he' ? srtAt(5) : srtAt(3)),
-    });
-    const sub = ((await (await current.get(FILE_PATH)).json()) as SubsResponse).subtitles[0]!;
-    const srt = await (await current.get(new URL(sub.url).pathname)).text();
-    expect(srt).toContain('HE:'); // translated from the English one
-    expect(srt).not.toContain('00:01:29,');
-  });
-
-  it('keeps the normal choice when the text is not what is said in the video', async () => {
-    const { svc } = await readySync(speech(WORDS.map((w) => `zz${w}qq`)));
-    current = await start({
-      ...onSpeech(),
-      sync: svc,
-      candidates: [
-        cand({ fileId: 1, language: 'he', downloadCount: 900 }),
-        cand({ fileId: 2, language: 'en', downloadCount: 10 }),
-      ],
-      contentFor: (c) => (c.language === 'he' ? SRC : srtAt(3)),
-    });
-    const sub = ((await (await current.get(FILE_PATH)).json()) as SubsResponse).subtitles[0]!;
-    const srt = await (await current.get(new URL(sub.url).pathname)).text();
-    expect(srt).toContain('Hello there.'); // the Hebrew one as it was, not translated
-    expect(srt).not.toContain('HE:');
-    expect(current.translator.calls).toBe(0);
-  });
-
-  it('does nothing when the setting is off, the tool is missing or the video is not on the local server', async () => {
-    const { svc, log } = await readySync(speech(WORDS));
-    for (const over of [
-      { settings: { preciseSync: false } },
-      { findStream: async () => undefined },
-    ]) {
-      current = await start({
-        ...onSpeech(over),
-        sync: svc,
-        candidates: [cand({ fileId: 7, language: 'en' })],
-        content: srtAt(3),
-      });
-      const sub = ((await (await current.get(FILE_PATH)).json()) as SubsResponse).subtitles[0]!;
-      const srt = await (await current.get(new URL(sub.url).pathname)).text();
-      expect(srt).toContain('00:01:29,'); // not moved
-      await current.close();
-    }
-    expect(log.runs).toBe(0);
-  });
-
-  it('says it is listening to the video, with progress, while the first subtitle is made', async () => {
-    let open: () => void = () => undefined;
-    const gate = new Promise<void>((r) => {
-      open = r;
-    });
-    const { svc } = await readySync(speech(WORDS), { runs: 0, gate });
-    current = await start({
-      ...onSpeech(),
-      sync: svc,
-      subWaitMs: 100,
-      candidates: [cand({ fileId: 7, language: 'en' })],
-      content: srtAt(3),
-    });
-    const sub = ((await (await current.get(FILE_PATH)).json()) as SubsResponse).subtitles[0]!;
-    const waiting = await (await current.get(new URL(sub.url).pathname)).text();
-    expect(waiting).toContain('מסנכרן את התזמון לדיבור');
-    const status = (await (await current.get('/api/status')).json()) as {
-      stage: string;
-      syncPercent: number;
-    };
-    expect(status).toMatchObject({ stage: 'sync', syncPercent: 50 });
-    open();
-    await (await current.get(new URL(sub.url).pathname)).text();
-  });
-
-  it('offers the download, installs on request and switches itself on', async () => {
-    const zip = makeZip({
-      'bin/Release/whisper-cli.exe': 'cli',
-      'bin/Release/whisper.dll': 'w',
-      'bin/Release/ggml.dll': 'g',
-      'bin/Release/ggml-base.dll': 'gb',
-    });
-    const model = Buffer.from('m'.repeat(32));
-    const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
-    const svc = new SyncService({
-      dataDir: mkdtempSync(join(tmpdir(), 'sync-')),
-      logger: silentLogger(),
-      supported: true,
-      modelSpec: {
-        name: 'tiny.en',
-        file: 'ggml-tiny.en.bin',
-        url: 'https://huggingface.co/m',
-        sha256: sha(model),
-        bytes: model.length,
-        leadSec: 0.35,
-      },
-      zipSpec: { url: 'https://github.com/t.zip', sha256: sha(zip), bytes: zip.length },
-      fetchImpl: (async (u: string | URL | Request) =>
-        new Response(new Uint8Array(String(u).endsWith('.zip') ? zip : model))) as typeof fetch,
-    });
-    current = await start({ sync: svc });
-    const get = async () =>
-      (await (await current!.get('/api/sync')).json()) as {
-        state: string;
-        enabled: boolean;
-        supported: boolean;
-      };
-    expect(await get()).toMatchObject({ supported: true, state: 'missing', enabled: false });
-    const res = await fetch(current.base + '/api/sync/install', {
-      method: 'POST',
-      headers: { Host: current.host, 'Content-Type': 'application/json' },
-      body: '{}',
-    });
-    expect(res.status).toBe(200);
-    for (let i = 0; i < 40 && (await get()).state !== 'ready'; i++)
-      await new Promise((r) => setTimeout(r, 25));
-    expect(await get()).toMatchObject({ state: 'ready', enabled: true });
-    const off = await fetch(current.base + '/api/sync/remove', {
-      method: 'POST',
-      headers: { Host: current.host, 'Content-Type': 'application/json' },
-      body: '{}',
-    });
-    expect(await off.json()).toMatchObject({ ok: true, state: 'missing', enabled: false });
-  });
-
-  it('refuses to install where the tool does not run', async () => {
-    const svc = new SyncService({
-      dataDir: mkdtempSync(join(tmpdir(), 'sync-')),
-      logger: silentLogger(),
-      supported: false,
-    });
-    current = await start({ sync: svc });
-    const res = await fetch(current.base + '/api/sync/install', {
-      method: 'POST',
-      headers: { Host: current.host, 'Content-Type': 'application/json' },
-      body: '{}',
-    });
-    expect(res.status).toBe(400);
   });
 });
 
