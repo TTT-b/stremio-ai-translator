@@ -296,7 +296,7 @@ ${checks('r-', 'sample', 'sample-out')}
 
 <div id="dash" class="${startStep ? 'hidden' : 'flex'} w-full max-w-[560px] flex-col gap-[18px]">
 <div class="flex items-center justify-between gap-3"><div><h1 class="text-[26px] font-extrabold text-warm-tx">${tt('dashTitle')}</h1>${d.testMode ? `<div class="mt-1.5 inline-block rounded-full bg-amber-400/15 px-2.5 py-0.5 text-xs font-bold text-amber-300">${tt('testBanner')}</div>` : ''}<div class="mt-1 text-[13px] text-warm-mu">${d.aiConfigured ? `${tt('providerLine')} <span dir="ltr">${escapeHtml(d.aiProviderLabel)} &middot; ${escapeHtml(d.aiModel)}</span>` : tt('noKeyYet')}</div></div>
-<div class="flex items-center gap-2"><button type="button" class="js-news ${btn} relative !px-3 !py-2" aria-label="${tt('newsBell')}" title="${tt('newsBell')}"><span class="text-base leading-none" aria-hidden="true">&#128276;</span><span class="js-news-badge absolute -top-1 -end-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-warm-ac px-1 text-[10px] font-bold text-warm-on"></span></button><button type="button" id="open-library" class="${btn} !py-2">${tt('mySubs')}</button><button type="button" id="open-settings" class="${btn} flex items-center gap-2 !py-2"><span class="text-base leading-none" aria-hidden="true">&#9881;</span>${tt('settings')}</button></div></div>
+<div class="flex flex-wrap items-center justify-end gap-2"><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !py-2 disabled:cursor-not-allowed disabled:opacity-40" disabled title="${tt('resumeHint')}">${tt('resumeBtn')}</button><button type="button" class="js-news ${btn} relative !px-3 !py-2" aria-label="${tt('newsBell')}" title="${tt('newsBell')}"><span class="text-base leading-none" aria-hidden="true">&#128276;</span><span class="js-news-badge absolute -top-1 -end-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-warm-ac px-1 text-[10px] font-bold text-warm-on"></span></button><button type="button" id="open-library" class="${btn} !py-2">${tt('mySubs')}</button><button type="button" id="open-settings" class="${btn} flex items-center gap-2 !py-2"><span class="text-base leading-none" aria-hidden="true">&#9881;</span>${tt('settings')}</button></div></div>
 <section class="flex flex-col gap-3.5 rounded-[22px] border border-warm-ln bg-warm-sf p-6">
 <div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div>
 <div id="st-progress-text" class="text-[26px] font-extrabold leading-tight text-warm-tx">${tt('noSub')}</div>
@@ -553,6 +553,15 @@ const quickSave = async () => {
     if (r.ok) { $('d-lang').value = lang; $('d-dual').checked = dual; }
   } catch { toast(false, FAILED); }
 };
+$('resume-btn').addEventListener('click', async () => {
+  const btn = $('resume-btn');
+  btn.disabled = true;
+  try {
+    const r = await post('/api/resume', {});
+    toast(r.ok, r.ok ? T.resumeStarted : T.resumeNone);
+  } catch { toast(false, FAILED); }
+  refreshStatus();
+});
 $('q-lang').addEventListener('change', quickSave);
 $('q-dual').addEventListener('change', quickSave);
 $('rerun').addEventListener('click', () => { setDrawer(false); fromDash = true; go(1); setView('wizard'); });
@@ -718,6 +727,7 @@ const refreshStatus = async () => {
       hint.classList.toggle('hidden', !hint.textContent);
     }
     $('st-subdl-text').textContent = f(T.stSubdlCount, {n: r.subdlDownloads || 0});
+    $('resume-btn').disabled = !r.resumable;
     renderQueue(r.queue || []);
   } catch { /* the app may be restarting */ }
 };

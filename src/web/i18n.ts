@@ -399,6 +399,13 @@ const S = {
   srcBackup: { he: 'גיבוי', en: 'Backup' },
   stSubdl: { he: 'הורדות כתוביות מ-SubDL', en: 'SubDL downloads' },
   stSubdlCount: { he: '{n} בסשן הנוכחי', en: '{n} this session' },
+  resumeBtn: { he: 'המשך תרגום', en: 'Continue translation' },
+  resumeHint: {
+    he: 'מופעל כשתרגום נתקע או בוטל: ממשיך מהמקום שנשמר, בלי לתרגם שוב מה שכבר תורגם.',
+    en: 'Available when a translation is stuck or was cancelled: continues from what was saved, without translating it again.',
+  },
+  resumeStarted: { he: 'ממשיך את התרגום', en: 'Continuing the translation' },
+  resumeNone: { he: 'אין כרגע מה להמשיך', en: 'Nothing to continue right now' },
   stSubdlPanel: { he: 'בדוק את המכסה בלוח SubDL', en: 'Check your quota in the SubDL panel' },
   stSubdlHint: {
     he: 'התוכנה לא מקבלת מ-SubDL נתון על מכסה, ולכן מוצג רק מספר ההורדות בסשן הנוכחי.',

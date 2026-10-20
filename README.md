@@ -264,6 +264,17 @@ prefix `HE:`. Besides the built-in samples, it picks from any `.srt` files you p
 folder inside the app's data folder (`data\test-subtitles` when run from the project). Test subtitles are
 not added to the library. While test mode is on, real translations are paused, so turn it off when done.
 
+### The Continue button
+
+The main screen has a **Continue translation** button. It is grey while everything runs normally.
+It turns on when a request was cancelled or failed, or when a translation has had no news from the
+AI for 30 seconds (for example a request that is not answered). Pressing it cuts the stuck request
+and asks again, or starts the cancelled request again from what was saved: parts that were already
+translated are not translated twice.
+
+While the subtitle is not ready, the player shows what is happening (for example `Translating the
+subtitles… 45%`) in the interface language instead of one fixed sentence.
+
 ### Speaker names and sound notes are removed
 
 Subtitles made for the hard of hearing contain more than speech: who is talking (`KATARA: Water.`)

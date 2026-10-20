@@ -229,6 +229,33 @@ describe('translateSubtitle', () => {
     expect(badKey.calls).toBe(1);
   });
 
+  it('a request that is not answered is cut by a kick and asked again, finished parts kept', async () => {
+    const kicks = new Set<() => void>();
+    const provider = new FakeProvider(async (req, call) => {
+      if (call === 1) return new Promise<never>(() => undefined); // the AI never answers the first request
+      return { translations: req.cues.map((c) => ({ id: c.id, text: 'T:' + c.text })) };
+    });
+    const work = translateSubtitle(
+      source,
+      provider,
+      opts({
+        chunkSize: 100,
+        concurrency: 1,
+        registerKick: (cut) => {
+          kicks.add(cut);
+          return () => void kicks.delete(cut);
+        },
+      }),
+    );
+    for (let i = 0; i < 50 && kicks.size === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(kicks.size).toBe(1);
+    for (const cut of [...kicks]) cut();
+    const result = await work;
+    expect(provider.calls).toBe(2);
+    expect(result.file.cues).toHaveLength(source.cues.length);
+    expect(kicks.size).toBe(0);
+  });
+
   it('respects the concurrency limit', async () => {
     let active = 0;
     let peak = 0;

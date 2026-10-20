@@ -51,6 +51,9 @@ async function start(opts: {
   contentFor?: (c: SubtitleCandidate) => string;
   loadEmbedded?: NonNullable<Parameters<typeof createApp>[0]['loadEmbedded']>;
   refreshGuessAfterMs?: number;
+  stallAfterMs?: number;
+  /** Replaces the fake AI: gets the request and the call number. */
+  translate?: ConstructorParameters<typeof FakeProvider>[0];
   cancelCooldownMs?: number;
   limits?: NonNullable<Parameters<typeof createApp>[0]['limits']>;
   logDir?: string;
@@ -79,10 +82,13 @@ async function start(opts: {
     searches: 0,
     downloads: 0,
     dataDir: opts.dataDir ?? mkdtempSync(join(tmpdir(), 'flow-')),
-    translator: new FakeProvider(async (req) => {
-      if (opts.gate) await opts.gate;
-      return { translations: req.cues.map((c) => ({ id: c.id, text: `HE:${c.text}` })) };
-    }),
+    translator: new FakeProvider(
+      opts.translate ??
+        (async (req) => {
+          if (opts.gate) await opts.gate;
+          return { translations: req.cues.map((c) => ({ id: c.id, text: `HE:${c.text}` })) };
+        }),
+    ),
     get: (path, headers = {}) => fetch(h.base + path, { headers: { Host: h.host, ...headers } }),
     close: () => new Promise<void>((r) => server.close(() => r())),
   };
@@ -136,6 +142,7 @@ async function start(opts: {
     ...(opts.onPending ? { onPending: opts.onPending } : {}),
     ...(opts.logDir ? { logDir: opts.logDir } : {}),
     ...(opts.cancelCooldownMs !== undefined ? { cancelCooldownMs: opts.cancelCooldownMs } : {}),
+    ...(opts.stallAfterMs !== undefined ? { stallAfterMs: opts.stallAfterMs } : {}),
     ...(opts.refreshGuessAfterMs !== undefined
       ? { refreshGuessAfterMs: opts.refreshGuessAfterMs }
       : {}),
@@ -174,6 +181,80 @@ describe('Stremio manifest', () => {
     });
     expect(m.id).toBeTruthy();
     expect(JSON.stringify(m)).not.toMatch(/api[-_]?key/i);
+  });
+});
+
+describe('the Continue button', () => {
+  type St = { resumable: boolean; queue: unknown[] };
+  const status = async (h: Harness) => (await (await h.get('/api/status')).json()) as St;
+  const resume = async (h: Harness) => {
+    const res = await fetch(h.base + '/api/resume', {
+      method: 'POST',
+      headers: { Host: h.host, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    return (await res.json()) as { ok: boolean; action: string };
+  };
+  const until = async (check: () => Promise<boolean>) => {
+    for (let i = 0; i < 120 && !(await check()); i++) await new Promise((r) => setTimeout(r, 25));
+  };
+
+  it('has nothing to do when everything is fine', async () => {
+    current = await start({});
+    expect((await status(current)).resumable).toBe(false);
+    expect(await resume(current)).toEqual({ ok: false, action: 'none' });
+  });
+
+  it('restarts a cancelled request at once and the subtitle then arrives', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    current = await start({ gate, subWaitMs: 50, cancelCooldownMs: 60_000 });
+    const body = (await (
+      await current.get('/subtitles/movie/tt0111161.json')
+    ).json()) as SubsResponse;
+    const path = new URL(body.subtitles[0]!.url).pathname;
+    const queue = ((await (await current.get('/api/status')).json()) as { queue: { id: string }[] })
+      .queue;
+    await fetch(current.base + '/api/jobs/' + queue[0]!.id + '/cancel', {
+      method: 'POST',
+      headers: { Host: current.host, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    release();
+    await until(async () => (await status(current!)).resumable);
+    expect((await status(current)).resumable).toBe(true);
+    expect((await resume(current)).action).toBe('restarted');
+    let text = '';
+    await until(async () => {
+      text = await (await current!.get(path)).text();
+      return text.includes('HE:');
+    });
+    expect(text).toContain('HE:Hello there.');
+    expect((await status(current)).resumable).toBe(false);
+  });
+
+  it('cuts a translation that stopped getting answers, and it finishes', async () => {
+    current = await start({
+      stallAfterMs: 50,
+      subWaitMs: 50,
+      translate: async (req, call) =>
+        call === 1
+          ? new Promise<never>(() => undefined)
+          : { translations: req.cues.map((c) => ({ id: c.id, text: 'T:' + c.text })) },
+    });
+    const body = (await (
+      await current.get('/subtitles/movie/tt0111161.json')
+    ).json()) as SubsResponse;
+    const path = new URL(body.subtitles[0]!.url).pathname;
+    await until(async () => (await status(current!)).resumable);
+    expect((await status(current)).resumable).toBe(true);
+    expect((await resume(current)).action).toBe('kicked');
+    let text = '';
+    await until(async () => {
+      text = await (await current!.get(path)).text();
+      return text.includes('T:');
+    });
+    expect(text).toContain('T:Hello there.');
   });
 });
 
@@ -267,7 +348,7 @@ describe('subtitle request flow', () => {
     const path = new URL(sub.url).pathname;
 
     const first = await (await current.get(path)).text();
-    expect(first).toContain('Translation in progress');
+    expect(first).toContain('בחר שוב את הכתובית בעוד רגע');
     expect(first).toMatch(/^1\n\d\d:\d\d:\d\d,\d{3} --> /); // still a valid SRT
 
     // A second request while running shares the same job (one translation, not two).
@@ -1109,7 +1190,7 @@ describe('precise sync by speech', () => {
     });
     const sub = ((await (await current.get(FILE_PATH)).json()) as SubsResponse).subtitles[0]!;
     const waiting = await (await current.get(new URL(sub.url).pathname)).text();
-    expect(waiting).toContain('Syncing the subtitle to the speech');
+    expect(waiting).toContain('מסנכרן את התזמון לדיבור');
     const status = (await (await current.get('/api/status')).json()) as {
       stage: string;
       syncPercent: number;

@@ -10,10 +10,9 @@ import { isJobId, JobManager, type JobManagerDeps } from '../jobs/manager';
 import { createStremioRouter } from '../stremio/addon';
 import {
   CANCELLED_MESSAGE,
-  IN_PROGRESS_MESSAGE,
   pendingMessage,
   placeholderSrt,
-  SYNC_IN_PROGRESS_MESSAGE,
+  progressMessage,
 } from '../stremio/placeholder';
 import { SyncService } from '../sync/service';
 import { fitSubtitleToVideo } from '../sync/videoFit';
@@ -85,6 +84,7 @@ export interface ServerDeps {
   logDir?: string;
   /** Test hook: how soon a guessed-timing subtitle is checked again. */
   refreshGuessAfterMs?: number;
+  stallAfterMs?: number;
   cancelCooldownMs?: number;
   /** Test hook: receives the job manager and cache. */
   onReady?: (ctx: { jobs: JobManager; cache: FileCache }) => void;
@@ -224,6 +224,7 @@ export function createApp(deps: ServerDeps): express.Express {
     ...(deps.onPending ? { onPending: deps.onPending } : {}),
     ...(deps.limits ? { limits: deps.limits } : {}),
     ...(deps.cancelCooldownMs !== undefined ? { cancelCooldownMs: deps.cancelCooldownMs } : {}),
+    ...(deps.stallAfterMs !== undefined ? { stallAfterMs: deps.stallAfterMs } : {}),
     ...(deps.refreshGuessAfterMs !== undefined
       ? { refreshGuessAfterMs: deps.refreshGuessAfterMs }
       : {}),
@@ -376,6 +377,13 @@ export function createApp(deps: ServerDeps): express.Express {
       action === 'approve' ? jobs.approve(id) : action === 'skip' ? jobs.skip(id) : jobs.cancel(id);
     logger.info({ stage: 'API', jobId: id.slice(0, 8), action, done }, 'queue action');
     res.json({ ok: done });
+  });
+
+  // The Continue button: cut a translation that is not being answered, or restart a cancelled/failed one.
+  app.post('/api/resume', (_req, res) => {
+    const action = jobs.resume();
+    logger.info({ stage: 'API', action }, 'resume');
+    res.json({ ok: action !== 'none', action });
   });
 
   // Delete translated subtitles from the local cache. Downloaded source files are kept.
@@ -776,7 +784,15 @@ export function createApp(deps: ServerDeps): express.Express {
       send(placeholderSrt(CANCELLED_MESSAGE), 'cancelled', job.id);
     } else {
       send(
-        placeholderSrt(job.stage === 'sync' ? SYNC_IN_PROGRESS_MESSAGE : IN_PROGRESS_MESSAGE),
+        placeholderSrt(
+          progressMessage(
+            readSettings(deps.settingsPath).uiLanguage ?? 'he',
+            job.stage,
+            job.progress && job.progress.total > 0
+              ? Math.min(100, Math.floor((job.progress.done / job.progress.total) * 100))
+              : null,
+          ),
+        ),
         'in-progress',
         job.id,
       );

@@ -67,6 +67,10 @@ export interface Job {
   progress?: { done: number; total: number };
   /** What the job is doing now, so the page can say where it is. */
   stage?: 'queued' | 'local' | 'sync' | 'search' | 'translate';
+  /** When the translation last moved (a step started or a part finished); a long silence is a stall. */
+  progressAt?: number;
+  /** Cuts the requests that are waiting for the AI so they are asked again (set while translating). */
+  kick?: () => number;
   /** Progress of listening to the video while the stage is 'sync', 0..100. */
   syncPercent?: number;
   /** Display name for the queue (filled in shortly after the job is created). */
@@ -122,6 +126,8 @@ export interface JobManagerDeps {
   cancelCooldownMs?: number;
   /** A finished job with guessed timing is checked again after this long (default 15 s). */
   refreshGuessAfterMs?: number;
+  /** A translation with no news for this long counts as stuck (default 30 s). */
+  stallAfterMs?: number;
   /** Hard caps so one stuck step can never block the queue (defaults: 2 min 20 s, 2 min, 1 hour). */
   limits?: {
     embeddedCapMs?: number;
@@ -181,6 +187,9 @@ interface ChosenSource {
  * 8: stray letters of any foreign alphabet are removed, also from subtitles made before.
  */
 const SOURCE_LOGIC_VERSION = 10;
+
+/** A translation with no news for this long counts as stuck. */
+const STALL_AFTER_MS = 30_000;
 
 /** Files compared for timing when there is no hash match. Each uncached one costs a download. */
 const CONSENSUS_POOL_SIZE = 3;
@@ -256,7 +265,12 @@ export class JobManager {
   /** Translations in progress, by translation cache key, so identical requests share one. */
   private readonly translating = new Map<
     string,
-    { work: ReturnType<typeof translateSubtitle>; watchers: Set<Job>; lead: Job }
+    {
+      work: ReturnType<typeof translateSubtitle>;
+      watchers: Set<Job>;
+      lead: Job;
+      kicks: Set<() => void>;
+    }
   >();
 
   constructor(private readonly deps: JobManagerDeps) {
@@ -265,12 +279,13 @@ export class JobManager {
   }
 
   /** Start (or join) the job for this request. Returns immediately. */
-  ensure(spec: JobSpec, restored = false): Job {
+  ensure(spec: JobSpec, restored = false, force = false): Job {
     const cfg = this.deps.config();
     const id = jobIdFor(spec, cfg.aiModel, cfg.dualSubtitles);
     const existing = this.jobs.get(id);
     if (existing) {
       const retryable =
+        (force && (existing.status === 'failed' || existing.status === 'cancelled')) ||
         (existing.status === 'failed' &&
           this.now() - (existing.finishedAt ?? 0) > (this.deps.retryFailedAfterMs ?? 60_000)) ||
         // After a cancel Stremio asks again within seconds; that must not undo the user's answer.
@@ -380,6 +395,55 @@ export class JobManager {
       }
     }
     return done;
+  }
+
+  /** A translation that has had no news for a while: the AI is probably not answering. */
+  private isStalled(job: Job): boolean {
+    return (
+      job.status === 'running' &&
+      job.stage === 'translate' &&
+      job.progressAt !== undefined &&
+      this.now() - job.progressAt > (this.deps.stallAfterMs ?? STALL_AFTER_MS)
+    );
+  }
+
+  /** The latest cancelled or failed request, unless something newer already covers the same video. */
+  private restartable(): Job | undefined {
+    const all = [...this.jobs.values()];
+    const last = all
+      .filter((j) => j.status === 'failed' || j.status === 'cancelled')
+      .sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))[0];
+    if (!last) return undefined;
+    const covered = all.some(
+      (j) =>
+        j !== last &&
+        videoKey(j.spec) === videoKey(last.spec) &&
+        (j.status === 'done' || j.status === 'running' || j.status === 'pending'),
+    );
+    return covered ? undefined : last;
+  }
+
+  /** Is there something the "Continue" button can do right now? */
+  resumable(): boolean {
+    return [...this.jobs.values()].some((j) => this.isStalled(j)) || !!this.restartable();
+  }
+
+  /**
+   * The user pressed Continue. A translation that stopped getting answers is cut and asked again
+   * (finished parts are kept); a cancelled or failed request starts again from what was saved.
+   */
+  resume(): 'kicked' | 'restarted' | 'none' {
+    const stalled = [...this.jobs.values()].filter((j) => this.isStalled(j));
+    if (stalled.length > 0) {
+      let cut = 0;
+      for (const job of stalled) cut += job.kick?.() ?? 0;
+      return cut > 0 ? 'kicked' : 'none';
+    }
+    const last = this.restartable();
+    if (!last) return 'none';
+    const job = this.ensure(last.spec, false, true);
+    if (job.status === 'pending') this.approve(job.id); // pressing Continue is the user's OK
+    return 'restarted';
   }
 
   /** Another request for this episode already has its subtitle (Stremio asks again with another file). */
@@ -504,6 +568,8 @@ export class JobManager {
     quota: { limit: number; left: number } | null;
     /** Downloads from SubDL this session. */
     subdlDownloads: number;
+    /** The Continue button has something to do: a stuck translation, or a cancelled/failed request. */
+    resumable: boolean;
     queue: QueueItem[];
   } {
     const running = [...this.jobs.values()].filter((j) => j.status === 'running').length;
@@ -543,6 +609,7 @@ export class JobManager {
       syncPercent: stage === 'sync' ? (latest?.syncPercent ?? 0) : null,
       lastError: state === 'error' ? this.lastErrorCode : null,
       quota: this.quota ? { ...this.quota } : null,
+      resumable: this.resumable(),
       subdlDownloads: this.subdlDownloads,
       queue: this.queue(),
     };
@@ -936,6 +1003,7 @@ export class JobManager {
     log.info({ stage: 'PARSER', cues: parsed.cues.length, format: parsed.format }, 'source parsed');
     job.progress = { done: 0, total: parsed.cues.length };
     job.stage = 'translate';
+    job.progressAt = this.now();
 
     // 4a. Already in the target language: serve as SRT, no translation.
     if (chosen.kind === 'direct') {
@@ -1028,6 +1096,13 @@ export class JobManager {
       watchers.add(job);
       if (sharing.lead.progress) job.progress = { ...sharing.lead.progress };
     }
+    const kicks = sharing?.kicks ?? new Set<() => void>();
+    job.kick = () => {
+      const waiting = [...kicks];
+      for (const cut of waiting) cut();
+      job.progressAt = this.now();
+      return waiting.length;
+    };
     const work =
       sharing?.work ??
       translateSubtitle(parsed, provider, {
@@ -1040,22 +1115,34 @@ export class JobManager {
         rtlFix: rtl,
         dualSubtitles: dual,
         isCancelled: () => [...watchers].every((w) => w.cancelled),
+        registerKick: (cut) => {
+          kicks.add(cut);
+          return () => void kicks.delete(cut);
+        },
         requestGapMs: cfg.chunkDelayMs,
         onRateLimitWait: (d) => {
           this.rateLimited = Math.max(0, this.rateLimited + d);
         },
         onProgress: (done, total) => {
-          for (const w of watchers) w.progress = { done, total };
+          for (const w of watchers) {
+            w.progress = { done, total };
+            w.progressAt = this.now();
+          }
         },
         logger: log,
         logDialogue: cfg.logDialogue,
       });
     if (!sharing) {
-      this.translating.set(trKey, { work, watchers, lead: job });
+      this.translating.set(trKey, { work, watchers, lead: job, kicks });
       const forget = (): void => void this.translating.delete(trKey);
       work.then(forget, forget);
     }
-    const result = await work;
+    let result: Awaited<typeof work>;
+    try {
+      result = await work;
+    } finally {
+      delete job.kick;
+    }
     watchers.delete(job);
     job.progress = { done: result.file.cues.length, total: result.file.cues.length };
     const content = serializeSubtitle({ format: 'srt', cues: result.file.cues });

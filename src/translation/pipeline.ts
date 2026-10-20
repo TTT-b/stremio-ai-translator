@@ -42,6 +42,12 @@ export interface PipelineOptions {
   requestGapMs?: number;
   /** How long one chunk may keep waiting out rate limits / quota before the job fails. */
   rateLimitBudgetMs?: number;
+  /**
+   * Lets the user's "Continue" cut a request that is not being answered: the pipeline hands over a
+   * function that fails the request at once (as a timeout, so it is asked again) and gets back a
+   * function to call when the request ends.
+   */
+  registerKick?: (kick: () => void) => () => void;
   /** Called with +1 when a chunk starts waiting on a rate limit and -1 when it stops. */
   onRateLimitWait?: (delta: 1 | -1) => void;
   /** Called after each chunk with cues finished so far and the file's total. */
@@ -68,6 +74,11 @@ const OVERLOAD_MAX_WAITS = 8;
 /** The extra gap between requests never grows beyond this while the provider is pushing back. */
 const THROTTLE_MAX_EXTRA_MS = 8000;
 const THROTTLE_FIRST_EXTRA_MS = 1000;
+
+/** A request cut by the user is asked again after this short pause. */
+const KICK_RETRY_MS = 500;
+
+const isKicked = (err: AppError): boolean => err.details['kicked'] === true;
 
 const isBackoffError = (err: unknown): err is AppError =>
   isAppError(err) &&
@@ -133,10 +144,12 @@ async function waitOutRateLimits<T>(
         if (!isBackoffError(err)) throw err;
         if (err.code === 'PROVIDER_TIMEOUT' && n > OVERLOAD_MAX_WAITS) throw err;
         const hinted = err.retryAfterMs;
-        const delay = Math.min(
-          RATE_WAIT_MAX_MS,
-          Math.max(hinted ?? 0, RATE_WAIT_BASE_MS * 2 ** Math.min(n - 1, 4)),
-        );
+        const delay = isKicked(err)
+          ? KICK_RETRY_MS
+          : Math.min(
+              RATE_WAIT_MAX_MS,
+              Math.max(hinted ?? 0, RATE_WAIT_BASE_MS * 2 ** Math.min(n - 1, 4)),
+            );
         if (waited + delay > budget) throw err;
         if (!waiting) {
           waiting = true;
@@ -154,6 +167,28 @@ async function waitOutRateLimits<T>(
   } finally {
     if (waiting) opts.onRateLimitWait?.(-1);
   }
+}
+
+/** The request, but the user may cut it short (see registerKick). */
+function withKick<T>(call: Promise<T>, opts: PipelineOptions): Promise<T> {
+  const register = opts.registerKick;
+  if (!register) return call;
+  return new Promise<T>((resolve, reject) => {
+    const stop = register(() => {
+      stop();
+      reject(new AppError('PROVIDER_TIMEOUT', 'restarted by the user', { kicked: true }));
+    });
+    call.then(
+      (value) => {
+        stop();
+        resolve(value);
+      },
+      (error: unknown) => {
+        stop();
+        reject(error);
+      },
+    );
+  });
 }
 
 async function translateOneChunk(
@@ -191,13 +226,16 @@ async function translateOneChunk(
           waitOutRateLimits(
             async () => {
               await throttle.pace();
-              const reply = await provider.translateChunk({
-                targetLanguage: opts.targetLanguageName,
-                targetLanguageCode: opts.targetLanguageCode,
-                cues: source,
-                context: chunk.context,
-                upcoming: chunk.upcoming,
-              });
+              const reply = await withKick(
+                provider.translateChunk({
+                  targetLanguage: opts.targetLanguageName,
+                  targetLanguageCode: opts.targetLanguageCode,
+                  cues: source,
+                  context: chunk.context,
+                  upcoming: chunk.upcoming,
+                }),
+                opts,
+              );
               throttle.onSuccess();
               return reply;
             },
