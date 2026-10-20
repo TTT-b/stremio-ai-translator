@@ -266,8 +266,8 @@ not added to the library. While test mode is on, real translations are paused, s
 
 ### The Continue button
 
-The main screen has a **Continue translation** button. It is grey while everything runs normally.
-It turns on when a request was cancelled or failed, or when a translation has had no news from the
+The main screen has a **Continue translation** button. It can always be pressed (it says so when there is nothing to continue).
+It is highlighted when a request was cancelled or failed, or when a translation has had no news from the
 AI for 12 seconds (for example a request that is not answered). Pressing it cuts the stuck request
 and asks again, or starts the cancelled request again from what was saved: parts that were already
 translated are not translated twice.

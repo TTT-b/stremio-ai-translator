@@ -407,8 +407,8 @@ const S = {
   stSubdlCount: { he: '{n} בסשן הנוכחי', en: '{n} this session' },
   resumeBtn: { he: 'המשך תרגום', en: 'Continue translation' },
   resumeHint: {
-    he: 'מופעל כשתרגום נתקע או בוטל: ממשיך מהמקום שנשמר, בלי לתרגם שוב מה שכבר תורגם.',
-    en: 'Available when a translation is stuck or was cancelled: continues from what was saved, without translating it again.',
+    he: 'לחץ אם התרגום נתקע או בוטל',
+    en: 'Press if the translation is stuck or was cancelled',
   },
   resumeStarted: { he: 'ממשיך את התרגום', en: 'Continuing the translation' },
   resumeNone: { he: 'אין כרגע מה להמשיך', en: 'Nothing to continue right now' },

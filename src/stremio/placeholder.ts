@@ -20,24 +20,24 @@ export function progressMessage(
   percent: number | null,
 ): string {
   const again =
-    lang === 'he' ? 'בחר שוב את הכתובית בעוד רגע' : 'reselect this subtitle in a moment';
+    lang === 'he' ? 'בחר שוב את הכתוביות בסוף התהליך' : 'reselect the subtitles when it finishes';
   const he: Record<string, string> = {
-    queued: 'ממתין בתור…',
-    local: 'בודק אם יש כתובית בתוך הסרט…',
-    search: 'מחפש כתובית…',
-    sync: 'מסנכרן את התזמון לדיבור (כמה דקות, פעם אחת)…',
+    queued: 'ממתין בתור',
+    local: 'בודק אם יש כתוביות בתוך הסרט',
+    search: 'מחפש כתוביות',
+    sync: 'מסנכרן את הכתוביות',
   };
   const en: Record<string, string> = {
-    queued: 'Waiting in the queue…',
-    local: 'Checking for a subtitle inside the video…',
-    search: 'Searching for a subtitle…',
-    sync: 'Syncing the timing to the speech (a few minutes, once)…',
+    queued: 'Waiting in the queue',
+    local: 'Checking for subtitles inside the video',
+    search: 'Searching for subtitles',
+    sync: 'Syncing the subtitles',
   };
   const translating =
     lang === 'he'
-      ? `מתרגם את הכתוביות…${percent === null ? '' : ` ${percent}%`}`
-      : `Translating the subtitles…${percent === null ? '' : ` ${percent}%`}`;
+      ? `מתרגם את הכתוביות${percent === null ? '' : ` ${percent}%`}`
+      : `Translating the subtitles${percent === null ? '' : ` ${percent}%`}`;
   const line =
     stage === 'translate' ? translating : ((lang === 'he' ? he : en)[stage ?? ''] ?? translating);
-  return `${line} — ${again}`;
+  return `${line} - ${again}`;
 }

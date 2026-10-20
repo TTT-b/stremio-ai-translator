@@ -375,7 +375,7 @@ describe('subtitle request flow', () => {
     const path = new URL(sub.url).pathname;
 
     const first = await (await current.get(path)).text();
-    expect(first).toContain('בחר שוב את הכתובית בעוד רגע');
+    expect(first).toContain('בחר שוב את הכתוביות בסוף התהליך');
     expect(first).toMatch(/^1\n\d\d:\d\d:\d\d,\d{3} --> /); // still a valid SRT
 
     // A second request while running shares the same job (one translation, not two).

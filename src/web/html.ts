@@ -343,7 +343,7 @@ ${checks('r-', 'sample', 'sample-out')}
 <div class="flex flex-wrap items-center justify-end gap-2"><button type="button" class="js-news ${btn} relative !px-3 !py-2" aria-label="${tt('newsBell')}" title="${tt('newsBell')}"><span class="text-base leading-none" aria-hidden="true">&#128276;</span><span class="js-news-badge absolute -top-1 -end-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-warm-ac px-1 text-[10px] font-bold text-warm-on"></span></button><button type="button" id="open-library" class="${btn} !py-2">${tt('mySubs')}</button><button type="button" id="open-settings" class="${btn} flex items-center gap-2 !py-2"><span class="text-base leading-none" aria-hidden="true">&#9881;</span>${tt('settings')}</button></div></div>
 <div class="flex flex-col gap-[18px] lg:grid lg:grid-cols-2 lg:items-start lg:gap-5"><div class="flex flex-col gap-[18px]">
 <section class="flex flex-col gap-3.5 rounded-[22px] border border-warm-ln bg-warm-sf p-6">
-<div class="flex items-center justify-between gap-3"><div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px] disabled:cursor-not-allowed disabled:opacity-40" disabled title="${tt('resumeHint')}">${tt('resumeBtn')}</button></div>
+<div class="flex items-center justify-between gap-3"><div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('resumeHint')}">${tt('resumeBtn')}</button></div>
 <div id="st-progress-text" class="text-[26px] font-extrabold leading-tight text-warm-tx">${tt('noSub')}</div>
 <div class="h-2 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('progressAria')}" aria-valuemin="0" aria-valuemax="100"><div id="st-progress" class="h-full w-0 rounded-full bg-warm-ac transition-[width] duration-500"></div></div>
 </section>
@@ -632,6 +632,7 @@ if (openStremioBtn) openStremioBtn.addEventListener('click', async () => {
 $('resume-btn').addEventListener('click', async () => {
   const btn = $('resume-btn');
   btn.disabled = true;
+  setTimeout(() => { btn.disabled = false; }, 1500);
   try {
     const r = await post('/api/resume', {});
     toast(r.ok, r.ok ? T.resumeStarted : T.resumeNone);
@@ -805,7 +806,9 @@ const refreshStatus = async () => {
       hint.classList.toggle('hidden', !hint.textContent);
     }
     if (subdlOn) $('st-subdl-text').textContent = f(T.stSubdlCount, {n: r.subdlDownloads || 0});
-    $('resume-btn').disabled = !r.resumable;
+    // Always a normal button; it only lights up when there is something to continue.
+    $('resume-btn').classList.toggle('!border-warm-ac', !!r.resumable);
+    $('resume-btn').classList.toggle('!text-warm-ac', !!r.resumable);
     renderQueue(r.queue || []);
   } catch { /* the app may be restarting */ }
 };
