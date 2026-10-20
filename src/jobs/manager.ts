@@ -73,6 +73,8 @@ export interface Job {
   kick?: () => number;
   /** Progress of listening to the video while the stage is 'sync', 0..100. */
   syncPercent?: number;
+  /** When the sound check last made progress (the video's data may not be arriving). */
+  syncProgressAt?: number;
   /** Display name for the queue (filled in shortly after the job is created). */
   title?: string;
   /** Set when the user cancelled it; the translation stops before its next request. */
@@ -126,6 +128,8 @@ export interface JobManagerDeps {
     sourceCapMs?: number;
     jobCapMs?: number;
     speechCapMs?: number;
+    /** How long the sound check may wait for the video's data before it gives up. */
+    syncNoDataMs?: number;
   };
   /** Test hooks: where the playing video is on Stremio's server, and which ffmpeg to use. */
   findStream?: (
@@ -182,6 +186,9 @@ const SOURCE_LOGIC_VERSION = 11;
 
 /** How long the "better subtitle is ready" notice stays on the main screen. */
 const UPGRADE_NOTICE_MS = 30 * 60_000;
+
+/** The sound check gives up when the video sends no sound for this long (45 s). */
+const SYNC_NO_DATA_MS = 45_000;
 
 /** A translation with no news for this long counts as stuck. */
 const STALL_AFTER_MS = 12_000;
@@ -412,6 +419,16 @@ export class JobManager {
     );
   }
 
+  /** The sound check is waiting for the video's data (nothing new for a while). */
+  private isSyncStalled(job: Job): boolean {
+    return (
+      job.status === 'running' &&
+      job.stage === 'sync' &&
+      job.syncProgressAt !== undefined &&
+      this.now() - job.syncProgressAt > (this.deps.stallAfterMs ?? STALL_AFTER_MS)
+    );
+  }
+
   /** The latest cancelled or failed request, unless something newer already covers the same video. */
   private restartable(): Job | undefined {
     const all = [...this.jobs.values()];
@@ -430,7 +447,10 @@ export class JobManager {
 
   /** Is there something the "Continue" button can do right now? */
   resumable(): boolean {
-    return [...this.jobs.values()].some((j) => this.isStalled(j)) || !!this.restartable();
+    return (
+      [...this.jobs.values()].some((j) => this.isStalled(j) || this.isSyncStalled(j)) ||
+      !!this.restartable()
+    );
   }
 
   /**
@@ -438,6 +458,9 @@ export class JobManager {
    * (finished parts are kept); a cancelled or failed request starts again from what was saved.
    */
   resume(): 'kicked' | 'restarted' | 'none' {
+    // Waiting for the video's sound: give that step up and go on with the subtitle as it is.
+    const waiting = [...this.jobs.values()].find((j) => this.isSyncStalled(j));
+    if (waiting && this.skip(waiting.id)) return 'kicked';
     const stalled = [...this.jobs.values()].filter((j) => this.isStalled(j));
     if (stalled.length > 0) {
       let cut = 0;
@@ -1228,6 +1251,16 @@ export class JobManager {
     const abort = new AbortController();
     const watch = setInterval(() => {
       if (job.cancelled || wasSkipped()) abort.abort();
+      else if (
+        job.syncProgressAt !== undefined &&
+        this.now() - job.syncProgressAt > (this.deps.limits?.syncNoDataMs ?? SYNC_NO_DATA_MS)
+      ) {
+        log.info(
+          { stage: 'SOURCE', sync: 'no-data' },
+          'the video is not sending its sound; timing left as it was',
+        );
+        abort.abort();
+      }
     }, 500);
     const cap = setTimeout(() => abort.abort(), this.deps.limits?.speechCapMs ?? 300_000);
     try {
@@ -1235,6 +1268,7 @@ export class JobManager {
       const stream = await find(cfg.stremioServerUrl, filename, this.deps.fetchImpl);
       if (!stream) return undefined;
       job.syncPercent = 0;
+      job.syncProgressAt = this.now();
       const cues = parseSubtitle(picked.raw).cues;
       const result = await fit({
         url: stream.url,
@@ -1242,6 +1276,7 @@ export class JobManager {
         cues,
         signal: abort.signal,
         onProgress: (p) => {
+          if (p !== job.syncPercent) job.syncProgressAt = this.now();
           job.syncPercent = p;
         },
       });
@@ -1269,6 +1304,7 @@ export class JobManager {
       clearInterval(watch);
       clearTimeout(cap);
       delete job.syncPercent;
+      delete job.syncProgressAt;
     }
   }
 

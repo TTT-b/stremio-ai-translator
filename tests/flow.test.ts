@@ -1121,6 +1121,53 @@ describe('timing from the sound of the video', () => {
     expect(s).toContain('HE:');
   });
 
+  it('gives up listening when the video sends no sound, and goes on with the subtitle', async () => {
+    current = await start({
+      findStream: async () => stream,
+      limits: { syncNoDataMs: 120 },
+      speechFit: (o) =>
+        new Promise((_resolve, reject) => {
+          o.onProgress?.(0);
+          o.signal.addEventListener('abort', () => reject(new Error('stopped')));
+        }),
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    const { s } = await served('');
+    expect(s).toContain('HE:');
+  });
+
+  it('Continue skips a sound check that is waiting for the video', async () => {
+    current = await start({
+      findStream: async () => stream,
+      stallAfterMs: 60,
+      speechFit: (o) =>
+        new Promise((_resolve, reject) => {
+          o.onProgress?.(0);
+          o.signal.addEventListener('abort', () => reject(new Error('stopped')));
+        }),
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    const made = (await (await current.get(FILE_PATH)).json()) as SubsResponse;
+    const path = new URL(made.subtitles[0]!.url).pathname;
+    type St = { resumable: boolean; stage: string };
+    const status = async () => (await (await current!.get('/api/status')).json()) as St;
+    for (let i = 0; i < 80 && !(await status()).resumable; i++)
+      await new Promise((r) => setTimeout(r, 25));
+    expect((await status()).resumable).toBe(true);
+    const res = await fetch(current.base + '/api/resume', {
+      method: 'POST',
+      headers: { Host: current.host, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
+    let text = '';
+    for (let i = 0; i < 120 && !text.includes('HE:'); i++) {
+      text = await (await current.get(path)).text();
+      if (!text.includes('HE:')) await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(text).toContain('HE:');
+  });
+
   it('does not listen when the video is not on this computer', async () => {
     let asked = 0;
     current = await start({
