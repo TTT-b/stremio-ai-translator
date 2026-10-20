@@ -43,6 +43,9 @@ export interface JobResult {
   cues: number;
   /** Cache entries that belong to this subtitle (for the library's delete). */
   cacheKeys?: string[];
+  /** The cache key this result was stored under, and the key used when its timing is exact. */
+  outKey?: string;
+  exactKey?: string;
   /** False when the timing is only a best guess (OpenSubtitles fallback): the job is checked again later. */
   exact?: boolean;
   /**
@@ -73,6 +76,8 @@ export interface Job {
   kick?: () => number;
   /** Progress of listening to the video while the stage is 'sync', 0..100. */
   syncPercent?: number;
+  /** The sound check that was still running when the translation started (see upgradeFromSound). */
+  lateFit?: Promise<SoundFit | undefined>;
   /** When the sound check last made progress (the video's data may not be arriving). */
   syncProgressAt?: number;
   /** Display name for the queue (filled in shortly after the job is created). */
@@ -130,6 +135,8 @@ export interface JobManagerDeps {
     speechCapMs?: number;
     /** How long the sound check may wait for the video's data before it gives up. */
     syncNoDataMs?: number;
+    /** How long the translation waits for the sound check before it starts without it. */
+    syncWaitMs?: number;
   };
   /** Test hooks: where the playing video is on Stremio's server, and which ffmpeg to use. */
   findStream?: (
@@ -186,6 +193,15 @@ const SOURCE_LOGIC_VERSION = 11;
 
 /** How long the "better subtitle is ready" notice stays on the main screen. */
 const UPGRADE_NOTICE_MS = 30 * 60_000;
+
+/** The translation starts without the sound check after this long (30 s); the check goes on in the background. */
+const SYNC_WAIT_MS = 30_000;
+
+/** The sound check, as the translation uses it: the moved source subtitle and the fit that moved it. */
+interface SoundFit {
+  source: ChosenSource;
+  fit: TimingFit;
+}
 
 /** The sound check gives up when the video sends no sound for this long (45 s). */
 const SYNC_NO_DATA_MS = 45_000;
@@ -808,7 +824,10 @@ export class JobManager {
       this.lastFailed = false;
       this.lastErrorCode = null;
       void this.record(job, job.result, log);
-      if (job.result.exact === false) void this.upgradeLater(job, log);
+      if (job.result.exact === false) {
+        void this.upgradeLater(job, log);
+        void this.upgradeFromSound(job, log);
+      }
       log.info(
         {
           stage: 'ASSEMBLY',
@@ -891,14 +910,7 @@ export class JobManager {
         { stage: 'ASSEMBLY', upgrade: 'done', via: result.via, cues: result.cues },
         'subtitle upgraded to the exact timing',
       );
-      const v = job.spec.video;
-      const notice = {
-        title: await this.titleFor(job),
-        ...(v.season !== undefined ? { season: v.season } : {}),
-        ...(v.episode !== undefined ? { episode: v.episode } : {}),
-      };
-      this.lastUpgrade = { ...notice, at: this.now() };
-      this.deps.onUpgraded?.(notice);
+      await this.announceUpgrade(job);
     } catch (err) {
       log.warn(
         { stage: 'SOURCE', upgrade: 'failed', errorCode: isAppError(err) ? err.code : 'UNKNOWN' },
@@ -906,6 +918,57 @@ export class JobManager {
       );
     } finally {
       this.release();
+    }
+  }
+
+  /** Tell the main screen and the desktop that a better subtitle replaced the shown one. */
+  private async announceUpgrade(job: Job): Promise<void> {
+    const v = job.spec.video;
+    const notice = {
+      title: await this.titleFor(job),
+      ...(v.season !== undefined ? { season: v.season } : {}),
+      ...(v.episode !== undefined ? { episode: v.episode } : {}),
+    };
+    this.lastUpgrade = { ...notice, at: this.now() };
+    this.deps.onUpgraded?.(notice);
+  }
+
+  /**
+   * The sound check was still listening when the translation started. If it finds how the timing
+   * is off, the finished subtitle is moved the same way (no new translation) and swapped in.
+   */
+  private async upgradeFromSound(job: Job, log: Logger): Promise<void> {
+    const pending = job.lateFit;
+    if (!pending) return;
+    let moved: SoundFit | undefined;
+    try {
+      moved = await pending;
+    } catch {
+      return;
+    }
+    const before = job.result;
+    if (!moved || !before || !this.canUpgrade(job)) return;
+    try {
+      const cues = parseSubtitle(before.content).cues;
+      const content = serializeSubtitle({ format: 'srt', cues: applyFit(cues, moved.fit) });
+      const result: JobResult = { ...before, content, exact: true, timing: 'speech' };
+      if (before.exactKey) this.safeSet(before.exactKey, 'translation', content, before.cues, log);
+      if (before.outKey && before.outKey !== before.exactKey) {
+        this.safeSet(before.outKey, 'translation', content, before.cues, log);
+      }
+      if (!this.canUpgrade(job)) return;
+      job.result = result;
+      void this.record(job, result, log);
+      log.info(
+        { stage: 'ASSEMBLY', upgrade: 'done', via: 'sound' },
+        'subtitle moved onto the speech in the background',
+      );
+      await this.announceUpgrade(job);
+    } catch (err) {
+      log.warn(
+        { stage: 'SOURCE', upgrade: 'failed', errorCode: isAppError(err) ? err.code : 'UNKNOWN' },
+        'could not move the subtitle after the sound check; it stays as it was',
+      );
     }
   }
 
@@ -1038,14 +1101,30 @@ export class JobManager {
         const moved = await this.skippable(
           job,
           'sync',
-          (wasSkipped) =>
-            this.fitToSpeech(job, cfg, log, picked, () => wasSkipped() || !!late.value),
+          (wasSkipped) => {
+            const fit = this.fitToSpeech(job, cfg, log, picked, () => wasSkipped() || !!late.value);
+            fit.catch(() => undefined);
+            // After a while the translation starts without it; the check goes on and may upgrade the subtitle.
+            const waitMs = this.deps.limits?.syncWaitMs ?? SYNC_WAIT_MS;
+            const timer = new Promise<undefined>((resolve) => {
+              const t = setTimeout(() => {
+                job.lateFit = fit;
+                log.info(
+                  { stage: 'SOURCE', sync: 'continues-in-background' },
+                  'translating now; the sound check goes on in the background',
+                );
+                resolve(undefined);
+              }, waitMs);
+              void fit.finally(() => clearTimeout(t));
+            });
+            return Promise.race([fit, timer]);
+          },
           undefined,
         );
         this.stopIfCancelled(job);
         if (moved) {
           placedOnSpeech = true;
-          chosen = moved;
+          chosen = moved.source;
         }
       }
       // The video's own subtitle came while the timing was being checked: it is exact, use it.
@@ -1082,6 +1161,8 @@ export class JobManager {
         via: 'direct',
         cues: parsed.cues.length,
         cacheKeys: [...keys],
+        outKey,
+        exactKey: jobKey,
         exact,
         timing,
       };
@@ -1226,6 +1307,8 @@ export class JobManager {
       via: 'translated',
       cues: result.file.cues.length,
       cacheKeys: [...keys],
+      outKey,
+      exactKey: jobKey,
       exact,
       timing,
     };
@@ -1241,7 +1324,7 @@ export class JobManager {
     log: Logger,
     picked: ChosenSource,
     wasSkipped: () => boolean,
-  ): Promise<ChosenSource | undefined> {
+  ): Promise<SoundFit | undefined> {
     const fit = this.deps.speechFit;
     const filename = job.spec.filename;
     const ffmpeg = this.deps.ffmpegFor
@@ -1294,9 +1377,12 @@ export class JobManager {
         'subtitle moved onto the speech',
       );
       return {
-        ...picked,
-        raw: serializeSubtitle({ format: 'srt', cues: applyFit(cues, result) }),
-        exact: true,
+        source: {
+          ...picked,
+          raw: serializeSubtitle({ format: 'srt', cues: applyFit(cues, result) }),
+          exact: true,
+        },
+        fit: result,
       };
     } catch {
       return undefined;

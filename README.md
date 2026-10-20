@@ -311,6 +311,12 @@ was. The **Skip** button on the main screen skips this step. Look for `subtitle 
 speech` or `timing left as it was` in the log (stage `SOURCE`). On real episodes the result was
 within about 0.1 second.
 
+The translation waits for this check for 30 seconds at most. If the check is still listening then
+(a torrent that sends its data slowly), the translation starts without it and the check goes on in
+the background. When it finishes and is sure, the finished subtitle is moved by the same amount
+(no new translation), swapped in, and a notice tells you to select the subtitle again in Stremio.
+If the video sends no sound for 45 seconds, the check gives up.
+
 ### Timing consensus (fewer out-of-sync subtitles)
 
 When there is no hash match, the subtitle timing may belong to another release of the video.

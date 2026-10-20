@@ -1121,6 +1121,51 @@ describe('timing from the sound of the video', () => {
     expect(s).toContain('HE:');
   });
 
+  it('translates after a while without the sound check, then moves the finished subtitle when it finishes', async () => {
+    const upgraded: unknown[] = [];
+    current = await start({
+      findStream: async () => stream,
+      subWaitMs: 50,
+      limits: { syncWaitMs: 40 },
+      onUpgraded: (item) => upgraded.push(item),
+      speechFit: async () => {
+        await new Promise((r) => setTimeout(r, 400));
+        return { scale: 1, offsetMs: 2000, score: 0.2, baseline: 0 };
+      },
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    const sub = ((await (await current.get(FILE_PATH)).json()) as SubsResponse).subtitles[0]!;
+    const path = new URL(sub.url).pathname;
+    const firstStart = (srt: string) => {
+      const m = /(\d\d):(\d\d):(\d\d),(\d\d\d) -->/.exec(srt);
+      return m
+        ? ((Number(m[1]) * 60 + Number(m[2])) * 60 + Number(m[3])) * 1000 + Number(m[4])
+        : -1;
+    };
+    let text = '';
+    for (let i = 0; i < 120 && !text.includes('HE:'); i++) {
+      text = await (await current.get(path)).text();
+      if (!text.includes('HE:')) await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(text).toContain('HE:'); // translated before the sound check was done
+    const before = firstStart(text);
+    let after = before;
+    for (let i = 0; i < 160 && after === before; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      after = firstStart(await (await current.get(path)).text());
+    }
+    expect(after - before).toBe(2000);
+    expect(upgraded).toHaveLength(1);
+    const status = (await (await current.get('/api/status')).json()) as { upgrade: unknown };
+    expect(status.upgrade).not.toBeNull();
+    let lib: { items: { timing?: string }[] } = { items: [] };
+    for (let i = 0; i < 40 && lib.items[0]?.timing !== 'speech'; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      lib = (await (await current.get('/api/library')).json()) as typeof lib;
+    }
+    expect(lib.items[0]?.timing).toBe('speech');
+  });
+
   it('gives up listening when the video sends no sound, and goes on with the subtitle', async () => {
     current = await start({
       findStream: async () => stream,
