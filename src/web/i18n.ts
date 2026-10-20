@@ -354,8 +354,8 @@ const S = {
     en: 'Remove speaker names and sound notes from subtitles',
   },
   cleanHint: {
-    he: 'למשל "קטארה:" או "(גונח)" בכתוביות שנכתבו גם לכבדי שמיעה. שורה שהיא רק הערת קול נמחקת.',
-    en: 'For example "KATARA:" or "(groans)" in subtitles made for the hard of hearing. A line that is only a sound note is removed.',
+    he: 'כתוביות שנכתבו גם לכבדי שמיעה כוללות שמות דוברים והערות קול. הן מוסרות לפני התרגום, ושורה שהיא רק הערת קול נמחקת.',
+    en: 'Subtitles made for the hard of hearing include speaker names and sound notes. They are removed before translation, and a line that is only a sound note is deleted.',
   },
   embHint: {
     he: 'מתאים בדיוק לקובץ שמנגן (בלי הפרשי תזמון ובלי הורדה). עובד עם טורנטים דרך Stremio.',
