@@ -126,7 +126,7 @@ export interface JobManagerDeps {
   cancelCooldownMs?: number;
   /** A finished job with guessed timing is checked again after this long (default 15 s). */
   refreshGuessAfterMs?: number;
-  /** A translation with no news for this long counts as stuck (default 30 s). */
+  /** A translation with no news for this long counts as stuck (default 12 s). */
   stallAfterMs?: number;
   /** Hard caps so one stuck step can never block the queue (defaults: 2 min 20 s, 2 min, 1 hour). */
   limits?: {
@@ -188,8 +188,8 @@ interface ChosenSource {
  */
 const SOURCE_LOGIC_VERSION = 10;
 
-/** A translation with no news for this long counts as stuck. */
-const STALL_AFTER_MS = 30_000;
+/** A translation with no news for this long counts as stuck (12 s). */
+const STALL_AFTER_MS = 12_000;
 
 /** Files compared for timing when there is no hash match. Each uncached one costs a download. */
 const CONSENSUS_POOL_SIZE = 3;

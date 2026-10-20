@@ -262,6 +262,8 @@ describe('local web server', () => {
       preview: string;
     };
     expect(body.ok).toBe(true);
-    expect(body.preview).toContain('00:00:01,000 --> 00:00:03,500');
+    expect(body.preview.trim().length).toBeGreaterThan(0);
+    expect(body.preview).not.toContain('-->'); // plain lines, not the raw SRT
+    expect(body.preview).not.toContain('<i>');
   });
 });

@@ -16,6 +16,7 @@ import {
 } from '../stremio/placeholder';
 import { SyncService } from '../sync/service';
 import { fitSubtitleToVideo } from '../sync/videoFit';
+import { pickSample, readableLines } from './sample';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { findLanguage, LANGUAGES } from '../config/languages';
 import type { Config } from '../config/env';
@@ -119,20 +120,6 @@ const KEY_ENV_NAMES = {
   openSubtitlesUsername: 'OPENSUBTITLES_USERNAME',
   openSubtitlesPassword: 'OPENSUBTITLES_PASSWORD',
 } as const;
-
-const SAMPLE_SRT = `1
-00:00:01,000 --> 00:00:03,500
-Good morning. Did you sleep well?
-
-2
-00:00:04,000 --> 00:00:06,000
-<i>Not really. Too much coffee.</i>
-
-3
-00:00:06,500 --> 00:00:09,000
-- Where are we going?
-- To the harbor.
-`;
 
 const MAX_SUBTITLE_BYTES = 2 * 1024 * 1024;
 
@@ -669,6 +656,7 @@ export function createApp(deps: ServerDeps): express.Express {
     log: Logger,
   ): Promise<{
     output: string;
+    lines: string;
     cues: number;
     tokens: { inputTokens: number; outputTokens: number };
   }> {
@@ -688,6 +676,7 @@ export function createApp(deps: ServerDeps): express.Express {
     });
     return {
       output: serializeSubtitle(result.file),
+      lines: readableLines(result.file.cues.map((cue) => cue.text)),
       cues: source.cues.length,
       tokens: result.usage,
     };
@@ -697,11 +686,11 @@ export function createApp(deps: ServerDeps): express.Express {
     const log = (res.locals.log as Logger).child({ route: 'dev-sample' });
     const c = current();
     try {
-      const r = await translateText(SAMPLE_SRT, c, log);
+      const r = await translateText(pickSample(), c, log);
       res.json({
         ok: true,
         message: `Translated ${r.cues} cues to ${c.targetLanguage}.`,
-        preview: r.output,
+        preview: r.lines,
       });
     } catch (err) {
       const e = isAppError(err) ? err : new AppError('PROVIDER_RESPONSE_INVALID');
