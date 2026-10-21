@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from '../src/config/env';
+import { loadConfig, secretValues } from '../src/config/env';
+import { effectiveConfig, parseSettingsUpdate } from '../src/config/settings';
 import { AppError } from '../src/errors';
 
 describe('loadConfig', () => {
@@ -12,6 +13,50 @@ describe('loadConfig', () => {
     expect(loadConfig({ RTL_FIX: 'false' }).rtlFix).toBe(false);
     expect(c.aiApiKey).toBe('');
     expect(c.dualSubtitles).toBe(false);
+    expect(c.partialSubtitles).toBe(true);
+    expect(loadConfig({ PARTIAL_SUBTITLES: 'false' }).partialSubtitles).toBe(false);
+  });
+
+  it('has the recommended developer settings by default, and reads the Jimaku key', () => {
+    const c = loadConfig({ JIMAKU_API_KEY: 'jk-abcdef-123456' });
+    expect(c).toMatchObject({
+      seasonPacks: true,
+      prefetchNext: false,
+      soundCheck: 'background',
+      embeddedWaitSec: 15,
+      embeddedMaxEtaSec: 60,
+      jimakuApiKey: 'jk-abcdef-123456',
+    });
+    expect(loadConfig({}).jimakuApiKey).toBe('');
+    expect(secretValues(c)).toContain('jk-abcdef-123456');
+  });
+
+  it('developer settings from settings.json replace the defaults, and bad ones are refused', () => {
+    const c = effectiveConfig(loadConfig({}), {
+      soundCheck: 'off',
+      seasonPacks: false,
+      prefetchNext: false,
+      embeddedWaitSec: 30,
+      embeddedMaxEtaSec: 0,
+    });
+    expect(c).toMatchObject({
+      soundCheck: 'off',
+      seasonPacks: false,
+      prefetchNext: false,
+      embeddedWaitSec: 30,
+      embeddedMaxEtaSec: 0,
+    });
+    for (const bad of [
+      { soundCheck: 'loud' },
+      { embeddedWaitSec: -1 },
+      { embeddedWaitSec: 1000 },
+      { embeddedMaxEtaSec: 1.5 },
+      { sourceOrder: ['subdl', 'nowhere'] },
+      { sourceOrder: ['subdl', 'opensubtitles', 'jimaku', 'subdl'] },
+    ]) {
+      expect(() => parseSettingsUpdate(bad)).toThrow();
+    }
+    expect(parseSettingsUpdate({ sourceOrder: [] })).toEqual({ sourceOrder: [] });
   });
 
   it('reads provided values', () => {

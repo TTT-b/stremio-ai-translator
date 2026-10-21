@@ -5,6 +5,7 @@ import type { Config } from '../config/env';
 import { findLanguage } from '../config/languages';
 import { AppError, isAppError } from '../errors';
 import type { Logger } from '../logging/logger';
+import type { SourceId } from '../sources/ordered';
 import { rankSameLanguage, selectSubtitle } from '../sources/select';
 import {
   findStream,
@@ -22,6 +23,7 @@ import { parseSubtitle } from '../subtitles/parse';
 import { serializeSubtitle } from '../subtitles/serialize';
 import type { ChunkCue } from '../subtitles/chunk';
 import { stripForeignScripts } from '../subtitles/validate';
+import { withPartialNotice } from '../stremio/placeholder';
 import type { Cue } from '../subtitles/types';
 import { CancelledError, translateSubtitle, type ChunkStore } from '../translation/pipeline';
 import { PROMPT_VERSION } from '../translation/prompts/v1';
@@ -34,9 +36,19 @@ export interface JobSpec {
   movieHash?: string;
   /** Video file name from Stremio `extra.filename`; used for the text-search fallback. */
   filename?: string;
+  /** The next episode, translated in the background while the current one plays. */
+  prefetch?: boolean;
+  /** Developer redo: take the subtitle only from this source, and ignore what was saved before. */
+  onlyProvider?: SourceId;
+  fresh?: boolean;
 }
 
+/** Where a subtitle came from, shown in the library so the sources can be compared. */
+export type SubtitleOrigin = 'subdl' | 'opensubtitles' | 'jimaku' | 'video';
+
 export interface JobResult {
+  /** The source subtitle: who gave it, in which language, and whether it was translated. */
+  source?: { provider: SubtitleOrigin; language: string; kind: 'direct' | 'translate' };
   /** Final SRT text. */
   content: string;
   via: 'direct' | 'translated' | 'cache';
@@ -80,6 +92,13 @@ export interface Job {
   lateFit?: Promise<SoundFit | undefined>;
   /** When the sound check last made progress (the video's data may not be arriving). */
   syncProgressAt?: number;
+  /**
+   * The translated start of a long subtitle, served while the rest is still being translated.
+   * Memory only: it is never cached or listed. `served` is set once Stremio was given it.
+   */
+  partial?: { cues: Cue[]; untilMs: number; served: boolean };
+  /** How the late sound check says the timing is off; applied to the partial when it is shown. */
+  lateMove?: TimingFit;
   /** Display name for the queue (filled in shortly after the job is created). */
   title?: string;
   /** Set when the user cancelled it; the translation stops before its next request. */
@@ -137,6 +156,8 @@ export interface JobManagerDeps {
     syncNoDataMs?: number;
     /** How long the translation waits for the sound check before it starts without it. */
     syncWaitMs?: number;
+    /** Files with fewer lines than this are never shown in parts (default 1000). */
+    partialMinTotalCues?: number;
   };
   /** Test hooks: where the playing video is on Stremio's server, and which ffmpeg to use. */
   findStream?: (
@@ -171,6 +192,8 @@ const JOB_ID = /^[0-9a-f]{32}$/;
 interface ChosenSource {
   kind: 'direct' | 'translate';
   language: string;
+  /** Where it came from: a source site, or the video file itself (a track or a file beside it). */
+  provider?: SubtitleOrigin;
   raw: string;
   /** Timing is known to match this exact video (its own subtitle, or a file-hash match). */
   exact: boolean;
@@ -191,6 +214,12 @@ interface ChosenSource {
  */
 const SOURCE_LOGIC_VERSION = 11;
 
+/** A translation is shown in parts only for files with at least this many lines. */
+const PARTIAL_MIN_TOTAL_CUES = 1000;
+
+/** The first part is shown once this share of the lines (from the start) is translated. */
+const PARTIAL_FRACTION = 0.25;
+
 /** How long the "better subtitle is ready" notice stays on the main screen. */
 const UPGRADE_NOTICE_MS = 30 * 60_000;
 
@@ -208,9 +237,6 @@ const SYNC_NO_DATA_MS = 45_000;
 
 /** A translation with no news for this long counts as stuck. */
 const STALL_AFTER_MS = 12_000;
-
-/** How long the job waits for the subtitle inside the video before it goes on without it. */
-const EMBEDDED_SOFT_MS = 15_000;
 
 /** Files compared for timing when there is no hash match. Each uncached one costs a download. */
 const CONSENSUS_POOL_SIZE = 3;
@@ -255,6 +281,13 @@ export function jobIdFor(spec: JobSpec, model: string, dual = false): string {
   }).slice(0, 32);
 }
 
+/** The `source` part of a result, when the chosen subtitle says where it came from. */
+function originOf(chosen: ChosenSource): Pick<JobResult, 'source'> {
+  return chosen.provider
+    ? { source: { provider: chosen.provider, language: chosen.language, kind: chosen.kind } }
+    : {};
+}
+
 /** Requests for the same episode in the same language are one thing to the user (Stremio asks twice). */
 function videoKey(spec: JobSpec): string {
   const v = spec.video;
@@ -288,6 +321,23 @@ export class JobManager {
     title: string;
     season?: number;
     episode?: number;
+    at: number;
+  } | null = null;
+  /** The subtitle Stremio took last (shown on the main screen for a while). */
+  private lastDelivered: {
+    title: string;
+    season?: number;
+    episode?: number;
+    via: string;
+    at: number;
+  } | null = null;
+  /** How the latest background sound check ended (shown on the main screen for a while). */
+  private lastSync: {
+    title: string;
+    season?: number;
+    episode?: number;
+    outcome: 'moved' | 'kept';
+    offsetMs?: number;
     at: number;
   } | null = null;
   /** Translations in progress, by translation cache key, so identical requests share one. */
@@ -605,6 +655,25 @@ export class JobManager {
     lastError: string | null;
     /** OpenSubtitles daily downloads: allowed and left, or null when not known (yet). */
     quota: { limit: number; left: number } | null;
+    /** The sound check that goes on beside the translation (or after it): how far it is, 0..100. */
+    backgroundSync: { percent: number; title: string; season?: number; episode?: number } | null;
+    /** The subtitle Stremio took last, for half an hour. */
+    lastDelivered: {
+      title: string;
+      season?: number;
+      episode?: number;
+      via: string;
+      at: number;
+    } | null;
+    /** How the latest background sound check ended, for half an hour. */
+    lastSync: {
+      title: string;
+      season?: number;
+      episode?: number;
+      outcome: 'moved' | 'kept';
+      offsetMs?: number;
+      at: number;
+    } | null;
     /** Downloads from SubDL this session. */
     subdlDownloads: number;
     /** A better subtitle replaced the shown one in the last half hour (Stremio needs a new selection). */
@@ -656,7 +725,31 @@ export class JobManager {
           ? { ...this.lastUpgrade }
           : null,
       subdlDownloads: this.subdlDownloads,
+      backgroundSync: this.backgroundSync(),
+      lastDelivered:
+        this.lastDelivered && this.now() - this.lastDelivered.at < UPGRADE_NOTICE_MS
+          ? { ...this.lastDelivered }
+          : null,
+      lastSync:
+        this.lastSync && this.now() - this.lastSync.at < UPGRADE_NOTICE_MS
+          ? { ...this.lastSync }
+          : null,
       queue: this.queue(),
+    };
+  }
+
+  /** A sound check that is listening while the job is already translating (or done). */
+  private backgroundSync(): ReturnType<JobManager['stats']>['backgroundSync'] {
+    const job = [...this.jobs.values()].find(
+      (j) => j.syncPercent !== undefined && j.stage !== 'sync' && j.lateFit !== undefined,
+    );
+    if (!job) return null;
+    const v = job.spec.video;
+    return {
+      percent: Math.max(0, Math.min(100, Math.round(job.syncPercent ?? 0))),
+      title: job.title ?? '',
+      ...(v.season !== undefined ? { season: v.season } : {}),
+      ...(v.episode !== undefined ? { episode: v.episode } : {}),
     };
   }
 
@@ -719,6 +812,7 @@ export class JobManager {
         createdAt: this.now(),
         keys: result.cacheKeys.slice(0, 5000),
         ...(result.timing ? { timing: result.timing } : {}),
+        ...(result.source ? { source: result.source } : {}),
         ...(job.spec.filename ? { filename: job.spec.filename.slice(0, 300) } : {}),
       });
     } catch {
@@ -761,6 +855,24 @@ export class JobManager {
   }
 
   /** Wait until the job settles or `ms` elapses. Never throws. */
+  /**
+   * The subtitle to give Stremio while the translation is still running (or stopped half way):
+   * the translated start plus a note line. Undefined when there is no part yet.
+   */
+  partialSrt(job: Job, lang: 'he' | 'en', stopped: boolean): string | undefined {
+    const part = job.partial;
+    if (!part) return undefined;
+    let cues = part.cues;
+    let untilMs = part.untilMs;
+    if (job.lateMove) {
+      cues = applyFit(cues, job.lateMove);
+      const tail = applyFit([{ index: 0, startMs: 0, endMs: untilMs, text: '' }], job.lateMove)[0];
+      untilMs = tail?.endMs ?? untilMs;
+    }
+    part.served = true;
+    return withPartialNotice(cues, untilMs, lang, stopped);
+  }
+
   async waitFor(job: Job, ms: number): Promise<void> {
     if (job.status !== 'running') return;
     await Promise.race([
@@ -821,13 +933,19 @@ export class JobManager {
       }
       job.result = outcome;
       job.status = 'done';
-      this.lastFailed = false;
-      this.lastErrorCode = null;
+      const partialWasShown = job.partial?.served === true;
+      delete job.partial;
+      if (!job.spec.prefetch) {
+        this.lastFailed = false;
+        this.lastErrorCode = null;
+      }
       void this.record(job, job.result, log);
+      this.prefetchNext(job, log);
       if (job.result.exact === false) {
         void this.upgradeLater(job, log);
         void this.upgradeFromSound(job, log);
       }
+      if (partialWasShown) void this.announceUpgrade(job, true);
       log.info(
         {
           stage: 'ASSEMBLY',
@@ -840,14 +958,18 @@ export class JobManager {
     } catch (err) {
       if (err instanceof CancelledError) {
         job.status = 'cancelled';
+        delete job.partial;
         log.info({ stage: 'ASSEMBLY', durationMs: this.now() - started }, 'job cancelled');
       } else {
         job.error = isAppError(err)
           ? err
           : new AppError('SOURCE_DOWNLOAD_FAILED', 'unexpected error');
         job.status = 'failed';
-        this.lastFailed = true;
-        this.lastErrorCode = job.error.code;
+        // The next episode is only a head start: when it fails the user is told nothing.
+        if (!job.spec.prefetch) {
+          this.lastFailed = true;
+          this.lastErrorCode = job.error.code;
+        }
         log.warn(
           { errorCode: job.error.code, durationMs: this.now() - started, ...job.error.details },
           'job failed',
@@ -858,6 +980,54 @@ export class JobManager {
       job.finishedAt = this.now();
       this.release();
     }
+  }
+
+  /**
+   * While one episode of a series is on, the next one is translated in the background, so it is
+   * ready when the user gets to it. It uses the same sources and caches as a real request (no video
+   * file yet, so no look inside it) and never chains on to the one after.
+   */
+  private prefetchNext(job: Job, log: Logger): void {
+    const cfg = this.deps.config();
+    const v = job.spec.video;
+    if (job.spec.prefetch || !cfg.prefetchNext || cfg.translationMode !== 'auto') return;
+    if (this.deps.testMode?.() || v.type !== 'series' || v.episode === undefined) return;
+    const next: JobSpec = {
+      video: { ...v, episode: v.episode + 1 },
+      targetLanguage: job.spec.targetLanguage,
+      prefetch: true,
+    };
+    const key = videoKey(next);
+    if ([...this.jobs.values()].some((j) => videoKey(j.spec) === key)) return;
+    log.info(
+      { stage: 'SOURCE', prefetch: 'start', nextEpisode: next.video.episode },
+      'translating the next episode in the background',
+    );
+    this.ensure(next);
+  }
+
+  /**
+   * Developer tool: make a saved subtitle again from scratch, taking the source subtitle only from
+   * one provider. The saved result is replaced; the translation of identical text is still reused.
+   */
+  redo(id: string, only: SourceId): boolean {
+    if (!isJobId(id)) return false;
+    const current = this.jobs.get(id);
+    if (current && (current.status === 'running' || current.status === 'pending')) return false;
+    let spec: JobSpec;
+    try {
+      spec = JSON.parse(readFileSync(join(this.deps.jobsDir, `${id}.json`), 'utf8')) as JobSpec;
+    } catch {
+      return false;
+    }
+    const plain: JobSpec = { ...spec };
+    delete plain.onlyProvider;
+    delete plain.fresh;
+    this.jobs.delete(id);
+    this.ensure({ ...plain, onlyProvider: only, fresh: true }, false, true);
+    // What is kept on disk (for a restart) is the plain request, so the redo happens only once.
+    this.saveSpec(id, plain);
+    return true;
   }
 
   /** A finished subtitle whose timing is only a guess, and that is still the current one. */
@@ -922,13 +1092,25 @@ export class JobManager {
   }
 
   /** Tell the main screen and the desktop that a better subtitle replaced the shown one. */
-  private async announceUpgrade(job: Job): Promise<void> {
+  private async announceUpgrade(job: Job, once = false): Promise<void> {
     const v = job.spec.video;
     const notice = {
       title: await this.titleFor(job),
       ...(v.season !== undefined ? { season: v.season } : {}),
       ...(v.episode !== undefined ? { episode: v.episode } : {}),
     };
+    // Stremio's two requests for one episode finish together: tell the user once.
+    const last = this.lastUpgrade;
+    if (
+      once &&
+      last &&
+      this.now() - last.at < 60_000 &&
+      last.title === notice.title &&
+      last.season === notice.season &&
+      last.episode === notice.episode
+    ) {
+      return;
+    }
     this.lastUpgrade = { ...notice, at: this.now() };
     this.deps.onUpgraded?.(notice);
   }
@@ -947,6 +1129,7 @@ export class JobManager {
       return;
     }
     const before = job.result;
+    if (!moved) void this.noteSync(job, 'kept');
     if (!moved || !before || !this.canUpgrade(job)) return;
     try {
       const cues = parseSubtitle(before.content).cues;
@@ -963,6 +1146,7 @@ export class JobManager {
         { stage: 'ASSEMBLY', upgrade: 'done', via: 'sound' },
         'subtitle moved onto the speech in the background',
       );
+      void this.noteSync(job, 'moved', moved.fit.offsetMs);
       await this.announceUpgrade(job);
     } catch (err) {
       log.warn(
@@ -972,12 +1156,59 @@ export class JobManager {
     }
   }
 
+  /** Remember that Stremio took a finished subtitle, for the main screen. */
+  async noteDelivered(job: Job): Promise<void> {
+    if (job.status !== 'done' || !job.result || job.spec.prefetch) return;
+    const v = job.spec.video;
+    this.lastDelivered = {
+      title: await this.titleFor(job),
+      ...(v.season !== undefined ? { season: v.season } : {}),
+      ...(v.episode !== undefined ? { episode: v.episode } : {}),
+      via: job.result.via,
+      at: this.now(),
+    };
+  }
+
+  /** Remember how the background sound check ended, for the main screen. */
+  private async noteSync(job: Job, outcome: 'moved' | 'kept', offsetMs?: number): Promise<void> {
+    const v = job.spec.video;
+    this.lastSync = {
+      title: await this.titleFor(job),
+      ...(v.season !== undefined ? { season: v.season } : {}),
+      ...(v.episode !== undefined ? { episode: v.episode } : {}),
+      outcome,
+      ...(offsetMs !== undefined ? { offsetMs } : {}),
+      at: this.now(),
+    };
+  }
+
   /** After the user cancelled, stop at the next step instead of finishing the whole lookup. */
   private stopIfCancelled(job: Job): void {
     if (job.cancelled) throw new CancelledError();
   }
 
+  /** Where a prefetched episode leaves its mark, so the real request for it can skip the long waits. */
+  private prefetchKey(spec: JobSpec, cfg: Config): string {
+    const lang = findLanguage(spec.targetLanguage);
+    return cacheKey({
+      video: videoKey(spec),
+      rtl: cfg.rtlFix && !!lang?.rtl,
+      ...(cfg.dualSubtitles ? { dual: true } : {}),
+      ...(cfg.cleanSubtitles ? { clean: true } : {}),
+      sourceLogic: SOURCE_LOGIC_VERSION,
+      kind: 'prefetch',
+    });
+  }
+
   private async run(job: Job, log: Logger, preset?: ChosenSource): Promise<JobResult> {
+    const result = await this.runJob(job, log, preset);
+    if (job.spec.prefetch) {
+      this.safeSet(this.prefetchKey(job.spec, this.deps.config()), 'source', '1', 0, log);
+    }
+    return result;
+  }
+
+  private async runJob(job: Job, log: Logger, preset?: ChosenSource): Promise<JobResult> {
     const cfg = this.deps.config();
     const { cache } = this.deps;
     const lang = findLanguage(job.spec.targetLanguage);
@@ -1008,7 +1239,8 @@ export class JobManager {
     });
     // Everything deleted together with this subtitle if the user removes it from the library.
     const keys = new Set<string>([jobKey, fallbackKey]);
-    const hit = cache.get(jobKey);
+    const fresh = job.spec.fresh === true;
+    const hit = fresh ? undefined : cache.get(jobKey);
     if (hit) {
       job.progress = { done: hit.cues, total: hit.cues };
       return {
@@ -1019,7 +1251,12 @@ export class JobManager {
         exact: true,
       };
     }
-    const fallback = tryLocal ? cache.get(fallbackKey) : undefined;
+    const fallback = tryLocal && !fresh ? cache.get(fallbackKey) : undefined;
+    // The next episode was translated in the background: only the downloaded subtitle is needed again.
+    const prefetched = !fresh && cache.get(this.prefetchKey(job.spec, cfg)) !== undefined;
+    const embeddedSoftMs =
+      this.deps.limits?.embeddedSoftMs ??
+      (prefetched ? Math.min(cfg.embeddedWaitSec * 1000, 3000) : cfg.embeddedWaitSec * 1000);
 
     // 2. Find the best subtitle: the one inside the playing video file first (exact timing, no
     // download), then OpenSubtitles.
@@ -1030,42 +1267,44 @@ export class JobManager {
     const late: { value?: ChosenSource } = {};
     let chosen =
       preset ??
-      (await this.skippable(
-        job,
-        'local',
-        (wasSkipped) => {
-          const attempt = withCap(
-            this.embeddedSource(
-              job,
-              cfg,
-              lang.code,
-              log,
-              !!fallback || this.episodeServed(job),
-              wasSkipped,
-            ),
-            this.deps.limits?.embeddedCapMs ?? 140_000, // one try is 30 s; a loading video gets up to 2 min
-            () => {
-              log.warn({ stage: 'SOURCE', embedded: 'cap' }, 'embedded lookup took too long');
-              return undefined;
+      (job.spec.onlyProvider
+        ? undefined
+        : await this.skippable(
+            job,
+            'local',
+            (wasSkipped) => {
+              const attempt = withCap(
+                this.embeddedSource(
+                  job,
+                  cfg,
+                  lang.code,
+                  log,
+                  !!fallback || prefetched || this.episodeServed(job),
+                  wasSkipped,
+                ),
+                this.deps.limits?.embeddedCapMs ?? 140_000, // one try is 30 s; a loading video gets up to 2 min
+                () => {
+                  log.warn({ stage: 'SOURCE', embedded: 'cap' }, 'embedded lookup took too long');
+                  return undefined;
+                },
+              );
+              job.lateEmbedded = attempt;
+              void attempt.then(
+                (found) => {
+                  if (found) late.value = found;
+                },
+                () => undefined,
+              );
+              return withCap(attempt, embeddedSoftMs, () => {
+                log.info(
+                  { stage: 'SOURCE', embedded: 'soft-limit' },
+                  'not waiting longer for the video',
+                );
+                return undefined;
+              });
             },
-          );
-          job.lateEmbedded = attempt;
-          void attempt.then(
-            (found) => {
-              if (found) late.value = found;
-            },
-            () => undefined,
-          );
-          return withCap(attempt, this.deps.limits?.embeddedSoftMs ?? EMBEDDED_SOFT_MS, () => {
-            log.info(
-              { stage: 'SOURCE', embedded: 'soft-limit' },
-              'not waiting longer for the video',
-            );
-            return undefined;
-          });
-        },
-        undefined,
-      ));
+            undefined,
+          ));
     this.stopIfCancelled(job);
     if (!chosen && fallback) {
       // Still not available: keep what OpenSubtitles gave last time.
@@ -1095,7 +1334,13 @@ export class JobManager {
         chosen = late.value;
       }
       // No exact timing: listen to a few short pieces of the video and move the subtitle onto them.
-      if (!placedOnSpeech && !chosen.exact && this.deps.speechFit && job.spec.filename) {
+      if (
+        !placedOnSpeech &&
+        !chosen.exact &&
+        cfg.soundCheck !== 'off' &&
+        this.deps.speechFit &&
+        job.spec.filename
+      ) {
         job.stage = 'sync';
         const picked = chosen;
         const moved = await this.skippable(
@@ -1105,10 +1350,17 @@ export class JobManager {
             const fit = this.fitToSpeech(job, cfg, log, picked, () => wasSkipped() || !!late.value);
             fit.catch(() => undefined);
             // After a while the translation starts without it; the check goes on and may upgrade the subtitle.
-            const waitMs = this.deps.limits?.syncWaitMs ?? SYNC_WAIT_MS;
+            const waitMs =
+              this.deps.limits?.syncWaitMs ?? (cfg.soundCheck === 'wait' ? SYNC_WAIT_MS : 0);
             const timer = new Promise<undefined>((resolve) => {
               const t = setTimeout(() => {
                 job.lateFit = fit;
+                void fit.then(
+                  (moved) => {
+                    if (moved) job.lateMove = moved.fit;
+                  },
+                  () => undefined,
+                );
                 log.info(
                   { stage: 'SOURCE', sync: 'continues-in-background' },
                   'translating now; the sound check goes on in the background',
@@ -1122,6 +1374,8 @@ export class JobManager {
           undefined,
         );
         this.stopIfCancelled(job);
+        // Finished inside the wait (not left running in the background): tell the main screen.
+        if (!job.lateFit) void this.noteSync(job, moved ? 'moved' : 'kept', moved?.fit.offsetMs);
         if (moved) {
           placedOnSpeech = true;
           chosen = moved.source;
@@ -1157,6 +1411,7 @@ export class JobManager {
       this.safeSet(outKey, 'translation', content, parsed.cues.length, log);
       job.progress = { done: parsed.cues.length, total: parsed.cues.length };
       return {
+        ...originOf(chosen),
         content,
         via: 'direct',
         cues: parsed.cues.length,
@@ -1199,6 +1454,7 @@ export class JobManager {
       this.safeSet(outKey, 'translation', cached.content, cached.cues, log);
       job.progress = { done: parsed.cues.length, total: parsed.cues.length };
       return {
+        ...originOf(chosen),
         content: cached.content,
         via: 'cache',
         cues: cached.cues,
@@ -1243,6 +1499,7 @@ export class JobManager {
     if (sharing) {
       watchers.add(job);
       if (sharing.lead.progress) job.progress = { ...sharing.lead.progress };
+      if (sharing.lead.partial) job.partial = { ...sharing.lead.partial, served: false };
     }
     const kicks = sharing?.kicks ?? new Set<() => void>();
     job.kick = () => {
@@ -1251,9 +1508,23 @@ export class JobManager {
       job.progressAt = this.now();
       return waiting.length;
     };
+    const showParts =
+      cfg.partialSubtitles &&
+      parsed.cues.length >= (this.deps.limits?.partialMinTotalCues ?? PARTIAL_MIN_TOTAL_CUES);
+    const untilMs = parsed.cues[parsed.cues.length - 1]?.endMs ?? 0;
     const work =
       sharing?.work ??
       translateSubtitle(parsed, provider, {
+        ...(showParts
+          ? {
+              partialMinCues: Math.ceil(parsed.cues.length * PARTIAL_FRACTION),
+              onPartial: (cues: Cue[]) => {
+                for (const w of watchers) {
+                  w.partial = { cues, untilMs, served: w.partial?.served ?? false };
+                }
+              },
+            }
+          : {}),
         chunkStore,
         targetLanguageCode: lang.code,
         targetLanguageName: lang.name,
@@ -1303,6 +1574,7 @@ export class JobManager {
     }
     keys.add(trKey);
     return {
+      ...originOf(chosen),
       content,
       via: 'translated',
       cues: result.file.cues.length,
@@ -1413,13 +1685,14 @@ export class JobManager {
         logger: log,
         // A recheck (a guessed-timing subtitle was already served) tries once, without the long wait.
         ...(quick ? { waitMs: 0, retryBudgetMs: 0 } : {}),
+        maxEtaSec: cfg.embeddedMaxEtaSec,
         shouldStop: () => !!job.cancelled || wasSkipped(),
         ...(this.deps.fetchImpl ? { fetchImpl: this.deps.fetchImpl } : {}),
       },
     );
     if (!found) return undefined;
     const kind = found.language.toLowerCase() === target.toLowerCase() ? 'direct' : 'translate';
-    return { kind, language: found.language, raw: found.raw, exact: true };
+    return { kind, language: found.language, provider: 'video', raw: found.raw, exact: true };
   }
 
   /** The best subtitle OpenSubtitles has: search, timing consensus, then download. */
@@ -1429,13 +1702,13 @@ export class JobManager {
     target: string,
     log: Logger,
     /** Take the best subtitle in this language even if the target language has one. */
-    forceLanguage?: string,
+    forceLanguage: string | undefined = undefined,
   ): Promise<ChosenSource> {
     const { cache } = this.deps;
     const lang = { code: target };
     const source = this.deps.makeSource(cfg, log);
     await this.refreshQuota(); // at most every 10 minutes; a failure changes nothing
-    const candidates = await source.search({
+    const found = await source.search({
       video: job.spec.video,
       languages: [...new Set([lang.code, 'en'])],
       ...(job.spec.movieHash ? { movieHash: job.spec.movieHash } : {}),
@@ -1446,6 +1719,11 @@ export class JobManager {
         ...(this.deps.fetchImpl ? { fetchImpl: this.deps.fetchImpl } : {}),
       }),
     });
+    // A developer redo takes the subtitle from one source only.
+    const only = job.spec.onlyProvider;
+    // Developer option: translate from English even when a ready subtitle in the language exists.
+    if (cfg.preferTranslation && forceLanguage === undefined) forceLanguage = 'en';
+    const candidates = only ? found.filter((c) => (c.provider ?? 'opensubtitles') === only) : found;
     let selection = selectSubtitle(candidates, lang.code);
     const forced = forceLanguage ? rankSameLanguage(candidates, forceLanguage)[0] : undefined;
     if (forced) {
@@ -1470,6 +1748,8 @@ export class JobManager {
       const key = cacheKey({
         provider: c.provider ?? 'opensubtitles',
         fileId: c.fileId,
+        // A season pack is one download but holds one subtitle per episode.
+        ...(c.pack ? { pack: c.episode ?? 0 } : {}),
         kind: 'source',
       });
       const known = cache.get(key)?.content;
@@ -1488,17 +1768,17 @@ export class JobManager {
     // Only when OpenSubtitles has said plenty are left (a free account has few per day): the
     // first subtitle of a session never triggers it, so an account is never drained blindly.
     // The OpenSubtitles daily limit is the one being protected, so only its files are compared.
-    const isSubdl = (c: SubtitleCandidate) => c.provider === 'subdl';
+    const isMain = (c: SubtitleCandidate) => (c.provider ?? 'opensubtitles') === 'opensubtitles';
     if (
       !candidate.hashMatch &&
-      !isSubdl(candidate) &&
+      isMain(candidate) &&
       this.downloadsLeft !== undefined &&
       this.downloadsLeft >= CONSENSUS_MIN_LEFT
     ) {
-      const pool = rankSameLanguage(
-        candidates.filter((c) => !isSubdl(c)),
-        candidate.language,
-      ).slice(0, CONSENSUS_POOL_SIZE);
+      const pool = rankSameLanguage(candidates.filter(isMain), candidate.language).slice(
+        0,
+        CONSENSUS_POOL_SIZE,
+      );
       if (pool.length >= 3) {
         const loaded: ConsensusItem<SubtitleCandidate>[] = [];
         for (const c of pool) {
@@ -1524,25 +1804,43 @@ export class JobManager {
         }
       }
     }
-    // 3b. When OpenSubtitles has no downloads left, use the second provider's file instead.
-    const spare = () => rankSameLanguage(candidates.filter(isSubdl), candidate.language)[0];
-    if (this.downloadsLeft === 0 && !isSubdl(candidate)) candidate = spare() ?? candidate;
+    // 3b. When OpenSubtitles has no downloads left, use another source's file instead.
+    const spare = () =>
+      rankSameLanguage(
+        candidates.filter((c) => !isMain(c)),
+        candidate.language,
+      )[0];
+    if (this.downloadsLeft === 0 && isMain(candidate)) candidate = spare() ?? candidate;
     let raw: string;
     try {
       raw = await fetchRaw(candidate);
     } catch (err) {
+      const failed = candidate;
+      // A season pack may not hold this episode: then a single-episode file is the next choice.
+      const packMiss = isAppError(err) && err.code === 'SOURCE_SUBTITLE_NOT_FOUND' && failed.pack;
       const alt =
-        isAppError(err) && err.code === 'SOURCE_QUOTA_EXCEEDED' && !isSubdl(candidate)
+        isAppError(err) && err.code === 'SOURCE_QUOTA_EXCEEDED' && isMain(failed)
           ? spare()
-          : undefined;
+          : packMiss
+            ? rankSameLanguage(
+                candidates.filter((c) => c !== failed && !c.pack),
+                failed.language,
+              )[0]
+            : undefined;
       if (!alt) throw err;
-      log.info({ stage: 'SOURCE', provider: 'subdl' }, 'OpenSubtitles limit reached, using SubDL');
+      log.info(
+        { stage: 'SOURCE', provider: alt.provider },
+        packMiss
+          ? 'the season pack has no file for this episode, using another file'
+          : 'OpenSubtitles limit reached, using another source',
+      );
       candidate = alt;
       raw = await fetchRaw(candidate);
     }
     return {
       kind: selection.kind,
       language: candidate.language,
+      provider: candidate.provider ?? 'opensubtitles',
       raw,
       exact: candidate.hashMatch,
     };

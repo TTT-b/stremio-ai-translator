@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../src/errors';
-import { FallbackSource } from '../src/sources/fallback';
+import { OrderedSource } from '../src/sources/ordered';
 import { SubdlProvider } from '../src/sources/subdl/provider';
 import type {
   SourceSubtitleProvider,
@@ -24,8 +24,8 @@ function fake(routes: (url: URL) => Response | Promise<Response>) {
   return { f, urls };
 }
 
-const provider = (f: typeof fetch) =>
-  new SubdlProvider({ apiKey: 'key-123456', logger: silentLogger(), fetchImpl: f });
+const provider = (f: typeof fetch, o: { seasonPacks?: boolean } = {}) =>
+  new SubdlProvider({ apiKey: 'key-123456', logger: silentLogger(), fetchImpl: f, ...o });
 
 const episode: SubtitleQuery = {
   video: {
@@ -89,7 +89,7 @@ describe('SubDL provider', () => {
     });
   });
 
-  it('skips season packs, other episodes and odd download paths', async () => {
+  it('skips other episodes and odd download paths, and season packs when they are switched off', async () => {
     const { f } = fake(() =>
       json({
         status: true,
@@ -101,9 +101,85 @@ describe('SubDL provider', () => {
         ],
       }),
     );
-    const found = await provider(f).search({ ...episode, languages: ['en'] });
+    const found = await provider(f, { seasonPacks: false }).search({
+      ...episode,
+      languages: ['en'],
+    });
     expect(found).toHaveLength(1);
     expect(found[0]!.fileName).toBe('ok.zip');
+  });
+
+  it('keeps the API key SubDL appends to some links out of the candidate', async () => {
+    const { f } = fake(() =>
+      json({
+        status: true,
+        subtitles: [
+          sub({ url: '/subtitle/1-2.zip?api_key=SECRET-KEY-VALUE', name: 'a.zip' }),
+          sub({
+            full_season: true,
+            url: '/subtitle/3-4.zip?api_key=SECRET-KEY-VALUE',
+            name: 'p.zip',
+          }),
+        ],
+      }),
+    );
+    const found = await provider(f).search({ ...episode, languages: ['en'] });
+    expect(found.map((c) => c.downloadPath)).toEqual(['/subtitle/1-2.zip', '/subtitle/3-4.zip']);
+    expect(JSON.stringify(found)).not.toContain('SECRET-KEY-VALUE');
+  });
+
+  it('lists a season pack as a pack of the wanted episode (even when SubDL names another episode)', async () => {
+    const { f } = fake(() =>
+      json({
+        status: true,
+        subtitles: [
+          sub({ full_season: true, episode: 1, url: '/subtitle/9-8.zip', name: 'Show.S02.pack' }),
+          sub({ url: '/subtitle/1-2.zip', name: 'single.zip' }),
+        ],
+      }),
+    );
+    const found = await provider(f).search({ ...episode, languages: ['en'] });
+    expect(found.map((c) => [c.fileName, c.pack ?? false])).toEqual([
+      ['Show.S02.pack', true],
+      ['single.zip', false],
+    ]);
+    expect(found[0]).toMatchObject({ season: 2, episode: 5 });
+    // A pack needs a known episode: for a movie it is left out.
+    const movie = await provider(f).search({
+      video: { type: 'movie', idKind: 'imdb', externalId: 'tt1', imdbId: 'tt1' },
+      languages: ['en'],
+    });
+    expect(movie.some((c) => c.pack)).toBe(false);
+  });
+
+  it('downloads the right episode out of a season pack, and says so when it is not inside', async () => {
+    const zip = makeZip({
+      'Show.S02E04.en.srt': '1\n00:00:01,000 --> 00:00:02,000\nfour\n',
+      'Show.S02E05.en.srt': '1\n00:00:01,000 --> 00:00:02,000\nfive\n',
+      'Show.S02E15.en.srt': '1\n00:00:01,000 --> 00:00:02,000\nfifteen\n',
+    });
+    const { f } = fake(() => new Response(new Uint8Array(zip)));
+    const pack = {
+      fileId: 8,
+      language: 'en',
+      fileName: 'pack',
+      downloadCount: 0,
+      rating: 0,
+      hashMatch: false,
+      hearingImpaired: false,
+      machineTranslated: false,
+      provider: 'subdl' as const,
+      downloadPath: '/subtitle/9-8.zip',
+      pack: true,
+      season: 2,
+      episode: 5,
+    };
+    const got = await provider(f).download(pack);
+    expect(got.content).toContain('five');
+    expect(got.fileName).toBe('Show.S02E05.en.srt');
+    await expect(provider(f).download({ ...pack, episode: 9 })).rejects.toMatchObject({
+      code: 'SOURCE_SUBTITLE_NOT_FOUND',
+    });
   });
 
   it('text search keeps results only when the title agrees', async () => {
@@ -182,7 +258,7 @@ describe('SubDL provider', () => {
   });
 });
 
-describe('FallbackSource', () => {
+describe('OrderedSource', () => {
   const c = (id: number, provider?: 'subdl'): SubtitleCandidate => ({
     fileId: id,
     language: 'en',
@@ -210,42 +286,54 @@ describe('FallbackSource', () => {
     };
     return s;
   };
+  const os = (p: SourceSubtitleProvider) => ({ id: 'opensubtitles' as const, provider: p });
+  const sd = (p: SourceSubtitleProvider) => ({ id: 'subdl' as const, provider: p });
 
-  it('lists both providers and downloads from the one a candidate came from', async () => {
+  it('lists every provider, remembers the order, and downloads from the one a candidate came from', async () => {
     const a = source('os', async () => [c(1)]);
     const b = source('sd', async () => [c(2, 'subdl')]);
-    const both = new FallbackSource(a, b);
+    const both = new OrderedSource([sd(b), os(a)]);
     const found = await both.search(episode);
-    expect(found.map((x) => x.fileId)).toEqual([1, 2]);
-    expect((await both.download(found[1]!)).content).toBe('sd');
-    expect((await both.download(found[0]!)).content).toBe('os');
+    expect(found.map((x) => [x.fileId, x.providerRank])).toEqual([
+      [2, 0],
+      [1, 1],
+    ]);
+    expect((await both.download(found[0]!)).content).toBe('sd');
+    expect((await both.download(found[1]!)).content).toBe('os');
   });
 
-  it('never lets the second provider fail a search, and covers a failing first one', async () => {
+  it('never lets a secondary provider fail a search, and covers a failing main one', async () => {
     const boom = async (): Promise<SubtitleCandidate[]> => {
       throw new AppError('SOURCE_DOWNLOAD_FAILED');
     };
     const ok = source('os', async () => [c(1)]);
-    expect(await new FallbackSource(ok, source('sd', boom)).search(episode)).toHaveLength(1);
+    expect(await new OrderedSource([os(ok), sd(source('sd', boom))]).search(episode)).toHaveLength(
+      1,
+    );
     const second = source('sd', async () => [c(2, 'subdl')]);
-    expect(await new FallbackSource(source('os', boom), second).search(episode)).toHaveLength(1);
+    expect(
+      await new OrderedSource([os(source('os', boom)), sd(second)]).search(episode),
+    ).toHaveLength(1);
+    // OpenSubtitles failed and nothing else found anything: the failure is the reason.
     await expect(
-      new FallbackSource(
-        source('os', boom),
-        source('sd', async () => []),
-      ).search(episode),
+      new OrderedSource([os(source('os', boom)), sd(source('sd', async () => []))]).search(episode),
     ).rejects.toBeInstanceOf(AppError);
+    // The other way round it is just "nothing found".
+    expect(
+      await new OrderedSource([os(source('os', async () => [])), sd(source('sd', boom))]).search(
+        episode,
+      ),
+    ).toEqual([]);
   });
 
-  it('with preferSecond, asks the second provider first and the first only when it has nothing', async () => {
-    const os = source('os', async () => [c(1)]);
-    const sd = source('sd', async () => [c(2, 'subdl')]);
-    expect((await new FallbackSource(os, sd, true).search(episode)).map((x) => x.fileId)).toEqual([
-      2,
-    ]);
-    const empty = source('sd', async () => []);
-    expect(
-      (await new FallbackSource(os, empty, true).search(episode)).map((x) => x.fileId),
-    ).toEqual([1]);
+  it('asks every provider (a search costs no download)', async () => {
+    let asked = 0;
+    const counting = (name: string) =>
+      source(name, async () => {
+        asked++;
+        return [];
+      });
+    await new OrderedSource([sd(counting('sd')), os(counting('os'))]).search(episode);
+    expect(asked).toBe(2);
   });
 });

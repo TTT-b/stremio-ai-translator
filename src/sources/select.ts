@@ -5,11 +5,21 @@ export type Selection =
   | { kind: 'translate'; candidate: SubtitleCandidate }
   | { kind: 'none' };
 
-/** Higher is better: hash match, human-made, not hearing-impaired, then popularity/rating. */
+/** How much one place in the user's source order is worth: more than any quality term below. */
+const RANK_STEP = 2_000_000;
+const MAX_RANKS = 3;
+
+/**
+ * Higher is better: hash match (exact timing), the user's source order, human-made, a single
+ * episode over a season pack, not hearing-impaired, then popularity/rating.
+ */
 export function score(c: SubtitleCandidate): number {
+  const rank = Math.min(c.providerRank ?? MAX_RANKS - 1, MAX_RANKS - 1);
   return (
-    (c.hashMatch ? 1_000_000 : 0) +
+    (c.hashMatch ? 100_000_000 : 0) +
+    (MAX_RANKS - 1 - rank) * RANK_STEP +
     (c.machineTranslated ? 0 : 100_000) +
+    (c.pack ? 0 : 50_000) +
     (c.hearingImpaired ? 0 : 10_000) +
     Math.min(c.downloadCount, 9_999) +
     Math.min(Math.max(c.rating, 0), 10) * 100

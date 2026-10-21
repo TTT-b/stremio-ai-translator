@@ -228,11 +228,83 @@ Optional. Save a free API key from subdl.com in **Settings > SubDL API key**. Th
 looks for subtitles on SubDL (free, up to 300 downloads a day per IP) and uses them when
 OpenSubtitles has none, or when OpenSubtitles says today's downloads are used up. OpenSubtitles stays
 first; a subtitle that already exists in the target language on SubDL is used directly. SubDL
-subtitles are zip files; only the first `.srt` inside is used, and season packs are skipped. The key
+subtitles are zip files; the first `.srt` inside is used. A whole-season zip is opened too and the
+file of the right episode is taken out of it (by `S02E05`, `2x05` or `- 031` in the file names; a wrong
+episode is never guessed, and a pack that does not hold the episode is skipped). Season packs can be
+switched off under **Developer settings**. SubDL appends the caller's key to the link of some results; only the
+path is kept, so the key is never stored or sent on. The key
 is stored like the other keys (`.env`, never committed) and is never logged. Look for
-`OpenSubtitles limit reached, using SubDL` in the log (stage `SOURCE`). The key can also be added in
+`OpenSubtitles limit reached, using another source` in the log (stage `SOURCE`). The key can also be added in
 the setup wizard (step 2), and **Test SubDL** in the connection checks (shown only when a key is saved)
 checks it. SubDL has no call that reports usage, so unlike OpenSubtitles there is no meter for it.
+For the anime tried so far (Black Clover, Sword Art Online, Dragon Ball) SubDL only had one English
+dub-caption `.ass` file per "season pack", so it did not help there.
+
+### Third subtitle source (Jimaku, anime)
+
+Optional. Save a free API key from jimaku.cc (account settings) in **Settings > Accounts and keys**
+(`JIMAKU_API_KEY` in `.env`). Jimaku has one file per episode for anime, almost all in **Japanese**,
+so it is the last resort (translating from Japanese is worse than from English): English and
+target-language subtitles from the other sources always win. The search uses the title from the
+file name (or Kitsu/Cinemeta) and the episode number; a file of another episode or show is dropped,
+and a bare number such as `- 052` is trusted only for the first season (Jimaku numbers long anime
+straight through, so "season 2 episode 1" would be the wrong file) unless the file name carries the
+season. Files come only from `jimaku.cc` and are limited to 2 MB. Jimaku allows 25 requests a minute;
+when it says "too many", nothing is found for that search.
+
+### Order of the sources
+
+Under **Settings > About > Developer settings > Order of the sources** the sources are ticked and ordered. The
+recommended order is SubDL, OpenSubtitles, then Jimaku (a source without a key is skipped). All
+sources are searched at once (a search costs no download) and the earlier one wins among otherwise
+equal subtitles. An exact file match (hash) on OpenSubtitles always wins, a subtitle in your language
+wins over a translation, English wins over Japanese, and a single episode wins over a season pack.
+**Back to the recommended order** resets it; choosing the first source in the older Translation
+dropdown also resets it.
+
+### Where a subtitle came from, and the sound check on the main screen
+
+Every line of **My subtitles** shows its source: `SubDL`, `OpenSubtitles`, `Jimaku` or `From the video`,
+and whether it was `ready-made` (already in your language) or `translated from EN`. Both requests Stremio
+makes for one episode are one line (their cache files are all deleted together). While the sound check
+listens in the background, a bar on the main screen shows how far it is, and when it ends it says
+whether the subtitle was moved (and by how many seconds) or the timing was left as it was. A line also
+says which subtitle Stremio took last. The notices after a sound check have an OK button that closes them,
+and the "Open Stremio" button asks before it opens the program.
+
+### Developer settings (Settings > About)
+
+Everything here is saved at once and is meant for trying things:
+
+- **Sound check:** _translate at once, check in the background_ (recommended and the default: the
+  translation starts without waiting, and the subtitle is moved when the check finishes), _wait up
+  to 30 s for the check before translating_, or _no sound check at all_.
+- **Seconds to wait for the subtitle inside the video** (default 15).
+- **Skip the subtitle inside the video if reading it would take more than N seconds** (default 60,
+  0 = never). Reading a track means reading the whole video file (about as long as downloading
+  it), so the app estimates it from the file size and the download speed Stremio's server reports
+  (`downloaded`, `downloadSpeed` in `/stats.json`) and skips at once instead of waiting and competing
+  with the playback for the connection. Subtitle files shipped beside the video are still read. When
+  the speed is not reported nothing is skipped. Look for `reading the tracks inside the video would
+take too long` in the log.
+- **Season packs from SubDL** and **Translate the next episode ahead** (packs on by default; the next episode ahead is off, switch it on if you read many episodes).
+- **Always translate from English with the AI** (off by default). Normally a ready subtitle in your
+  language from any source is used as it is, with no AI work; this makes the app prefer an English
+  subtitle and translate it, so the translation itself can be tried and compared.
+- **Order of the sources** (see above).
+- **Request the subtitles again, from scratch:** pick a saved subtitle and one source; it is made
+  again from that source only (no look inside the video, saved copy ignored) and replaces the old
+  one. The translation of identical text is reused, so it costs nothing again.
+- **Test mode** (moved here from Advanced).
+
+**The next episode ahead.** When a series episode is done, the next one (`S1E3` to `S1E4`) is searched
+and translated in the background from a downloaded subtitle (SubDL / OpenSubtitles / Jimaku; there is
+no video file yet, so nothing is read from it). It costs one download and one translation more, shows
+in the queue and the library, never chains on to the one after, is skipped in ask mode, for movies and in
+test mode, and a failure (for example the last episode of a season) is silent. When you open that
+episode the downloaded subtitle and the translation are already saved, so only the search is repeated
+and the wait for the video's own subtitle is cut to 3 seconds. Look for `translating the next
+episode in the background` in the log.
 
 ### Ask before translating (optional)
 
@@ -250,17 +322,17 @@ translation again once 20 seconds have passed (Stremio's own immediate re-ask is
 on to the next one: the video's own subtitle, then listening, then the download from OpenSubtitles. Which
 steps run at all is set in Settings (embedded subtitles).
 
-**First subtitle source.** Under Translation you can choose which source is asked first:
-OpenSubtitles (the default) or SubDL. The other one is used only when the first has no subtitle. SubDL
-needs a SubDL key (Accounts and keys); without a key OpenSubtitles is used. SubDL has no file-hash match, so
-its timing is less exact, but it does not use up the OpenSubtitles daily downloads.
+**First subtitle source.** Under Translation you can choose which source is preferred first:
+SubDL (the default) or OpenSubtitles. SubDL needs a SubDL key (Accounts and keys); without a key
+OpenSubtitles is used. SubDL has no file-hash match, so its timing is less exact, but it does not use
+up the OpenSubtitles daily downloads. The full order (with Jimaku) is under Developer settings.
 
 **Settings.** The panel opens from the start side of the window (the right in Hebrew, the left in
-English) as one column of categories: Accounts and keys, Translation, Maintenance, Advanced settings and
+English) as one column of categories: Accounts and keys, Translation, Maintenance and
 About. All are closed at first; tap one to open it (opening one closes the others). The version and the
-update check are in About.
+update check are in About, and so is **Developer settings** (a box inside About).
 
-**Test mode (Advanced settings, for developers).** Turn it on to try the queue, the buttons and the
+**Test mode (About > Developer settings).** Turn it on to try the queue, the buttons and the
 diagnostics without playing a video. "Run a test request" adds a made-up episode to the real queue. No
 OpenSubtitles and no AI are used (no quota is spent): a random subtitle is picked and every line gets the
 prefix `HE:`. Besides the built-in samples, it picks from any `.srt` files you put in the `test-subtitles`
@@ -287,6 +359,19 @@ deletes a line that was only a sound. Words inside a sentence are never touched.
 as "Translated by ..." or a site's advert (`www.opensubtitles.org`) are deleted too. Turn it off in
 **Settings → Remove speaker names and sound notes from subtitles** (or `CLEAN_SUBTITLES=false`).
 
+### Long films: the first part is shown while the rest is translated
+
+For a file of 1000 lines or more, the add-on does not make you wait for the whole translation.
+When the first quarter of the lines (counted from the start) is translated, that part is given to
+Stremio at once. A last line runs from the end of the part to the end of the film and says
+"the translation continues in the background, reselect the subtitles in a few minutes". The
+translation goes on, and when it is done the main screen shows the usual "better subtitle is
+ready" notice. Select the subtitle again and Stremio gets the whole film from the saved copy. The
+part is never saved or listed in **My subtitles**: only the finished subtitle is. If the translation
+stops half way (no quota, for example), the part stays and the note says it stopped. If the sound
+check finishes late, the same timing move is applied to the part and to the whole subtitle. Turn it
+off with `PARTIAL_SUBTITLES=false` in `.env` or `"partialSubtitles": false` in `settings.json`.
+
 ### The video's own subtitle is not waited for long
 
 The add-on looks for a subtitle inside the playing video first (exact timing). It waits for it for
@@ -311,9 +396,9 @@ was. The **Skip** button on the main screen skips this step. Look for `subtitle 
 speech` or `timing left as it was` in the log (stage `SOURCE`). On real episodes the result was
 within about 0.1 second.
 
-The translation waits for this check for 30 seconds at most. If the check is still listening then
-(a torrent that sends its data slowly), the translation starts without it and the check goes on in
-the background. When it finishes and is sure, the finished subtitle is moved by the same amount
+By default the translation does not wait for this check: it starts at once and the check goes on in
+the background (**Settings > About > Developer settings > Sound check** can make it wait up to 30 seconds, or turn the
+check off). When the check finishes and is sure, the finished subtitle is moved by the same amount
 (no new translation), swapped in, and a notice tells you to select the subtitle again in Stremio.
 If the video sends no sound for 45 seconds, the check gives up.
 

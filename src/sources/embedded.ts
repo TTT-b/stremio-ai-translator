@@ -45,6 +45,12 @@ export interface EmbeddedDeps {
   retryBudgetMs?: number;
   /** Pause between tries (default 10 s). Tests set 0. */
   retryGapMs?: number;
+  /**
+   * Reading a track means reading the whole video file. When that would take longer than this many
+   * seconds at the speed the torrent is downloading, the tracks are not tried (files stored beside
+   * the video still are). Unset or 0: always try.
+   */
+  maxEtaSec?: number;
   /** True once the user cancelled: no more tries. */
   shouldStop?: () => boolean;
   /** How long to keep looking for the video on the local server (default 8 s). Tests set 0. */
@@ -170,6 +176,9 @@ const statsSchema = z.record(
   z
     .object({
       infoHash: z.string().regex(/^[0-9a-f]{40}$/i),
+      /** How much of the torrent is on disk and how fast it is coming in (bytes, bytes per second). */
+      downloaded: z.number().optional(),
+      downloadSpeed: z.number().optional(),
       files: z
         .array(
           z.object({ path: z.string().max(1024), length: z.number().optional() }).passthrough(),
@@ -187,6 +196,20 @@ export interface LocalStream {
   videoPath: string;
   /** Every file in the torrent, in index order. */
   files: { path: string; length: number }[];
+  /** Torrent-wide download progress, when Stremio's server reports it. */
+  downloaded?: number;
+  downloadSpeed?: number;
+}
+
+/**
+ * Seconds it would take to read the playing file in full (what extracting a track needs), from its
+ * size and the torrent's download speed. Undefined when either is unknown.
+ */
+export function estimateReadSeconds(stream: LocalStream): number | undefined {
+  const length = stream.files[stream.fileIdx]?.length ?? 0;
+  const speed = stream.downloadSpeed ?? 0;
+  if (length <= 0 || speed <= 0) return undefined;
+  return Math.max(0, length - (stream.downloaded ?? 0)) / speed;
 }
 
 /** The torrent file currently held by Stremio's server whose name matches the playing video. */
@@ -214,6 +237,8 @@ export async function findStream(
         url: `${serverUrl}/${infoHash}/${idx}`,
         videoPath: (torrent.files[idx] as { path: string }).path,
         files: torrent.files.map((f) => ({ path: f.path, length: f.length ?? 0 })),
+        ...(torrent.downloaded !== undefined ? { downloaded: torrent.downloaded } : {}),
+        ...(torrent.downloadSpeed !== undefined ? { downloadSpeed: torrent.downloadSpeed } : {}),
       };
     }
   }
@@ -488,6 +513,17 @@ export async function loadEmbeddedSubtitle(
       return { raw, language, streamIndex: track.index, source: 'track' as const };
     };
 
+    // Reading a track reads the whole video; a big file on a slow connection is not worth the wait
+    // (and the reading would compete with the playback for the connection).
+    const eta = estimateReadSeconds(found);
+    const tooBig = !!deps.maxEtaSec && eta !== undefined && eta > deps.maxEtaSec;
+    if (tooBig) {
+      log.info(
+        { embedded: 'too-big', etaSec: Math.round(eta), limitSec: deps.maxEtaSec },
+        'reading the tracks inside the video would take too long',
+      );
+    }
+
     const attempt = async (): Promise<EmbeddedSubtitle | undefined> => {
       unreadable = false;
       for (const lang of langs) {
@@ -506,7 +542,7 @@ export async function loadEmbeddedSubtitle(
           }
         }
         // 2. Text tracks inside the file (ffprobe once, then ffmpeg per track).
-        if (tools && remaining() >= MIN_STEP_MS) {
+        if (tools && !tooBig && remaining() >= MIN_STEP_MS) {
           if (!tracks) {
             try {
               tracks = await listTextTracks(

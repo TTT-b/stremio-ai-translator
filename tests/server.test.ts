@@ -154,6 +154,22 @@ describe('local web server', () => {
     expect(await res.json()).toMatchObject({ ok: true, provider: 'fake-source' });
   });
 
+  it('Test Jimaku says the key is missing, without calling out', async () => {
+    const res = await post('/api/test/jimaku', {});
+    expect(await res.json()).toMatchObject({
+      ok: false,
+      provider: 'jimaku',
+      code: 'CONFIGURATION_INVALID',
+    });
+  });
+
+  it('the settings page offers a Jimaku check and developer settings inside About', async () => {
+    const html = await (await get('/')).text();
+    expect(html).toContain('data-test="jimaku"');
+    expect(html).toContain('הגדרות מפתח');
+    expect(html).not.toContain('הגדרות מתקדמות');
+  });
+
   it('saves keys to .env, keeps other lines, and never echoes the value', async () => {
     const newKey = ['AI', 'zaSyNEWKEYNEWKEYNEWKEYNEWKEY123456'].join('');
     const res = await post('/api/keys', {
@@ -171,6 +187,66 @@ describe('local web server', () => {
     // The status page now reports it as configured without showing it.
     const html = await (await get('/')).text();
     expect(html).not.toContain(newKey);
+  });
+
+  it('saves the Jimaku key like the other keys, and the page shows it as configured without the value', async () => {
+    const key = 'jimaku-key-VALUE-123456';
+    const before = await (await get('/')).text();
+    expect(before).toContain('id="d-jimaku"');
+    const res = await post('/api/keys', { jimakuApiKey: key });
+    expect(res.status).toBe(200);
+    expect(await res.text()).not.toContain(key);
+    expect(readFileSync(envPath, 'utf8')).toContain(`JIMAKU_API_KEY=${key}`);
+    expect(await (await get('/')).text()).not.toContain(key);
+  });
+
+  it('saves the developer settings, and the page shows them (the order too)', async () => {
+    const res = await post('/api/settings', {
+      soundCheck: 'wait',
+      seasonPacks: false,
+      prefetchNext: false,
+      embeddedWaitSec: 20,
+      embeddedMaxEtaSec: 90,
+      sourceOrder: ['opensubtitles', 'subdl'],
+    });
+    expect(res.status).toBe(200);
+    const html = await (await get('/')).text();
+    expect(html).toContain('<option value="wait" selected>');
+    expect(html).toMatch(/id="dev-emb-wait"[^>]*value="20"/);
+    expect(html).toMatch(/id="dev-emb-eta"[^>]*value="90"/);
+    expect(html).toMatch(/id="dev-packs" class="peer sr-only"><span/);
+    expect(html).toMatch(/id="dev-prefetch" class="peer sr-only"><span/);
+    const rows = [...html.matchAll(/<li data-src="(\w+)"[^>]*>.*?<input type="checkbox"([^>]*)>/g)];
+    expect(rows.map((m) => [m[1], m[2]!.includes('checked')])).toEqual([
+      ['opensubtitles', true],
+      ['subdl', true],
+      ['jimaku', false],
+    ]);
+    // Choosing the first source in the older dropdown puts the order back to the default.
+    await post('/api/settings', { subtitleSource: 'subdl', sourceOrder: [] });
+    const reset = await (await get('/')).text();
+    expect([...reset.matchAll(/<li data-src="(\w+)"/g)].map((m) => m[1])).toEqual([
+      'subdl',
+      'opensubtitles',
+      'jimaku',
+    ]);
+    await post('/api/settings', {
+      soundCheck: 'background',
+      seasonPacks: true,
+      prefetchNext: true,
+      embeddedWaitSec: 15,
+      embeddedMaxEtaSec: 60,
+    });
+  });
+
+  it('rejects a developer redo with bad input, an unknown subtitle, or a source with no key', async () => {
+    expect((await post('/api/dev/redo', { id: 'nope', source: 'subdl' })).status).toBe(400);
+    expect((await post('/api/dev/redo', { id: 'a'.repeat(32), source: 'other' })).status).toBe(400);
+    // No SubDL key is saved in this test setup.
+    expect((await post('/api/dev/redo', { id: 'a'.repeat(32), source: 'subdl' })).status).toBe(400);
+    expect(
+      (await post('/api/dev/redo', { id: 'a'.repeat(32), source: 'opensubtitles' })).status,
+    ).toBe(409);
   });
 
   it('rejects a key no provider accepts and leaves .env untouched', async () => {

@@ -34,7 +34,9 @@ import type { Logger } from '../logging/logger';
 import { z } from 'zod';
 import { loadConfig } from '../config/env';
 import { updateEnvFile } from '../config/envFile';
-import { FallbackSource } from '../sources/fallback';
+import { JimakuProvider } from '../sources/jimaku/provider';
+import { sourceOrderFrom } from '../sources/order';
+import { OrderedSource, type OrderedEntry, type SourceId } from '../sources/ordered';
 import { OpenSubtitlesProvider } from '../sources/opensubtitles/provider';
 import { SubdlProvider } from '../sources/subdl/provider';
 import { selectSubtitle } from '../sources/select';
@@ -49,7 +51,7 @@ import { PROVIDERS } from '../translation/providers';
 import { verifyAiKey, type VerifyResult } from '../translation/verify';
 import type { TranslationProvider } from '../translation/provider';
 import { translateSubtitle } from '../translation/pipeline';
-import { renderStatusPage } from './html';
+import { renderStatusPage, type StatusPageData } from './html';
 
 export interface ServerDeps {
   /** Config from the environment (before settings.json overrides). */
@@ -113,6 +115,7 @@ const keysSchema = z
     aiApiKey: z.string().trim().max(256).optional(),
     openSubtitlesApiKey: z.string().trim().max(256).optional(),
     subdlApiKey: z.string().trim().max(256).optional(),
+    jimakuApiKey: z.string().trim().max(256).optional(),
     openSubtitlesUsername: z.string().trim().max(128).optional(),
     openSubtitlesPassword: z.string().trim().max(256).optional(),
   })
@@ -122,6 +125,7 @@ const KEY_ENV_NAMES = {
   aiApiKey: 'AI_API_KEY',
   openSubtitlesApiKey: 'OPENSUBTITLES_API_KEY',
   subdlApiKey: 'SUBDL_API_KEY',
+  jimakuApiKey: 'JIMAKU_API_KEY',
   openSubtitlesUsername: 'OPENSUBTITLES_USERNAME',
   openSubtitlesPassword: 'OPENSUBTITLES_PASSWORD',
 } as const;
@@ -152,18 +156,34 @@ export function createApp(deps: ServerDeps): express.Express {
         logger: log,
         ...fetchPart,
       });
-      // The optional second source, used beside OpenSubtitles when a SubDL key is saved.
-      return c.subdlApiKey
-        ? new FallbackSource(
-            opensubtitles,
-            new SubdlProvider({
-              apiKey: c.subdlApiKey,
-              logger: log,
-              ...fetchPart,
-            }),
-            readSettings(deps.settingsPath).subtitleSource === 'subdl',
-          )
-        : opensubtitles;
+      // Every source that has what it needs (keys), in the order the user (or the default) gives.
+      const settings = readSettings(deps.settingsPath);
+      const available: Record<string, OrderedEntry | undefined> = {
+        opensubtitles: { id: 'opensubtitles', provider: opensubtitles },
+        subdl: c.subdlApiKey
+          ? {
+              id: 'subdl',
+              provider: new SubdlProvider({
+                apiKey: c.subdlApiKey,
+                logger: log,
+                seasonPacks: c.seasonPacks,
+                ...fetchPart,
+              }),
+            }
+          : undefined,
+        jimaku: c.jimakuApiKey
+          ? {
+              id: 'jimaku',
+              provider: new JimakuProvider({ apiKey: c.jimakuApiKey, logger: log, ...fetchPart }),
+            }
+          : undefined,
+      };
+      const entries = sourceOrderFrom(settings)
+        .map((id) => available[id])
+        .filter((e): e is OrderedEntry => e !== undefined);
+      return new OrderedSource(
+        entries.length > 0 ? entries : [{ id: 'opensubtitles', provider: opensubtitles }],
+      );
     });
   const makeProvider =
     deps.createProvider ??
@@ -268,6 +288,28 @@ export function createApp(deps: ServerDeps): express.Express {
 
   app.use('/api', express.json({ limit: '10kb' }));
 
+  /** What Settings > Developers shows: the values in force and every source (in use first). */
+  const devPageValues = (c: Config): NonNullable<StatusPageData['dev']> => {
+    const inUse = sourceOrderFrom(readSettings(deps.settingsPath));
+    const everySource: SourceId[] = ['subdl', 'opensubtitles', 'jimaku'];
+    const hasKey = (id: SourceId) =>
+      id === 'subdl' ? c.subdlApiKey !== '' : id === 'jimaku' ? c.jimakuApiKey !== '' : true;
+    return {
+      soundCheck: c.soundCheck,
+      seasonPacks: c.seasonPacks,
+      preferTranslation: c.preferTranslation,
+      prefetchNext: c.prefetchNext,
+      embeddedWaitSec: c.embeddedWaitSec,
+      embeddedMaxEtaSec: c.embeddedMaxEtaSec,
+      sources: [
+        ...inUse.map((id) => ({ id, on: true, hasKey: hasKey(id) })),
+        ...everySource
+          .filter((id) => !inUse.includes(id))
+          .map((id) => ({ id, on: false, hasKey: hasKey(id) })),
+      ],
+    };
+  };
+
   app.get('/', (req, res) => {
     const c = current();
     const nonce = randomBytes(16).toString('base64');
@@ -289,6 +331,8 @@ export function createApp(deps: ServerDeps): express.Express {
         translationMode: c.translationMode,
         openSubtitlesKeyConfigured: c.openSubtitlesApiKey !== '',
         subdlKeyConfigured: c.subdlApiKey !== '',
+        jimakuKeyConfigured: c.jimakuApiKey !== '',
+        dev: devPageValues(c),
         openSubtitlesLoginConfigured:
           c.openSubtitlesUsername !== '' && c.openSubtitlesPassword !== '',
         openSubtitlesUsername: c.openSubtitlesUsername,
@@ -301,7 +345,10 @@ export function createApp(deps: ServerDeps): express.Express {
         stremioReady: true,
         rtlFix: c.rtlFix,
         testMode: testMode(),
-        subtitleSource: readSettings(deps.settingsPath).subtitleSource ?? 'opensubtitles',
+        subtitleSource:
+          sourceOrderFrom(readSettings(deps.settingsPath))[0] === 'opensubtitles'
+            ? 'opensubtitles'
+            : 'subdl',
         uiLang: readSettings(deps.settingsPath).uiLanguage ?? 'he',
       }),
     );
@@ -317,6 +364,35 @@ export function createApp(deps: ServerDeps): express.Express {
     } catch {
       res.status(400).json({ ok: false, message: 'Invalid settings.' });
     }
+  });
+
+  // Developer tool: make a saved subtitle again from scratch, from one source only.
+  app.post('/api/dev/redo', (req, res) => {
+    const parsed = z
+      .object({
+        id: z.string().regex(/^[0-9a-f]{32}$/),
+        source: z.enum(['subdl', 'opensubtitles', 'jimaku']),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: 'Invalid input.' });
+      return;
+    }
+    const c = current();
+    const { id, source } = parsed.data;
+    if ((source === 'subdl' && !c.subdlApiKey) || (source === 'jimaku' && !c.jimakuApiKey)) {
+      res
+        .status(400)
+        .json({ ok: false, code: 'CONFIGURATION_INVALID', message: 'No key for that source.' });
+      return;
+    }
+    if (!jobs.redo(id, source)) {
+      res.status(409).json({ ok: false, message: 'That subtitle is busy or was not found.' });
+      return;
+    }
+    logger.info({ stage: 'API', source }, 'developer redo started');
+    res.json({ ok: true });
   });
 
   // Test mode: puts a made-up episode in the real queue (made-up subtitle, pretend AI).
@@ -563,7 +639,9 @@ export function createApp(deps: ServerDeps): express.Express {
       `system: ${process.platform} ${process.arch}, node ${process.versions.node}`,
       `AI provider: ${c.aiProvider} (key set: ${yes(c.aiApiKey !== '')})`,
       `OpenSubtitles key / login set: ${yes(c.openSubtitlesApiKey !== '')} / ${yes(c.openSubtitlesUsername !== '' && c.openSubtitlesPassword !== '')}`,
-      `SubDL key set: ${yes(c.subdlApiKey !== '')}`,
+      `SubDL / Jimaku key set: ${yes(c.subdlApiKey !== '')} / ${yes(c.jimakuApiKey !== '')}`,
+      `sources in use: ${sourceOrderFrom(readSettings(deps.settingsPath)).join(' > ')}, season packs: ${yes(c.seasonPacks)}, next episode ahead: ${yes(c.prefetchNext)}`,
+      `sound check: ${c.soundCheck}, wait for the video's own subtitle: ${c.embeddedWaitSec} s, skip it above ${c.embeddedMaxEtaSec} s`,
       `translation mode: ${c.translationMode}`,
       `target language: ${c.targetLanguage}, dual: ${yes(c.dualSubtitles)}, embedded subtitles: ${yes(c.embeddedSubtitles)}`,
       `Stremio server (${c.stremioServerUrl}): ${stremio}`,
@@ -619,6 +697,27 @@ export function createApp(deps: ServerDeps): express.Express {
         ...(details ? { details } : {}),
       },
       'subdl test',
+    );
+    res.json(result);
+  });
+
+  // Only used when a Jimaku key is saved: checks that Jimaku accepts it (no download is made).
+  app.post('/api/test/jimaku', async (_req, res) => {
+    const c = current();
+    const { details, ...result } = await new JimakuProvider({
+      apiKey: c.jimakuApiKey,
+      logger,
+      ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+    }).testConnection();
+    logger.info(
+      {
+        stage: 'SOURCE',
+        provider: 'jimaku',
+        ok: result.ok,
+        errorCode: result.code,
+        ...(details ? { details } : {}),
+      },
+      'jimaku test',
     );
     res.json(result);
   });
@@ -836,9 +935,13 @@ export function createApp(deps: ServerDeps): express.Express {
       return;
     }
     await jobs.waitFor(job, current().subWaitMs);
-    if (job.status === 'done' && job.result)
+    const uiLang = readSettings(deps.settingsPath).uiLanguage ?? 'he';
+    if (job.status === 'done' && job.result) {
       send(job.result.content, `ready:${job.result.via}`, job.id);
-    else if (job.status === 'failed' && job.error) {
+      void jobs.noteDelivered(job);
+    } else if (job.status === 'failed' && job.partial) {
+      send(jobs.partialSrt(job, uiLang, true) ?? '', 'partial-stopped', job.id);
+    } else if (job.status === 'failed' && job.error) {
       send(
         placeholderSrt(`Subtitle unavailable: ${job.error.userMessage}`),
         `failed:${job.error.code}`,
@@ -852,11 +955,13 @@ export function createApp(deps: ServerDeps): express.Express {
       );
     } else if (job.status === 'cancelled') {
       send(placeholderSrt(CANCELLED_MESSAGE), 'cancelled', job.id);
+    } else if (job.partial) {
+      send(jobs.partialSrt(job, uiLang, false) ?? '', 'partial', job.id);
     } else {
       send(
         placeholderSrt(
           progressMessage(
-            readSettings(deps.settingsPath).uiLanguage ?? 'he',
+            uiLang,
             job.stage,
             job.progress && job.progress.total > 0
               ? Math.min(100, Math.floor((job.progress.done / job.progress.total) * 100))

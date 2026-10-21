@@ -1,3 +1,6 @@
+import { serializeSubtitle } from '../subtitles/serialize';
+import type { Cue } from '../subtitles/types';
+
 /** A tiny valid SRT shown while the real subtitle is not available. */
 export function placeholderSrt(message: string): string {
   const text = message.replace(/\r?\n/g, ' ').replace(/-->/g, '->').trim();
@@ -40,4 +43,33 @@ export function progressMessage(
   const line =
     stage === 'translate' ? translating : ((lang === 'he' ? he : en)[stage ?? ''] ?? translating);
   return `${line} - ${again}`;
+}
+
+/** The line shown after a partial subtitle, from its last line to the end of the movie. */
+export function partialNotice(lang: 'he' | 'en', stopped: boolean): string {
+  if (lang === 'he') {
+    return stopped
+      ? 'התרגום נעצר. בחר שוב את הכתוביות כדי לנסות שוב'
+      : 'התרגום ממשיך ברקע. בחר שוב את הכתוביות בעוד כמה דקות';
+  }
+  return stopped
+    ? 'Translation stopped. Reselect the subtitles to try again'
+    : 'Translation continues in the background. Reselect the subtitles in a few minutes';
+}
+
+/** The translated first part plus one note line that runs to the end of the movie. */
+export function withPartialNotice(
+  cues: Cue[],
+  untilMs: number,
+  lang: 'he' | 'en',
+  stopped: boolean,
+): string {
+  const startMs = cues[cues.length - 1]?.endMs ?? 0;
+  const note: Cue = {
+    index: (cues[cues.length - 1]?.index ?? 0) + 1,
+    startMs,
+    endMs: Math.max(untilMs, startMs + 1000),
+    text: partialNotice(lang, stopped),
+  };
+  return serializeSubtitle({ format: 'srt', cues: [...cues, note] });
 }

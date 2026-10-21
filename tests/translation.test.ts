@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@google/genai';
 import { AppError } from '../src/errors';
 import { parseSubtitle } from '../src/subtitles/parse';
+import type { Cue } from '../src/subtitles/types';
 import {
   GeminiProvider,
   parseModelJson,
@@ -85,6 +86,98 @@ describe('translateSubtitle', () => {
     );
     expect(seen[0]).toEqual([0, 3]);
     expect(seen[seen.length - 1]).toEqual([3, 3]);
+  });
+
+  describe('partial results', () => {
+    const eight = {
+      format: 'srt' as const,
+      cues: Array.from({ length: 8 }, (_, i) => ({
+        index: i + 1,
+        startMs: i * 1000,
+        endMs: i * 1000 + 800,
+        text: `Line ${i + 1}`,
+      })),
+    };
+
+    it('reports the leading cues once they reach the minimum, and again as they grow', async () => {
+      const sizes: number[] = [];
+      const r = await translateSubtitle(
+        eight,
+        new FakeProvider(),
+        opts({
+          concurrency: 1,
+          partialMinCues: 2,
+          onPartial: (cues) => sizes.push(cues.length),
+        }),
+      );
+      expect(sizes).toEqual([2, 4, 6]); // the last step is the full result, not a partial
+      expect(r.file.cues).toHaveLength(8);
+    });
+
+    it('does not report before the minimum is reached', async () => {
+      const sizes: number[] = [];
+      await translateSubtitle(
+        eight,
+        new FakeProvider(),
+        opts({ concurrency: 1, partialMinCues: 5, onPartial: (cues) => sizes.push(cues.length) }),
+      );
+      expect(sizes).toEqual([6]);
+    });
+
+    it('only reports a run that starts at the first line, never a gap', async () => {
+      const sizes: number[] = [];
+      const seen: string[] = [];
+      let releaseFirst: () => void = () => undefined;
+      const firstGate = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const provider = new FakeProvider(async (req) => {
+        if (req.cues[0]?.id === '1') await firstGate; // the first chunk ends last of the first three
+        return { translations: req.cues.map((c) => ({ id: c.id, text: `T:${c.text}` })) };
+      });
+      await translateSubtitle(
+        eight,
+        provider,
+        opts({
+          concurrency: 3,
+          partialMinCues: 2,
+          onProgress: (done) => {
+            if (done >= 4) releaseFirst(); // chunks 2 and 3 are finished
+          },
+          onPartial: (cues) => {
+            sizes.push(cues.length);
+            seen.push(cues[0]?.text ?? '');
+          },
+        }),
+      );
+      expect(sizes.every((n, i) => i === 0 || n > (sizes[i - 1] as number))).toBe(true);
+      expect(sizes[0]).toBe(6); // chunks 2 and 3 finished first but were not reported alone
+      expect(seen.every((t) => t === 'T:Line 1')).toBe(true);
+    });
+
+    it('gives the same text in the partial as in the final result, with the same timing', async () => {
+      let partial: Cue[] = [];
+      const r = await translateSubtitle(
+        eight,
+        new FakeProvider(),
+        opts({
+          concurrency: 1,
+          dualSubtitles: true,
+          rtlFix: true,
+          partialMinCues: 2,
+          onPartial: (cues) => {
+            partial = cues;
+          },
+        }),
+      );
+      expect(partial.length).toBeGreaterThan(0);
+      expect(partial).toEqual(r.file.cues.slice(0, partial.length));
+    });
+
+    it('is silent when no callback is given', async () => {
+      const r = await translateSubtitle(eight, new FakeProvider(), opts({ partialMinCues: 2 }));
+      expect(r.file.cues).toHaveLength(8);
+    });
   });
 
   it('waits out rate limits and quota errors with growing pauses, then succeeds', async () => {
