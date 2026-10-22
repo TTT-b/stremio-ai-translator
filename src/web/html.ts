@@ -424,10 +424,9 @@ ${checks('r-', 'sample', 'sample-out')}
 <div class="flex flex-col gap-[18px] lg:grid lg:grid-cols-2 lg:items-start lg:gap-5"><div class="flex flex-col gap-[18px]">
 <section id="st-upgrade" class="${tile} hidden flex-col gap-3 !border-warm-ac/60" role="status"><div><div class="text-sm font-bold text-warm-tx">${tt('upgradeTitle')}</div><div id="st-upgrade-text" class="mt-0.5 text-xs text-warm-mu"></div></div><div dir="ltr" class="flex justify-start"><button type="button" id="st-upgrade-close" class="${btn} !px-4 !py-1.5 !text-[13px]">${tt('toastOk')}</button></div></section>
 <section class="flex flex-col gap-3.5 rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-xl shadow-black/20">
-<div class="flex flex-wrap items-center justify-between gap-3"><div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div><div class="flex items-center gap-2"><button type="button" id="sync-now-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('syncNowHint')}">${tt('syncNowBtn')}</button><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('resumeHint')}">${tt('resumeBtn')}</button></div></div>
+<div class="flex flex-wrap items-center justify-between gap-3"><div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div><div class="flex flex-wrap items-center gap-2"><button type="button" id="st-cancel-btn" class="${btn} hidden whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('qCancel')}</button><button type="button" id="st-skip-btn" class="${btn} hidden whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('qSkip')}</button><button type="button" id="sync-now-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('syncNowHint')}">${tt('syncNowBtn')}</button><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('resumeHint')}">${tt('resumeBtn')}</button></div></div>
 <div id="st-progress-text" class="text-[26px] font-extrabold leading-tight text-warm-tx">${tt('noSub')}</div>
 <div class="h-2.5 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('progressAria')}" aria-valuemin="0" aria-valuemax="100"><div id="st-progress" class="h-full w-0 rounded-full bg-warm-ac transition-[width] duration-500"></div></div>
-<div id="st-now" class="hidden flex-col gap-2 rounded-xl border border-warm-ln bg-warm-bg px-3 py-2.5" role="status"><div class="text-xs text-warm-mu">${tt('nowLabel')}</div><div id="st-now-name" class="text-sm font-bold text-warm-tx"></div><div id="st-now-status" class="text-xs text-warm-mu"></div><div class="flex flex-wrap gap-2"><button type="button" id="st-now-yes" class="${btnPrimary} hidden !px-4 !py-1.5 !text-[13px]">${tt('qTranslate')}</button><button type="button" id="st-now-skip" class="${btnPrimary} hidden !px-4 !py-1.5 !text-[13px]">${tt('qSkip')}</button><button type="button" id="st-now-cancel" class="${btn} !px-4 !py-1.5 !text-[13px]">${tt('qCancel')}</button></div></div>
 <div id="st-delivered" class="hidden text-xs text-warm-ok" role="status"></div>
 <div id="st-sync" class="hidden flex-col gap-1.5 rounded-xl border border-warm-ln bg-warm-bg px-3 py-2" role="status"><div id="st-sync-text" class="text-[13px] text-warm-tx"></div><div id="st-sync-bar" class="flex items-center gap-3"><div class="h-3 flex-1 overflow-hidden rounded-full bg-warm-ln" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="st-sync-fill" class="h-full w-0 rounded-full bg-warm-ok transition-[width] duration-500"></div></div><div class="flex flex-col items-end"><div id="st-sync-pct" dir="ltr" class="min-w-[3.5rem] text-end text-xl font-extrabold text-warm-ok">0%</div><div id="st-sync-eta" class="whitespace-nowrap text-[11px] text-warm-mu"></div></div><button type="button" id="st-sync-stop" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('syncStopBtn')}</button></div><div id="st-sync-ok-row" dir="ltr" class="flex justify-start"><button type="button" id="st-sync-ok" class="${btn} !px-4 !py-1.5 !text-[13px]">${tt('toastOk')}</button></div></div>
 </section>
@@ -720,6 +719,7 @@ if (openStremioBtn) openStremioBtn.addEventListener('click', () => askOpen(T.ext
 $('resume-btn').addEventListener('click', async () => {
   const btn = $('resume-btn');
   const label = btn.textContent;
+  btn.style.minWidth = btn.offsetWidth + 'px'; // the new text must not change the button's size
   btn.disabled = true;
   btn.textContent = T.resumeBusy;
   btn.classList.add('animate-pulse');
@@ -969,24 +969,16 @@ $('st-sync-stop').addEventListener('click', async () => {
   try { await post('/api/sync-stop', {}); } catch { toast(false, FAILED); }
   refreshStatus();
 });
-// One job: what it is and what it is doing, with Skip / Cancel, right in the main card.
-let nowJob = '';
-const renderNow = (items) => {
-  const it = items.length === 1 ? items[0] : null;
-  const row = $('st-now');
-  row.classList.toggle('hidden', !it);
-  row.classList.toggle('flex', !!it);
-  if (!it) return;
-  nowJob = it.id;
-  const where = it.season !== undefined && it.episode !== undefined ? ' · ' + f(T.qSeasonEp, {s: it.season, e: it.episode}) : '';
-  $('st-now-name').textContent = it.title + where;
-  $('st-now-status').textContent = queueStatus(it);
-  $('st-now-yes').classList.toggle('hidden', it.state !== 'pending');
-  $('st-now-skip').classList.toggle('hidden', !it.skippable);
+// Cancel (and Skip, when a step can be skipped) sit with the other buttons and show only while there is a job.
+let stopJob = '';
+const renderStop = (items) => {
+  const it = items.find((x) => x.state === 'running') || items.find((x) => x.state === 'pending');
+  stopJob = it ? it.id : '';
+  $('st-cancel-btn').classList.toggle('hidden', !it);
+  $('st-skip-btn').classList.toggle('hidden', !(it && it.skippable));
 };
-$('st-now-yes').addEventListener('click', () => queueAct(nowJob, 'approve'));
-$('st-now-skip').addEventListener('click', () => queueAct(nowJob, 'skip'));
-$('st-now-cancel').addEventListener('click', () => queueAct(nowJob, 'cancel'));
+$('st-cancel-btn').addEventListener('click', () => { if (stopJob) queueAct(stopJob, 'cancel'); });
+$('st-skip-btn').addEventListener('click', () => { if (stopJob) queueAct(stopJob, 'skip'); });
 const refreshStatus = async () => {
   try {
     const r = await (await fetch('/api/status')).json();
@@ -1052,7 +1044,7 @@ const refreshStatus = async () => {
     $('resume-btn').classList.toggle('!border-warm-ac', !!r.resumable);
     $('resume-btn').classList.toggle('!text-warm-ac', !!r.resumable);
     renderQueue(r.queue || []);
-    renderNow(r.queue || []);
+    renderStop(r.queue || []);
   } catch { /* the app may be restarting */ }
 };
 refreshStatus();

@@ -1295,6 +1295,29 @@ describe('timing from the sound of the video', () => {
     expect(last?.offsetMs).toBe(1500);
   });
 
+  it('reads the video once when Stremio asks twice for the same episode', async () => {
+    let cueCalls = 0;
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'background' },
+      findStream: async () => stream,
+      cueFit: async () => {
+        cueCalls++;
+        await new Promise((r) => setTimeout(r, 200));
+        return undefined;
+      },
+      speechFit: async () => undefined,
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    const other = FILE_PATH.replace('.json', '&videoHash=8e245d9679d31e12.json').replace(
+      'filename=Movie.2020.1080p.mkv',
+      'filename=Movie.2020.1080p.mkv',
+    );
+    await Promise.all([current.get(FILE_PATH), current.get(other)]);
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(cueCalls).toBe(1);
+  });
+
   it('gives up listening when the video sends no sound, and goes on with the subtitle', async () => {
     current = await start({
       findStream: async () => stream,

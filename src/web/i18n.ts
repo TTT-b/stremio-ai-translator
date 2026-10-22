@@ -167,7 +167,6 @@ const S = {
     en: 'Subtitle lines translated this session',
   },
   progressDone: { he: 'הושלם: {t} שורות תורגמו', en: 'Done: {t} lines translated' },
-  nowLabel: { he: 'עכשיו בטיפול', en: 'Working on now' },
   qTitle: { he: 'תור תרגומים', en: 'Translation queue' },
   qSeasonEp: { he: 'עונה {s} פרק {e}', en: 'S{s} E{e}' },
   qPending: {

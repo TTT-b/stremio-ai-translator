@@ -1127,6 +1127,12 @@ export class JobManager {
    * downloaded one. It is then translated in the background and swapped in: the address Stremio
    * holds keeps working, and no "translating" message shows in between.
    */
+  /** The measurement a request is making right now, by episode and subtitle (see fitToSpeech). */
+  private readonly measuring = new Map<
+    string,
+    Promise<{ result?: TimingFit; method: 'cues' | 'sound' }>
+  >();
+
   private async upgradeLater(job: Job, log: Logger): Promise<void> {
     try {
       await this.upgradeLaterWork(job, log);
@@ -1834,43 +1840,75 @@ export class JobManager {
       job.syncProgressAt = this.now();
       job.syncStartedAt = this.now();
       const cues = parseSubtitle(picked.raw).cues;
-      const onProgress = (p: number): void => {
-        if (p !== job.syncPercent) job.syncProgressAt = this.now();
-        job.syncPercent = p;
+      const measure = async (): Promise<{ result?: TimingFit; method: 'cues' | 'sound' }> => {
+        const onProgress = (p: number): void => {
+          if (p !== job.syncPercent) job.syncProgressAt = this.now();
+          job.syncPercent = p;
+        };
+        // First the video's own subtitle track, when it has one: its times are the real ones, and a few
+        // short pieces are enough. Then the sound of the video.
+        let result: TimingFit | undefined;
+        let method: 'cues' | 'sound' = 'sound';
+        if (this.deps.cueFit && cfg.embeddedSubtitles) {
+          result = await this.deps
+            .cueFit({
+              url: stream.url,
+              ffmpeg,
+              ffprobe: locateTools(cfg.ffmpegPath)?.ffprobe ?? '',
+              cues,
+              language: picked.language,
+              signal: abort.signal,
+              // every step of the cue check is progress, even when the number stays the same
+              onProgress: (p) => {
+                job.syncProgressAt = this.now();
+                onProgress(p);
+              },
+              log: (info) => log.info({ stage: 'SOURCE', ...info }, 'cue check'),
+            })
+            .catch(() => undefined);
+          if (result) method = 'cues';
+          else if (!abort.signal.aborted) {
+            log.info(
+              { stage: 'SOURCE', sync: 'no-track' },
+              'no usable track in the video; listening',
+            );
+            job.syncPercent = 0;
+            job.syncStartedAt = this.now();
+            job.syncProgressAt = this.now();
+          }
+        }
+        result ??= await fit({ url: stream.url, ffmpeg, cues, signal: abort.signal, onProgress });
+        return result ? { result, method } : { method };
       };
-      // First the video's own subtitle track, when it has one: its times are the real ones, and a few
-      // short pieces are enough. Then the sound of the video.
-      let result: TimingFit | undefined;
-      let method: 'cues' | 'sound' = 'sound';
-      if (this.deps.cueFit && cfg.embeddedSubtitles) {
-        result = await this.deps
-          .cueFit({
-            url: stream.url,
-            ffmpeg,
-            ffprobe: locateTools(cfg.ffmpegPath)?.ffprobe ?? '',
-            cues,
-            language: picked.language,
-            signal: abort.signal,
-            // every step of the cue check is progress, even when the number stays the same
-            onProgress: (p) => {
-              job.syncProgressAt = this.now();
-              onProgress(p);
-            },
-            log: (info) => log.info({ stage: 'SOURCE', ...info }, 'cue check'),
-          })
-          .catch(() => undefined);
-        if (result) method = 'cues';
-        else if (!abort.signal.aborted) {
-          log.info(
-            { stage: 'SOURCE', sync: 'no-track' },
-            'no usable track in the video; listening',
-          );
-          job.syncPercent = 0;
-          job.syncStartedAt = this.now();
-          job.syncProgressAt = this.now();
+      // Stremio often asks twice for one episode: the second request waits for the first one's answer
+      // instead of reading the video again at the same time.
+      const first = cues[0];
+      const last = cues[cues.length - 1];
+      const memoKey = [videoKey(job.spec), filename, cues.length, first?.startMs, last?.endMs].join(
+        '|',
+      );
+      const shared = this.measuring.get(memoKey);
+      let measured: { result?: TimingFit; method: 'cues' | 'sound' } | undefined;
+      if (shared) {
+        job.syncWaiting = true;
+        measured = await Promise.race([
+          shared,
+          new Promise<undefined>((resolve) =>
+            abort.signal.addEventListener('abort', () => resolve(undefined), { once: true }),
+          ),
+        ]);
+        delete job.syncWaiting;
+      } else {
+        const run = measure();
+        this.measuring.set(memoKey, run);
+        try {
+          measured = await run;
+        } finally {
+          this.measuring.delete(memoKey);
         }
       }
-      result ??= await fit({ url: stream.url, ffmpeg, cues, signal: abort.signal, onProgress });
+      const result = measured?.result;
+      const method = measured?.method ?? 'sound';
       if (!result) {
         log.info({ stage: 'SOURCE', sync: 'fit-unsure' }, 'timing left as it was');
         return undefined;
