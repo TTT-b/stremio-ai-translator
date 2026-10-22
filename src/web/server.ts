@@ -16,6 +16,7 @@ import {
   placeholderSrt,
   progressMessage,
 } from '../stremio/placeholder';
+import { fitSubtitleToEmbeddedCues } from '../sync/cueFit';
 import { fitSubtitleToVideo } from '../sync/videoFit';
 import { openStremio } from '../stremio/launcher';
 import { MuxError, muxSubtitle, type RunFfmpeg } from '../video/mux';
@@ -81,6 +82,7 @@ export interface ServerDeps {
   findStream?: JobManagerDeps['findStream'];
   ffmpegFor?: JobManagerDeps['ffmpegFor'];
   speechFit?: JobManagerDeps['speechFit'];
+  cueFit?: JobManagerDeps['cueFit'];
   /** Where the author's news.json is downloaded from. Tests point it elsewhere. */
   newsUrl?: string;
   /** Test hook: caps on how long one step of a job may take. */
@@ -230,6 +232,7 @@ export function createApp(deps: ServerDeps): express.Express {
     cache,
     library,
     speechFit: deps.speechFit ?? fitSubtitleToVideo,
+    cueFit: deps.cueFit ?? fitSubtitleToEmbeddedCues,
     ...(deps.findStream ? { findStream: deps.findStream } : {}),
     ...(deps.ffmpegFor ? { ffmpegFor: deps.ffmpegFor } : {}),
     ...(deps.loadEmbedded ? { loadEmbedded: deps.loadEmbedded } : {}),

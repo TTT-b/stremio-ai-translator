@@ -119,7 +119,7 @@ export function languageMatches(tag: string | undefined, code: string): boolean 
   return t === c || t.startsWith(`${c}-`) || (ISO3[c]?.includes(t) ?? false);
 }
 
-const defaultExec: Exec = (cmd, args, { timeoutMs, maxBytes }) =>
+export const defaultExec: Exec = (cmd, args, { timeoutMs, maxBytes }) =>
   new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
     const chunks: Buffer[] = [];

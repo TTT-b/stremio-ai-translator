@@ -279,6 +279,11 @@ Everything here is saved at once and is meant for trying things:
 - **Sound check:** _translate at once, check in the background_ (recommended and the default: the
   translation starts without waiting, and the subtitle is moved when the check finishes), _wait up
   to 30 s for the check before translating_, or _no sound check at all_.
+  The check first compares the subtitle with the subtitle track inside the video, when it has one:
+  it reads only two short pieces of that track (more where the two disagree), matches the lines by
+  their start times and words, and moves the subtitle by what it finds (one shift, or a shift that
+  changes along the video). Only when the video has no usable track does it listen to the sound.
+  The diagnostics table marks this as `cue-match`.
 - **Seconds to wait for the subtitle inside the video** (default 15).
 - **Skip the subtitle inside the video if reading it would take more than N seconds** (default 60,
   0 = never). Reading a track means reading the whole video file (about as long as downloading

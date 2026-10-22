@@ -186,6 +186,16 @@ export interface JobManagerDeps {
     signal: AbortSignal;
     onProgress?: (percent: number) => void;
   }) => Promise<TimingFit | undefined>;
+  /** Checks a subtitle's timing against the video's own subtitle track (a few short pieces); optional. */
+  cueFit?: (o: {
+    url: string;
+    ffmpeg: string;
+    ffprobe: string;
+    cues: Cue[];
+    language: string;
+    signal: AbortSignal;
+    onProgress?: (percent: number) => void;
+  }) => Promise<TimingFit | undefined>;
   /** When set, every finished subtitle is listed here so the user can review and delete it. */
   library?: Library;
   /** Ask mode: called once when a new request is waiting for the user's OK (for a notification). */
@@ -1797,16 +1807,38 @@ export class JobManager {
       job.syncProgressAt = this.now();
       job.syncStartedAt = this.now();
       const cues = parseSubtitle(picked.raw).cues;
-      const result = await fit({
-        url: stream.url,
-        ffmpeg,
-        cues,
-        signal: abort.signal,
-        onProgress: (p) => {
-          if (p !== job.syncPercent) job.syncProgressAt = this.now();
-          job.syncPercent = p;
-        },
-      });
+      const onProgress = (p: number): void => {
+        if (p !== job.syncPercent) job.syncProgressAt = this.now();
+        job.syncPercent = p;
+      };
+      // First the video's own subtitle track, when it has one: its times are the real ones, and a few
+      // short pieces are enough. Then the sound of the video.
+      let result: TimingFit | undefined;
+      let method: 'cues' | 'sound' = 'sound';
+      if (this.deps.cueFit && cfg.embeddedSubtitles) {
+        result = await this.deps
+          .cueFit({
+            url: stream.url,
+            ffmpeg,
+            ffprobe: locateTools(cfg.ffmpegPath)?.ffprobe ?? '',
+            cues,
+            language: picked.language,
+            signal: abort.signal,
+            onProgress,
+          })
+          .catch(() => undefined);
+        if (result) method = 'cues';
+        else if (!abort.signal.aborted) {
+          log.info(
+            { stage: 'SOURCE', sync: 'no-track' },
+            'no usable track in the video; listening',
+          );
+          job.syncPercent = 0;
+          job.syncStartedAt = this.now();
+          job.syncProgressAt = this.now();
+        }
+      }
+      result ??= await fit({ url: stream.url, ffmpeg, cues, signal: abort.signal, onProgress });
       if (!result) {
         log.info({ stage: 'SOURCE', sync: 'fit-unsure' }, 'timing left as it was');
         return undefined;
@@ -1815,6 +1847,7 @@ export class JobManager {
         {
           stage: 'SOURCE',
           sync: 'fitted',
+          method,
           offsetMs: result.offsetMs,
           scale: Math.round(result.scale * 10000) / 10000,
           score: Math.round(result.score * 1000) / 1000,

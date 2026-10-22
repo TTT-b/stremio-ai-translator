@@ -61,6 +61,7 @@ async function start(opts: {
   searchHangs?: boolean;
   findStream?: NonNullable<Parameters<typeof createApp>[0]['findStream']>;
   speechFit?: NonNullable<Parameters<typeof createApp>[0]['speechFit']>;
+  cueFit?: NonNullable<Parameters<typeof createApp>[0]['cueFit']>;
   settings?: object;
   onPending?: NonNullable<Parameters<typeof createApp>[0]['onPending']>;
   gate?: Promise<void>;
@@ -138,6 +139,7 @@ async function start(opts: {
     loadEmbedded: opts.loadEmbedded ?? (async () => undefined),
     // Tests never listen to a real video unless one supplies speechFit.
     speechFit: opts.speechFit ?? (async () => undefined),
+    cueFit: opts.cueFit ?? (async () => undefined),
     ...(opts.speechFit
       ? { findStream: opts.findStream ?? (async () => undefined), ffmpegFor: () => 'ffmpeg.exe' }
       : {}),
@@ -1245,6 +1247,45 @@ describe('timing from the sound of the video', () => {
     for (let i = 0; i < 160 && !listened; i++) await new Promise((r) => setTimeout(r, 25));
     expect(listened).toBe(true);
     expect(looks).toBeGreaterThan(3);
+  });
+
+  it('takes the timing from the video own subtitle track when it has one, without listening', async () => {
+    let listened = false;
+    let cueCalls = 0;
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'background' },
+      findStream: async () => stream,
+      cueFit: async () => {
+        cueCalls++;
+        return {
+          scale: 1,
+          offsetMs: 1500,
+          score: 1,
+          baseline: 0,
+          parts: [
+            { atSec: 200, offsetMs: 1500 },
+            { atSec: 900, offsetMs: 1500 },
+          ],
+        };
+      },
+      speechFit: async () => {
+        listened = true;
+        return undefined;
+      },
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    await served('');
+    type St = { lastSync: { outcome: string; offsetMs?: number } | null };
+    let last: St['lastSync'] = null;
+    for (let i = 0; i < 160 && last?.outcome !== 'moved'; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      last = ((await (await current.get('/api/status')).json()) as St).lastSync;
+    }
+    expect(cueCalls).toBe(1);
+    expect(listened).toBe(false);
+    expect(last?.outcome).toBe('moved');
+    expect(last?.offsetMs).toBe(1500);
   });
 
   it('gives up listening when the video sends no sound, and goes on with the subtitle', async () => {
