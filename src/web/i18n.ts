@@ -505,6 +505,10 @@ const S = {
     he: 'מקשיב לקול של הפרק ומתאים אליו את הכתוביות: {p}% ({name})',
     en: 'Listening to the episode and lining the subtitles up with it: {p}% ({name})',
   },
+  syncWaitVideo: {
+    he: 'ממתין שהפרק יתחיל לרוץ ב-Stremio כדי להקשיב לקול ({name})',
+    en: 'Waiting for the episode to start playing in Stremio to listen to it ({name})',
+  },
   syncEta: { he: 'עוד כ-{t}', en: 'about {t} left' },
   syncEtaWait: { he: 'מחשב זמן...', en: 'estimating...' },
   syncStopBtn: { he: 'עצור סנכרון', en: 'Stop sync' },

@@ -141,7 +141,8 @@ async function start(opts: {
     ...(opts.speechFit
       ? { findStream: opts.findStream ?? (async () => undefined), ffmpegFor: () => 'ffmpeg.exe' }
       : {}),
-    ...(opts.limits ? { limits: opts.limits } : {}),
+    // A video that is not on Stremio's server is not waited for, unless a test says so.
+    limits: { syncFindWaitMs: 0, ...opts.limits },
     ...(opts.onPending ? { onPending: opts.onPending } : {}),
     ...(opts.logDir ? { logDir: opts.logDir } : {}),
     ...(opts.cancelCooldownMs !== undefined ? { cancelCooldownMs: opts.cancelCooldownMs } : {}),
@@ -1224,6 +1225,26 @@ describe('timing from the sound of the video', () => {
       lib = (await (await current.get('/api/library')).json()) as typeof lib;
     }
     expect(lib.items[0]?.timing).toBe('speech');
+  });
+
+  it('waits for the video to start playing in Stremio, then listens to it', async () => {
+    let looks = 0;
+    let listened = false;
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'background' },
+      limits: { syncFindWaitMs: 5000, syncFindEveryMs: 20 },
+      findStream: async () => (++looks > 3 ? stream : undefined),
+      speechFit: async () => {
+        listened = true;
+        return { scale: 1, offsetMs: 1500, score: 0.3, baseline: 0 };
+      },
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    await served('');
+    for (let i = 0; i < 160 && !listened; i++) await new Promise((r) => setTimeout(r, 25));
+    expect(listened).toBe(true);
+    expect(looks).toBeGreaterThan(3);
   });
 
   it('gives up listening when the video sends no sound, and goes on with the subtitle', async () => {

@@ -998,11 +998,11 @@ const refreshStatus = async () => {
     $('st-sync-bar').classList.toggle('hidden', !bs);
     $('st-sync-ok-row').classList.toggle('hidden', !!bs);
     if (bs) {
-      $('st-sync-text').textContent = f(T.syncRunning, {p: bs.percent, name: nameOf(bs)});
+      $('st-sync-text').textContent = bs.waiting ? f(T.syncWaitVideo, {name: nameOf(bs)}) : f(T.syncRunning, {p: bs.percent, name: nameOf(bs)});
       $('st-sync-fill').style.width = bs.percent + '%';
       $('st-sync-pct').textContent = bs.percent + '%';
-      const eta = bs.etaSec;
-      $('st-sync-eta').textContent = eta === null || eta === undefined ? T.syncEtaWait : f(T.syncEta, {t: eta < 60 ? eta + (UI === 'he' ? ' שנ׳' : ' s') : Math.round(eta / 6) / 10 + (UI === 'he' ? ' דק׳' : ' min')});
+      const eta = bs.waiting ? null : bs.etaSec;
+      $('st-sync-eta').textContent = bs.waiting ? '' : eta === null || eta === undefined ? T.syncEtaWait : f(T.syncEta, {t: eta < 60 ? eta + (UI === 'he' ? ' שנ׳' : ' s') : Math.round(eta / 6) / 10 + (UI === 'he' ? ' דק׳' : ' min')});
     } else if (syncShown) {
       $('st-sync-text').textContent = ls.outcome === 'moved' ? f(T.syncMoved, {name: nameOf(ls), s: (Math.abs(ls.offsetMs || 0) / 1000).toFixed(1)}) : ls.outcome === 'inSync' ? f(T.syncInSync, {name: nameOf(ls)}) : ls.outcome === 'unavailable' ? f(T.syncUnavailable, {name: nameOf(ls)}) : f(T.syncKept, {name: nameOf(ls)});
     }
@@ -1034,7 +1034,7 @@ const refreshStatus = async () => {
   } catch { /* the app may be restarting */ }
 };
 refreshStatus();
-setInterval(refreshStatus, 2500);
+setInterval(refreshStatus, 1500);
 
 // Subtitle library: everything translated so far, grouped by title, with delete.
 const sizeText = (b) => b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(1) + ' MB';

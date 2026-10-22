@@ -94,6 +94,8 @@ export interface Job {
   syncProgressAt?: number;
   /** When listening to the video began, for the time estimate. */
   syncStartedAt?: number;
+  /** The sound check is waiting for the video to appear in Stremio (it is not playing yet). */
+  syncWaiting?: boolean;
   /** The user moved on to another video: the sound check of this one stops listening. */
   syncStopped?: boolean;
   /** The sound check could not start: the video is not on this computer's Stremio server. */
@@ -160,6 +162,10 @@ export interface JobManagerDeps {
     speechCapMs?: number;
     /** How long the sound check may wait for the video's data before it gives up. */
     syncNoDataMs?: number;
+    /** How long the sound check waits for the video to show up in Stremio (default 90 s). */
+    syncFindWaitMs?: number;
+    /** How often it looks again while waiting (default 3 s). */
+    syncFindEveryMs?: number;
     /** How long the translation waits for the sound check before it starts without it. */
     syncWaitMs?: number;
     /** Files with fewer lines than this are never shown in parts (default 1000). */
@@ -240,6 +246,8 @@ interface SoundFit {
 
 /** The sound check gives up when the video sends no sound for this long (45 s). */
 const SYNC_NO_DATA_MS = 45_000;
+const SYNC_FIND_WAIT_MS = 90_000;
+const SYNC_FIND_EVERY_MS = 3_000;
 
 /** A translation with no news for this long counts as stuck. */
 const STALL_AFTER_MS = 12_000;
@@ -668,6 +676,7 @@ export class JobManager {
     /** The sound check that goes on beside the translation (or after it): how far it is, 0..100. */
     backgroundSync: {
       percent: number;
+      waiting: boolean;
       etaSec: number | null;
       title: string;
       season?: number;
@@ -774,12 +783,16 @@ export class JobManager {
   /** A sound check that is listening while the job is already translating (or done). */
   private backgroundSync(): ReturnType<JobManager['stats']>['backgroundSync'] {
     const job = [...this.jobs.values()].find(
-      (j) => j.syncPercent !== undefined && j.stage !== 'sync' && j.lateFit !== undefined,
+      (j) =>
+        (j.syncPercent !== undefined || j.syncWaiting) &&
+        j.stage !== 'sync' &&
+        j.lateFit !== undefined,
     );
     if (!job) return null;
     const v = job.spec.video;
     return {
       percent: Math.max(0, Math.min(100, Math.round(job.syncPercent ?? 0))),
+      waiting: job.syncWaiting === true,
       etaSec: this.syncEtaSec(job),
       title: job.title ?? '',
       ...(v.season !== undefined ? { season: v.season } : {}),
@@ -1464,7 +1477,14 @@ export class JobManager {
           job,
           'sync',
           (wasSkipped) => {
-            const fit = this.fitToSpeech(job, cfg, log, picked, () => wasSkipped() || !!late.value);
+            const fit = this.fitToSpeech(
+              job,
+              cfg,
+              log,
+              picked,
+              () => wasSkipped() || !!late.value,
+              true,
+            );
             fit.catch(() => undefined);
             // After a while the translation starts without it; the check goes on and may upgrade the subtitle.
             const waitMs =
@@ -1713,6 +1733,8 @@ export class JobManager {
     log: Logger,
     picked: ChosenSource,
     wasSkipped: () => boolean,
+    /** Wait for the video to start playing in Stremio (the automatic check), not just look once. */
+    waitForVideo = false,
   ): Promise<SoundFit | undefined> {
     const fit = this.deps.speechFit;
     const filename = job.spec.filename;
@@ -1741,7 +1763,19 @@ export class JobManager {
     const cap = setTimeout(() => abort.abort(), this.deps.limits?.speechCapMs ?? 300_000);
     try {
       const find = this.deps.findStream ?? findStream;
-      const stream = await find(cfg.stremioServerUrl, filename, this.deps.fetchImpl);
+      let stream = await find(cfg.stremioServerUrl, filename, this.deps.fetchImpl);
+      const findWaitMs = this.deps.limits?.syncFindWaitMs ?? SYNC_FIND_WAIT_MS;
+      const everyMs = this.deps.limits?.syncFindEveryMs ?? SYNC_FIND_EVERY_MS;
+      // Stremio asks for subtitles before the video starts: wait for it to begin, then listen.
+      for (let waited = 0; waitForVideo && !stream && waited < findWaitMs; waited += everyMs) {
+        job.syncWaiting = true;
+        await new Promise((r) => setTimeout(r, everyMs));
+        if (abort.signal.aborted) break;
+        stream = await find(cfg.stremioServerUrl, filename, this.deps.fetchImpl).catch(
+          () => undefined,
+        );
+      }
+      delete job.syncWaiting;
       if (!stream) {
         job.syncNoVideo = true;
         return undefined;
@@ -1789,6 +1823,7 @@ export class JobManager {
       delete job.syncPercent;
       delete job.syncProgressAt;
       delete job.syncStartedAt;
+      delete job.syncWaiting;
     }
   }
 
