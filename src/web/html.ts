@@ -21,7 +21,7 @@ export interface StatusPageData {
   aiModel: string;
   dualSubtitles: boolean;
   /** Use subtitle tracks stored inside the video file (default on). */
-  embeddedSubtitles?: boolean;
+  embeddedSubtitles?: boolean; // creator only
   cleanSubtitles?: boolean;
   /** auto: translate right away. ask: wait for the user's OK first. */
   translationMode?: 'auto' | 'ask';
@@ -30,6 +30,8 @@ export interface StatusPageData {
   /** Developer test mode is on (made-up subtitles, pretend AI). */
   testMode?: boolean;
   jimakuKeyConfigured?: boolean;
+  /** Creator only: shows the diagnostics-with-titles button. */
+  creator?: boolean;
   /** Settings > Developers: the current values. */
   dev?: {
     soundCheck: 'background' | 'wait' | 'off';
@@ -508,7 +510,7 @@ ${group(
   `<p class="text-xs text-warm-mu">${tt('clearNote')}</p>
 <div class="grid grid-cols-2 gap-2.5"><button type="button" id="clear-cache" class="${btn}">${tt('clearCache')}</button><button type="button" id="rerun" class="${btn}">${tt('rerun')}</button></div>
 <span class="${result} text-center" id="clear-result"></span>
-<div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><p class="text-xs text-warm-mu">${tt('diagNote')}</p><button type="button" id="copy-diag" class="${btn}">${tt('diagBtn')}</button></div>`,
+<div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><p class="text-xs text-warm-mu">${tt('diagNote')}</p><button type="button" id="copy-diag" class="${btn}">${tt('diagBtn')}</button>${d.creator ? `<button type="button" id="copy-diag-titles" class="${btn}">Copy diagnostics + titles (creator)</button>` : ''}</div>`,
 )}
 ${group('menuAbout', `<p class="text-xs text-warm-mu">${tt('aboutDesc')}</p>${d.desktop ? updatesRow : ''}${devSection}`)}
 </div>
@@ -863,6 +865,15 @@ $('copy-diag').addEventListener('click', async () => {
   try {
     const text = await (await fetch('/api/diagnostics')).text();
     await navigator.clipboard.writeText(text);
+    toast(true, T.diagCopied);
+  } catch { toast(false, FAILED); }
+});
+// creator only
+$('copy-diag-titles')?.addEventListener('click', async () => {
+  try {
+    const base = await (await fetch('/api/diagnostics')).text();
+    const titles = await (await fetch('/api/diagnostics-titles')).text();
+    await navigator.clipboard.writeText(base + '\\n\\n' + titles);
     toast(true, T.diagCopied);
   } catch { toast(false, FAILED); }
 });
