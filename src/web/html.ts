@@ -935,8 +935,8 @@ const buildQueueRow = (it) => {
 };
 const renderQueue = (items) => {
   const box = $('st-queue');
-  // Shown only when something waits behind the current job (2 or more).
-  const shown = items.length >= 2;
+  // Shown whenever there is a job, so Skip and Cancel are there even for a single one.
+  const shown = items.length >= 1;
   box.classList.toggle('hidden', !shown);
   box.classList.toggle('flex', shown);
   const list = $('st-queue-list');
