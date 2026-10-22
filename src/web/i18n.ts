@@ -167,6 +167,7 @@ const S = {
     en: 'Subtitle lines translated this session',
   },
   progressDone: { he: 'הושלם: {t} שורות תורגמו', en: 'Done: {t} lines translated' },
+  nowLabel: { he: 'עכשיו בטיפול', en: 'Working on now' },
   qTitle: { he: 'תור תרגומים', en: 'Translation queue' },
   qSeasonEp: { he: 'עונה {s} פרק {e}', en: 'S{s} E{e}' },
   qPending: {
@@ -517,8 +518,8 @@ const S = {
     en: 'Sync done: the subtitle of {name} was moved by {s} seconds. Select the subtitles again in Stremio.',
   },
   deliveredText: {
-    he: 'Stremio לקח את הכתובית: {name}',
-    en: 'Stremio took the subtitle: {name}',
+    he: 'הכתובית האחרונה ש-Stremio לקח: {name}',
+    en: 'Last subtitle Stremio took: {name}',
   },
   syncNowBtn: { he: 'סנכרון קול', en: 'Sync to sound' },
   syncNowHint: {
