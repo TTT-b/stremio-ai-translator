@@ -35,6 +35,7 @@ const SAFE_FIELDS = [
   'timing',
   'provider',
   'parts',
+  'score',
 ] as const;
 
 const STAGES = new Set([
@@ -134,6 +135,7 @@ interface VideoRow {
   offsetMs?: number;
   scale?: number;
   parts?: string;
+  score?: number;
   upgraded: boolean;
   durationMs?: number;
   cues?: number;
@@ -174,6 +176,7 @@ function videoRows(lines: LogLine[]): VideoRow[] {
       const scale = num(line.scale);
       if (offset !== undefined) row.offsetMs = offset;
       if (scale !== undefined) row.scale = scale;
+      if (num(line.score) !== undefined) row.score = num(line.score);
       if (typeof line.parts === 'string') row.parts = text(line.parts, 60);
     }
     if (line.upgrade === 'done') row.upgraded = true;
@@ -198,7 +201,7 @@ function rowCells(r: VideoRow): string[] {
   const sound = r.failed
     ? '-'
     : r.sync === 'fitted' && r.offsetMs !== undefined && r.scale !== undefined
-      ? `moved ${(r.offsetMs / 1000).toFixed(1)} s, x${r.scale}`
+      ? `moved ${(r.offsetMs / 1000).toFixed(1)} s, x${r.scale}${r.score === undefined ? '' : `, score ${r.score}`}`
       : r.sync === 'fit-unsure'
         ? 'unsure'
         : r.sync === 'no-data'

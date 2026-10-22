@@ -1817,6 +1817,7 @@ export class JobManager {
           sync: 'fitted',
           offsetMs: result.offsetMs,
           scale: Math.round(result.scale * 10000) / 10000,
+          score: Math.round(result.score * 1000) / 1000,
           ...(result.parts?.length ? { parts: partsText(result.parts) } : {}),
         },
         'subtitle moved onto the speech',

@@ -8,10 +8,19 @@ import { detectSpeech, fitAcrossLevels } from './speech';
  */
 
 /** Where the pieces are looked for, as a share of the subtitle's length (the second round differs). */
-const FIRST_ROUND = [0.1, 0.45, 0.8];
-const SECOND_ROUND = [0.25, 0.62, 0.92];
-const MIN_WINDOW_SEC = 240;
-const MAX_WINDOW_SEC = 420;
+const ROUNDS: readonly (readonly number[])[] = [
+  [0.3, 0.65],
+  [0.12, 0.85],
+  [0.48, 0.93],
+];
+/** Short pieces: the data of a piece comes through Stremio's torrent, so every second costs download time. */
+const WINDOW_SEC = 100;
+/** An early answer needs at least this agreement with the speech (short pieces give chance matches around 0.2). */
+const EARLY_MIN_SCORE = 0.3;
+/** After all rounds, an answer whose pieces still disagree needs at least this agreement. */
+const LATE_MIN_SCORE = 0.2;
+/** Pieces that agree to within this (ms) after the fit are taken as a clear answer. */
+const AGREE_PARTS_MS = 800;
 /** Skipped at the start: an opening song says nothing about when people speak. */
 const INTRO_SKIP_SEC = 120;
 /** How far (share of the length) and in what steps a piece may move to find more dialogue. */
@@ -20,8 +29,6 @@ const SEARCH_STEP_SEC = 15;
 /** The subtitle may be this much off; the sound array has room for it. */
 const MARGIN_SEC = 100;
 const DEAD_DB = -120;
-/** The first round fills this share of the progress bar, the second round the rest. */
-const FIRST_ROUND_SHARE = 0.6;
 /** A piece is checked for what is left over only within this much (ms) after the fit. */
 const PART_REACH_MS = 6000;
 
@@ -89,7 +96,7 @@ export async function fitSubtitleToVideo(opts: VideoFitOptions): Promise<TimingF
   const lengthSec = Math.max(...opts.cues.map((c) => c.endMs), 0) / 1000;
   if (opts.cues.length < 20 || lengthSec < 300) return undefined;
 
-  const windowSec = Math.min(MAX_WINDOW_SEC, Math.max(MIN_WINDOW_SEC, lengthSec * 0.14));
+  const windowSec = Math.min(WINDOW_SEC, lengthSec * 0.14);
   const frames = Math.ceil(((lengthSec + MARGIN_SEC) * 1000) / FRAME_MS);
   const loudness = new Array<number>(frames).fill(DEAD_DB);
   const mask = new Uint8Array(frames);
@@ -142,10 +149,22 @@ export async function fitSubtitleToVideo(opts: VideoFitOptions): Promise<TimingF
     return { ...fit, parts };
   };
 
-  await listen(FIRST_ROUND, 0, FIRST_ROUND_SHARE);
-  const first = fitAcrossLevels(opts.cues, loudness, mask);
-  if (first) return withParts(first);
-  // Not sure: listen to other pieces too, and judge again with everything heard so far.
-  await listen(SECOND_ROUND, FIRST_ROUND_SHARE, 1);
-  return withParts(fitAcrossLevels(opts.cues, loudness, mask));
+  /** At least two pieces were judged, and they agree on what is left. */
+  const clear = (fit: TimingFit): boolean => {
+    const left = (fit.parts ?? []).flatMap((p) => (p.offsetMs === null ? [] : [p.offsetMs]));
+    return (
+      fit.score >= EARLY_MIN_SCORE &&
+      left.length >= 2 &&
+      Math.max(...left) - Math.min(...left) <= AGREE_PARTS_MS
+    );
+  };
+
+  // Two short pieces first; more only while the answer is missing or the pieces disagree.
+  let last: TimingFit | undefined;
+  for (const [i, shares] of ROUNDS.entries()) {
+    await listen(shares, i / ROUNDS.length, (i + 1) / ROUNDS.length);
+    last = withParts(fitAcrossLevels(opts.cues, loudness, mask));
+    if (last && clear(last)) return last;
+  }
+  return last && last.score >= LATE_MIN_SCORE ? last : undefined;
 }

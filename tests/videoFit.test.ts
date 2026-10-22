@@ -58,13 +58,13 @@ describe('fitSubtitleToVideo', { timeout: 30_000 }, () => {
   const { cues: truth, db } = film(40, 3);
   const base = { ffmpeg: 'ffmpeg', url: 'http://x/y', signal: new AbortController().signal };
 
-  it('finds the shift from three short pieces, not the whole video', async () => {
+  it('finds the shift from two short pieces, not the whole video', async () => {
     const asked: { startSec: number; durationSec: number }[] = [];
     const wrong = shifted(truth, 9000);
     const fit = await fitSubtitleToVideo({ ...base, cues: wrong, detect: fakeDetect(db, asked) });
-    expect(asked).toHaveLength(3);
+    expect(asked).toHaveLength(2);
     const heard = asked.reduce((s, w) => s + w.durationSec, 0);
-    expect(heard).toBeLessThan(0.6 * 40 * 60);
+    expect(heard).toBeLessThanOrEqual(200);
     expect(fit).toBeDefined();
     const fixed = applyFit(wrong, fit!);
     const bad = fixed.filter((c, i) => Math.abs(c.startMs - (truth[i] as Cue).startMs) > 300);
@@ -77,7 +77,7 @@ describe('fitSubtitleToVideo', { timeout: 30_000 }, () => {
       cues: shifted(truth, 9000),
       detect: fakeDetect(db, []),
     });
-    expect(fit?.parts).toHaveLength(3);
+    expect(fit?.parts).toHaveLength(2);
     for (const p of fit!.parts!) expect(Math.abs(p.offsetMs ?? 99_999)).toBeLessThan(400);
   });
 
@@ -150,10 +150,10 @@ describe('fitSubtitleToVideo', { timeout: 30_000 }, () => {
     const real = fakeDetect(db, asked);
     const noisy = fakeDetect(noise, asked);
     let calls = 0;
-    const detect: typeof detectSpeech = (...args) => (calls++ < 3 ? noisy(...args) : real(...args));
+    const detect: typeof detectSpeech = (...args) => (calls++ < 2 ? noisy(...args) : real(...args));
     const wrong = shifted(truth, 9000);
     const fit = await fitSubtitleToVideo({ ...base, cues: wrong, detect });
-    expect(asked.length).toBeGreaterThan(3);
+    expect(asked.length).toBeGreaterThan(2);
     expect(fit).toBeDefined();
     expect(Math.abs(fit!.offsetMs + 9000)).toBeLessThan(300);
   });
