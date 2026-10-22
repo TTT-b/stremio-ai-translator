@@ -1053,6 +1053,54 @@ describe('diagnostics', () => {
     expect(text).not.toContain('noise');
   });
 
+  it('keeps only the latest video and the problems, with the timing numbers', async () => {
+    const logDir = mkdtempSync(join(tmpdir(), 'logs-'));
+    const line = (o: object) => JSON.stringify(o);
+    writeFileSync(
+      join(logDir, 'app-2026-10-22.log'),
+      [
+        line({
+          level: 30,
+          time: 1792334500000,
+          stage: 'SOURCE',
+          videoId: 'tt0000001',
+          sync: 'fit-unsure',
+          msg: 'OLD EPISODE LINE',
+        }),
+        line({ level: 40, time: 1792334510000, msg: 'old problem' }),
+        line({
+          level: 30,
+          time: 1792334600000,
+          stage: 'SOURCE',
+          videoId: 'tt0000002',
+          sync: 'fitted',
+          offsetMs: -2500,
+          scale: 1.0427,
+          msg: 'subtitle moved onto the speech',
+        }),
+        line({
+          level: 30,
+          time: 1792334601000,
+          stage: 'ASSEMBLY',
+          videoId: 'tt0000002',
+          upgrade: 'done',
+          msg: 'job done',
+        }),
+      ].join('\n'),
+    );
+    current = await start({ logDir });
+    const text = await (await current.get('/api/diagnostics')).text();
+    expect(text).toContain('videos (last 5, newest last):');
+    expect(text).toContain('sync=fitted');
+    expect(text).toContain('offsetMs=-2500');
+    expect(text).toContain('scale=1.0427');
+    expect(text).toContain('upgrade=done');
+    expect(text).toContain('old problem');
+    expect(text).not.toContain('OLD EPISODE LINE');
+    const all = await (await current.get('/api/diagnostics?scope=all')).text();
+    expect(all).toContain('OLD EPISODE LINE');
+  });
+
   it('does not copy the titles of what the user watches', async () => {
     current = await start({ settings: { translationMode: 'ask' }, subWaitMs: 50 });
     await current.get('/subtitles/series/tt0944947%3A1%3A1.json');

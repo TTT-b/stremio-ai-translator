@@ -4,7 +4,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { FileCache } from '../cache/fileCache';
 import { Library, srtFileName } from '../jobs/library';
 import { RELEASE_NOTES } from '../electron/whatsNew';
-import { recentLogLines } from '../logging/diagnostics';
+import { recentLogLines, videoTable } from '../logging/diagnostics';
 import { findStream, locateTools } from '../sources/embedded';
 import { compareVersionsDesc, NEWS_URL, NewsFeed } from '../news/news';
 import { isJobId, JobManager, type JobManagerDeps } from '../jobs/manager';
@@ -626,7 +626,7 @@ export function createApp(deps: ServerDeps): express.Express {
 
   // A short report the user can copy and send when something does not work: settings as yes/no,
   // whether Stremio's server and ffmpeg are found, and the latest log lines. No keys, no subtitle text.
-  app.get('/api/diagnostics', async (_req, res) => {
+  app.get('/api/diagnostics', async (req, res) => {
     const c = current();
     let stremio = 'not reachable';
     try {
@@ -656,8 +656,11 @@ export function createApp(deps: ServerDeps): express.Express {
       // Counters only: no titles of what the user watches (the queue is reduced to its length).
       `jobs: ${JSON.stringify({ ...jobs.stats(), queue: jobs.stats().queue.length })}`,
       '',
-      'recent events:',
-      ...(deps.logDir ? recentLogLines(deps.logDir) : ['(no log folder)']),
+      ...(deps.logDir ? [...videoTable(deps.logDir), ''] : []),
+      req.query.scope === 'all' ? 'recent events:' : 'recent events (latest video and problems):',
+      ...(deps.logDir
+        ? recentLogLines(deps.logDir, 60, req.query.scope === 'all' ? 'all' : 'latest')
+        : ['(no log folder)']),
     ];
     res.type('text/plain').send(lines.join('\n'));
   });

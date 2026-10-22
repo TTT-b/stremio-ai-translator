@@ -495,3 +495,25 @@ tracks), copies the picture (HEVC is tagged `hvc1`, which Apple players need), a
 when it is AAC, AC3, E-AC3, MP3 or ALAC, otherwise it converts the sound to AAC. Videos in other
 picture formats (such as VP9 or AV1) may not play on an iPad even as MP4. Not every player shows
 Hebrew punctuation in the right place; VLC is the fallback.
+
+### Trying changes without installing the app
+
+For quick tests, run the add-on straight from the project folder instead of building and installing
+the desktop app. Close the installed app first (both use port 7000), then in PowerShell:
+
+```powershell
+cd "D:\TTT Sub"
+npm run dev
+```
+
+Open http://127.0.0.1:7000/ in your browser. `npm run dev` restarts by itself when a file changes
+(`npm start` runs once). It reads the keys from `.env` and keeps its data in the project folder, so
+the installed app's settings are not touched. Stremio uses the same add-on address
+(`http://127.0.0.1:7000/manifest.json`), so nothing needs reinstalling in Stremio. Buttons that only
+exist in the desktop app (such as saving a video file) are not shown in the browser.
+
+**Copy diagnostics** (Settings, Advanced) copies a short report: setup as yes/no, whether Stremio's
+server and ffmpeg are found, a table of the last 5 videos (where each subtitle came from, how sure
+its timing is, what the sound check did, time, lines) and the log lines of the latest video only
+(sources, timing numbers, warnings). No keys, no subtitle text, no titles (only IMDb ids and
+season/episode). Open `/api/diagnostics?scope=all` to see every recent line instead.
