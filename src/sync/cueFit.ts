@@ -16,6 +16,8 @@ import { pickWindows } from './videoFit';
 const WINDOW_SEC = 60;
 /** The two pieces read first; more are read only where neighbours disagree. */
 const FIRST_SHARES = [0.25, 0.75];
+/** When fewer than two pieces gave an answer, these places are tried one by one (a piece can fall on a song or a quiet part). */
+const RESCUE_SHARES = [0.5, 0.9, 0.1];
 /** At most this many more pieces, each between the two neighbours that differ most. */
 const MAX_EXTRA_PIECES = 3;
 const MIN_LENGTH_SEC = 300;
@@ -138,7 +140,7 @@ export async function fitSubtitleToEmbeddedCues(
   const taken: { from: number; to: number }[] = [];
   const matches: WindowMatch[] = [];
   let done = 0;
-  const total = FIRST_SHARES.length + MAX_EXTRA_PIECES;
+  const total = FIRST_SHARES.length + RESCUE_SHARES.length;
   const readRound = async (shares: readonly number[]): Promise<void> => {
     for (const fromSec of pickWindows(opts.cues, shares, WINDOW_SEC, lengthSec, taken)) {
       let raw = '';
@@ -173,6 +175,10 @@ export async function fitSubtitleToEmbeddedCues(
   };
 
   await readRound(FIRST_SHARES);
+  for (const share of RESCUE_SHARES) {
+    if (matches.length >= 2) break;
+    await readRound([share]);
+  }
   if (matches.length < 2) return undefined;
   for (let extra = 0; extra < MAX_EXTRA_PIECES; extra++) {
     const sorted = [...matches].sort((p, q) => p.atMs - q.atMs);

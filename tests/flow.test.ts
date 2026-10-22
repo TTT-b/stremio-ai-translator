@@ -304,6 +304,11 @@ describe('an exact subtitle that arrives after the job finished', () => {
     });
     expect(first).toContain('HE:Hello there.'); // the downloaded subtitle, translated
     expect(first).not.toContain('OWN line');
+    // While the video's own subtitle is still on its way, the main screen says so.
+    const waiting = (await (await current.get('/api/status')).json()) as {
+      exactComing: { season?: number; episode?: number } | null;
+    };
+    expect(waiting.exactComing).toMatchObject({ season: 1, episode: 1 });
 
     release(); // the video's own subtitle arrives after the job finished
     let text = '';
@@ -329,6 +334,8 @@ describe('an exact subtitle that arrives after the job finished', () => {
       upgrade: { season?: number; episode?: number; at: number } | null;
     };
     expect(status.upgrade).toMatchObject({ season: 1, episode: 1 });
+    const after = (await (await current.get('/api/status')).json()) as { exactComing: unknown };
+    expect(after.exactComing).toBeNull();
   });
 
   it('changes nothing when the video never gives its own subtitle', async () => {

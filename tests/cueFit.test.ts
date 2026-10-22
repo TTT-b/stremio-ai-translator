@@ -114,6 +114,27 @@ describe('fitSubtitleToEmbeddedCues', () => {
     expect(worst).toBeLessThan(700);
   });
 
+  it('tries other places when one piece falls on a part that does not match', async () => {
+    const real = sub.map((c) => ({ ...c, startMs: c.startMs + 38_000, endMs: c.endMs + 38_000 }));
+    const asked: number[] = [];
+    const fit = await fitSubtitleToEmbeddedCues({
+      ...base,
+      cues: sub,
+      signal,
+      exec,
+      // the piece near 75% of the video has only unrelated lines (a song, say)
+      readPiece: async (o) => {
+        asked.push(o.fromSec);
+        const lines = o.fromSec > 900 ? subtitle(24, 99) : real;
+        return toSrt(
+          lines.filter((c) => c.startMs >= o.fromSec * 1000 && c.startMs < o.toSec * 1000),
+        );
+      },
+    });
+    expect(asked.length).toBeGreaterThan(2);
+    expect(Math.abs((fit?.offsetMs ?? 0) - 38_000)).toBeLessThan(150);
+  });
+
   it('has nothing to say when the video has no track in that language', async () => {
     const asked: number[] = [];
     const fit = await fitSubtitleToEmbeddedCues({

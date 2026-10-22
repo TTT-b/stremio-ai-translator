@@ -84,6 +84,8 @@ export interface Job {
   progressAt?: number;
   /** The search inside the video, still running after the job went on without it (see upgradeLater). */
   lateEmbedded?: Promise<ChosenSource | undefined>;
+  /** The video's own subtitle is still being read (or translated) to replace the shown one. */
+  exactPending?: boolean;
   /** Cuts the requests that are waiting for the AI so they are asked again (set while translating). */
   kick?: () => number;
   /** Progress of listening to the video while the stage is 'sync', 0..100. */
@@ -698,6 +700,8 @@ export class JobManager {
     /** OpenSubtitles daily downloads: allowed and left, or null when not known (yet). */
     quota: { limit: number; left: number } | null;
     /** The sound check that goes on beside the translation (or after it): how far it is, 0..100. */
+    /** A subtitle with the video's own (exact) timing is on its way to replace the shown one. */
+    exactComing: { title: string; season?: number; episode?: number } | null;
     backgroundSync: {
       percent: number;
       waiting: boolean;
@@ -774,6 +778,7 @@ export class JobManager {
           ? { ...this.lastUpgrade }
           : null,
       subdlDownloads: this.subdlDownloads,
+      exactComing: this.exactComing(),
       backgroundSync: this.backgroundSync(),
       lastDelivered:
         this.lastDelivered && this.now() - this.lastDelivered.at < UPGRADE_NOTICE_MS
@@ -802,6 +807,17 @@ export class JobManager {
     if (elapsedMs < SYNC_ETA_MIN_MS) return null;
     const left = (elapsedMs * (100 - percent)) / percent / 1000;
     return Math.max(30, Math.round(left / 30) * 30); // to half a minute
+  }
+
+  private exactComing(): ReturnType<JobManager['stats']>['exactComing'] {
+    const job = [...this.jobs.values()].find((j) => j.exactPending && this.canUpgrade(j));
+    if (!job) return null;
+    const v = job.spec.video;
+    return {
+      title: job.title ?? '',
+      ...(v.season !== undefined ? { season: v.season } : {}),
+      ...(v.episode !== undefined ? { episode: v.episode } : {}),
+    };
   }
 
   /** A sound check that is listening while the job is already translating (or done). */
@@ -1112,6 +1128,14 @@ export class JobManager {
    * holds keeps working, and no "translating" message shows in between.
    */
   private async upgradeLater(job: Job, log: Logger): Promise<void> {
+    try {
+      await this.upgradeLaterWork(job, log);
+    } finally {
+      delete job.exactPending;
+    }
+  }
+
+  private async upgradeLaterWork(job: Job, log: Logger): Promise<void> {
     const pending = job.lateEmbedded;
     if (!pending) return;
     let exact: ChosenSource | undefined;
@@ -1443,6 +1467,7 @@ export class JobManager {
                 },
               );
               job.lateEmbedded = attempt;
+              job.exactPending = true;
               void attempt.then(
                 (found) => {
                   if (found) late.value = found;

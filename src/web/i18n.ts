@@ -541,6 +541,10 @@ const S = {
     he: 'לא הצלחתי להקשיב לקול של {name}, כי הפרק לא נמצא ב-Stremio שבמחשב הזה. פתח אותו שם ונסה שוב.',
     en: 'The sound of {name} could not be checked: the video was not found on the Stremio server of this computer.',
   },
+  syncWaitExact: {
+    he: 'ממשיך לקרוא את הכתובית שבתוך הסרטון כדי לתת תזמון מדויק ({name}). זה לוקח בערך דקה-שתיים, ואודיע כשהיא מוכנה.',
+    en: 'Still reading the subtitle inside the video to give exact timing ({name}). It takes a minute or two; you will be told when it is ready.',
+  },
   syncKept: {
     he: 'הסתיים: לא הצלחתי לקבוע בביטחון אם יש הבדל בין הכתוביות של {name} לקול, אז השארתי אותן כמו שהן.',
     en: 'Sync done: no sure change was found, the timing of {name} stays as it was.',

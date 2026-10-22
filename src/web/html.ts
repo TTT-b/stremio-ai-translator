@@ -1011,17 +1011,19 @@ const refreshStatus = async () => {
     // A finished notice goes away by itself after a minute. When an exact subtitle arrived after the
     // sound check, only that one is shown: the check's "kept" answer is no longer the whole story.
     const fresh = (x) => !!x && x.at > dismissedUpgrade && Date.now() - x.at < NOTICE_MS;
-    const syncShown = !!bs || (fresh(ls) && !(r.upgrade && r.upgrade.at >= ls.at));
+    const syncShown = !!bs || !!r.exactComing || (fresh(ls) && !(r.upgrade && r.upgrade.at >= ls.at));
     syncBox.classList.toggle('hidden', !syncShown);
     syncBox.classList.toggle('flex', syncShown);
     $('st-sync-bar').classList.toggle('hidden', !bs);
-    $('st-sync-ok-row').classList.toggle('hidden', !!bs);
+    $('st-sync-ok-row').classList.toggle('hidden', !!bs || !!r.exactComing);
     if (bs) {
       $('st-sync-text').textContent = bs.waiting ? f(T.syncWaitVideo, {name: nameOf(bs)}) : f(T.syncRunning, {p: bs.percent, name: nameOf(bs)});
       $('st-sync-fill').style.width = bs.percent + '%';
       $('st-sync-pct').textContent = bs.percent + '%';
       const eta = bs.waiting ? null : bs.etaSec;
       $('st-sync-eta').textContent = bs.waiting ? '' : eta === null || eta === undefined ? T.syncEtaWait : f(T.syncEta, {t: eta < 60 ? eta + (UI === 'he' ? ' שנ׳' : ' s') : Math.round(eta / 6) / 10 + (UI === 'he' ? ' דק׳' : ' min')});
+    } else if (r.exactComing) {
+      $('st-sync-text').textContent = f(T.syncWaitExact, {name: nameOf(r.exactComing)});
     } else if (syncShown) {
       $('st-sync-text').textContent = ls.outcome === 'moved' ? f(T.syncMoved, {name: nameOf(ls), s: (Math.abs(ls.offsetMs || 0) / 1000).toFixed(1)}) : ls.outcome === 'inSync' ? f(T.syncInSync, {name: nameOf(ls)}) : ls.outcome === 'unavailable' ? f(T.syncUnavailable, {name: nameOf(ls)}) : f(T.syncKept, {name: nameOf(ls)});
     }
