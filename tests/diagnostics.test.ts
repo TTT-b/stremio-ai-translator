@@ -63,6 +63,7 @@ describe('videoTable', () => {
         sync: 'fitted',
         offsetMs: -2500,
         scale: 1.0427,
+        parts: '4m:+0.1 12m:-0.2 19m:+3.1',
       },
       done('tt3', 'translated', 1826, 152000),
       {

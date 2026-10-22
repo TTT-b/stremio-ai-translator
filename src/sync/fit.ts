@@ -42,6 +42,8 @@ export interface FitOptions {
   maxRunnerUp?: number;
   /** 1 where the video's sound was really read; omitted = all of it. */
   mask?: Uint8Array;
+  /** Look only at a shift, never at a stretch (for checking one piece of the video). */
+  plainOnly?: boolean;
 }
 
 export interface TimingFit {
@@ -52,6 +54,8 @@ export interface TimingFit {
   score: number;
   /** Agreement of the untouched subtitle, for comparison. */
   baseline: number;
+  /** What is still off in each listened piece after the fit (ms), to see if the shift changes during the video. */
+  parts?: { atSec: number; offsetMs: number | null }[];
 }
 
 interface Curve {
@@ -131,7 +135,7 @@ export function fitTiming(
   const maxRunnerUp = opts.maxRunnerUp ?? 0.85;
   const maxLag = Math.round((opts.maxOffsetMs ?? 40_000) / FRAME_MS);
   if (cues.length < 20 || speech.length < 400) return undefined;
-  const curves: Curve[] = SCALE_CANDIDATES.map((scale) => ({
+  const curves: Curve[] = (opts.plainOnly ? [1] : SCALE_CANDIDATES).map((scale) => ({
     scale,
     r: curve(activity(cues, scale, speech.length), speech, opts.mask, maxLag),
   }));

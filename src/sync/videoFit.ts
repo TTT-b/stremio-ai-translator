@@ -1,5 +1,5 @@
 import type { Cue } from '../subtitles/types';
-import { FRAME_MS, type TimingFit } from './fit';
+import { FRAME_MS, applyFit, type TimingFit } from './fit';
 import { detectSpeech, fitAcrossLevels } from './speech';
 
 /**
@@ -22,6 +22,8 @@ const MARGIN_SEC = 100;
 const DEAD_DB = -120;
 /** The first round fills this share of the progress bar, the second round the rest. */
 const FIRST_ROUND_SHARE = 0.6;
+/** A piece is checked for what is left over only within this much (ms) after the fit. */
+const PART_REACH_MS = 6000;
 
 export interface VideoFitOptions {
   ffmpeg: string;
@@ -92,6 +94,7 @@ export async function fitSubtitleToVideo(opts: VideoFitOptions): Promise<TimingF
   const loudness = new Array<number>(frames).fill(DEAD_DB);
   const mask = new Uint8Array(frames);
   const taken: Span[] = [];
+  const heard: { startSec: number; frames: number }[] = [];
 
   /** Listens to one round of pieces; the progress bar covers [low, high] of 0..1. */
   const listen = async (shares: readonly number[], low: number, high: number): Promise<void> => {
@@ -109,6 +112,7 @@ export async function fitSubtitleToVideo(opts: VideoFitOptions): Promise<TimingF
         { startSec, durationSec: windowSec },
       );
       const first = Math.round((startSec * 1000) / FRAME_MS);
+      heard.push({ startSec, frames: scan.loudness.length });
       scan.loudness.forEach((v, i) => {
         if (first + i < frames) {
           loudness[first + i] = v;
@@ -119,10 +123,29 @@ export async function fitSubtitleToVideo(opts: VideoFitOptions): Promise<TimingF
     }
   };
 
+  /** What is still off in each piece after the fit: a shift that changes during the video shows here. */
+  const withParts = (fit: TimingFit | undefined): TimingFit | undefined => {
+    if (!fit) return undefined;
+    const moved = applyFit(opts.cues, fit);
+    const parts = [...heard]
+      .sort((p, q) => p.startSec - q.startSec)
+      .map((h) => {
+        const own = new Uint8Array(frames);
+        const from = Math.round((h.startSec * 1000) / FRAME_MS);
+        own.fill(1, from, Math.min(frames, from + h.frames));
+        const left = fitAcrossLevels(moved, loudness, own, {
+          maxOffsetMs: PART_REACH_MS,
+          plainOnly: true,
+        });
+        return { atSec: Math.round(h.startSec), offsetMs: left ? left.offsetMs : null };
+      });
+    return { ...fit, parts };
+  };
+
   await listen(FIRST_ROUND, 0, FIRST_ROUND_SHARE);
   const first = fitAcrossLevels(opts.cues, loudness, mask);
-  if (first) return first;
+  if (first) return withParts(first);
   // Not sure: listen to other pieces too, and judge again with everything heard so far.
   await listen(SECOND_ROUND, FIRST_ROUND_SHARE, 1);
-  return fitAcrossLevels(opts.cues, loudness, mask);
+  return withParts(fitAcrossLevels(opts.cues, loudness, mask));
 }

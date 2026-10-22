@@ -71,6 +71,29 @@ describe('fitSubtitleToVideo', { timeout: 30_000 }, () => {
     expect(bad.length / fixed.length).toBeLessThan(0.02);
   });
 
+  it('reports what is left off in each piece: about nothing for a plain shift', async () => {
+    const fit = await fitSubtitleToVideo({
+      ...base,
+      cues: shifted(truth, 9000),
+      detect: fakeDetect(db, []),
+    });
+    expect(fit?.parts).toHaveLength(3);
+    for (const p of fit!.parts!) expect(Math.abs(p.offsetMs ?? 99_999)).toBeLessThan(400);
+  });
+
+  it('shows a shift that changes during the video in the pieces', async () => {
+    // the first half of the subtitle is 9 s early, the second half 12 s: one shift cannot fit both
+    const half = truth.length / 2;
+    const bent = truth.map((c, i) => {
+      const off = i < half ? 9000 : 12_000;
+      return { ...c, startMs: c.startMs + off, endMs: c.endMs + off };
+    });
+    const fit = await fitSubtitleToVideo({ ...base, cues: bent, detect: fakeDetect(db, []) });
+    if (!fit) return; // not sure is an allowed answer; a wrong confident one is not tested here
+    const lefts = fit.parts!.map((p) => p.offsetMs);
+    expect(lefts.some((v) => v === null || Math.abs(v) > 1000)).toBe(true);
+  });
+
   it('leaves alone a subtitle that is already right', async () => {
     const fit = await fitSubtitleToVideo({ ...base, cues: truth, detect: fakeDetect(db, []) });
     const result = fit ? applyFit(truth, fit) : truth;

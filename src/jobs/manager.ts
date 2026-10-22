@@ -246,6 +246,19 @@ interface SoundFit {
 
 /** The sound check gives up when the video sends no sound for this long (45 s). */
 const SYNC_NO_DATA_MS = 45_000;
+/** "4m:+0.1 12m:-0.2 19m:?": what is left off in each listened piece, by minute of the video. */
+export function partsText(parts: { atSec: number; offsetMs: number | null }[]): string {
+  return parts
+    .map(
+      (p) =>
+        `${Math.round(p.atSec / 60)}m:` +
+        (p.offsetMs === null
+          ? '?'
+          : `${p.offsetMs >= 0 ? '+' : ''}${(p.offsetMs / 1000).toFixed(1)}`),
+    )
+    .join(' ');
+}
+
 const SYNC_FIND_WAIT_MS = 90_000;
 const SYNC_FIND_EVERY_MS = 3_000;
 
@@ -1804,6 +1817,7 @@ export class JobManager {
           sync: 'fitted',
           offsetMs: result.offsetMs,
           scale: Math.round(result.scale * 10000) / 10000,
+          ...(result.parts?.length ? { parts: partsText(result.parts) } : {}),
         },
         'subtitle moved onto the speech',
       );

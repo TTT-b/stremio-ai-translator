@@ -34,6 +34,7 @@ const SAFE_FIELDS = [
   'upgrade',
   'timing',
   'provider',
+  'parts',
 ] as const;
 
 const STAGES = new Set([
@@ -132,6 +133,7 @@ interface VideoRow {
   sync?: string;
   offsetMs?: number;
   scale?: number;
+  parts?: string;
   upgraded: boolean;
   durationMs?: number;
   cues?: number;
@@ -172,6 +174,7 @@ function videoRows(lines: LogLine[]): VideoRow[] {
       const scale = num(line.scale);
       if (offset !== undefined) row.offsetMs = offset;
       if (scale !== undefined) row.scale = scale;
+      if (typeof line.parts === 'string') row.parts = text(line.parts, 60);
     }
     if (line.upgrade === 'done') row.upgraded = true;
     if (line.msg === 'job done') {
@@ -210,6 +213,7 @@ function rowCells(r: VideoRow): string[] {
     sound,
     r.durationMs === undefined ? '-' : `${Math.round(r.durationMs / 1000)} s`,
     r.cues === undefined ? '-' : String(r.cues),
+    r.parts ?? '-',
   ];
 }
 
@@ -221,7 +225,7 @@ function rowCells(r: VideoRow): string[] {
 export function videoTable(logDir: string, count = 5): string[] {
   const rows = videoRows(readLogLines(logDir)).slice(-count);
   if (rows.length === 0) return ['videos: none yet'];
-  const header = ['video', 'source', 'timing', 'sound check', 'time', 'lines'];
+  const header = ['video', 'source', 'timing', 'sound check', 'time', 'lines', 'left off by part'];
   const body = rows.map(rowCells);
   const widths = header.map((h, i) => Math.max(h.length, ...body.map((b) => (b[i] ?? '').length)));
   const format = (n: string, cells: string[]) =>
