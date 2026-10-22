@@ -92,6 +92,8 @@ export interface Job {
   lateFit?: Promise<SoundFit | undefined>;
   /** When the sound check last made progress (the video's data may not be arriving). */
   syncProgressAt?: number;
+  /** When listening to the video began, for the time estimate. */
+  syncStartedAt?: number;
   /** The user moved on to another video: the sound check of this one stops listening. */
   syncStopped?: boolean;
   /** The sound check could not start: the video is not on this computer's Stremio server. */
@@ -297,6 +299,10 @@ function videoKey(spec: JobSpec): string {
   const v = spec.video;
   return [v.idKind, v.externalId, v.season ?? '', v.episode ?? '', spec.targetLanguage].join(':');
 }
+
+const SYNC_ETA_MIN_PERCENT = 5;
+const SYNC_ETA_MIN_MS = 20_000;
+const SYNC_ETA_STALE_MS = 30_000;
 
 export class JobManager {
   private readonly jobs = new Map<string, Job>();
@@ -660,7 +666,13 @@ export class JobManager {
     /** OpenSubtitles daily downloads: allowed and left, or null when not known (yet). */
     quota: { limit: number; left: number } | null;
     /** The sound check that goes on beside the translation (or after it): how far it is, 0..100. */
-    backgroundSync: { percent: number; title: string; season?: number; episode?: number } | null;
+    backgroundSync: {
+      percent: number;
+      etaSec: number | null;
+      title: string;
+      season?: number;
+      episode?: number;
+    } | null;
     /** The subtitle Stremio took last, for half an hour. */
     lastDelivered: {
       title: string;
@@ -742,6 +754,23 @@ export class JobManager {
     };
   }
 
+  /**
+   * Rough time left of the sound check, from how fast it went so far. Null while it is too early to
+   * tell, or when no data has arrived for a while (the video is not being sent).
+   */
+  private syncEtaSec(job: Job): number | null {
+    const percent = job.syncPercent ?? 0;
+    if (job.syncStartedAt === undefined || percent < SYNC_ETA_MIN_PERCENT || percent >= 100) {
+      return null;
+    }
+    const now = this.now();
+    if (now - (job.syncProgressAt ?? now) > SYNC_ETA_STALE_MS) return null;
+    const elapsedMs = now - job.syncStartedAt;
+    if (elapsedMs < SYNC_ETA_MIN_MS) return null;
+    const left = (elapsedMs * (100 - percent)) / percent / 1000;
+    return Math.max(30, Math.round(left / 30) * 30); // to half a minute
+  }
+
   /** A sound check that is listening while the job is already translating (or done). */
   private backgroundSync(): ReturnType<JobManager['stats']>['backgroundSync'] {
     const job = [...this.jobs.values()].find(
@@ -751,6 +780,7 @@ export class JobManager {
     const v = job.spec.video;
     return {
       percent: Math.max(0, Math.min(100, Math.round(job.syncPercent ?? 0))),
+      etaSec: this.syncEtaSec(job),
       title: job.title ?? '',
       ...(v.season !== undefined ? { season: v.season } : {}),
       ...(v.episode !== undefined ? { episode: v.episode } : {}),
@@ -1195,6 +1225,7 @@ export class JobManager {
     this.lastSync = null;
     job.syncPercent = 0;
     job.syncProgressAt = this.now();
+    job.syncStartedAt = this.now();
     const run = this.fitToSpeech(job, this.deps.config(), log, picked, () => false);
     job.lateFit = run;
     void run
@@ -1717,6 +1748,7 @@ export class JobManager {
       }
       job.syncPercent = 0;
       job.syncProgressAt = this.now();
+      job.syncStartedAt = this.now();
       const cues = parseSubtitle(picked.raw).cues;
       const result = await fit({
         url: stream.url,
@@ -1756,6 +1788,7 @@ export class JobManager {
       clearTimeout(cap);
       delete job.syncPercent;
       delete job.syncProgressAt;
+      delete job.syncStartedAt;
     }
   }
 

@@ -1958,7 +1958,7 @@ ${tag}
 
   it('the sound check keeps listening when another episode starts, until the user stops it', async () => {
     type Status = {
-      backgroundSync: { percent: number; episode?: number } | null;
+      backgroundSync: { percent: number; etaSec: number | null; episode?: number } | null;
       lastSync: unknown;
     };
     const status = async () => (await (await current!.get('/api/status')).json()) as Status;
@@ -1984,6 +1984,7 @@ ${tag}
     await new Promise((r) => setTimeout(r, 300));
     expect(stopped).toBe(false);
     expect((await status()).backgroundSync?.percent).toBe(30);
+    expect((await status()).backgroundSync?.etaSec).toBeNull(); // too early to estimate
 
     expect(((await (await post(current, '/api/sync-stop', {})).json()) as { ok: boolean }).ok).toBe(
       true,
