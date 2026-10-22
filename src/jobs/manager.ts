@@ -195,6 +195,7 @@ export interface JobManagerDeps {
     language: string;
     signal: AbortSignal;
     onProgress?: (percent: number) => void;
+    log?: (info: Record<string, unknown>) => void;
   }) => Promise<TimingFit | undefined>;
   /** When set, every finished subtitle is listed here so the user can review and delete it. */
   library?: Library;
@@ -1771,6 +1772,7 @@ export class JobManager {
     }
     const abort = new AbortController();
     const watch = setInterval(() => {
+      if (abort.signal.aborted) return; // said once; the step that was waiting ends by itself
       if (job.cancelled || job.syncStopped || wasSkipped()) abort.abort();
       else if (
         job.syncProgressAt !== undefined &&
@@ -1824,7 +1826,12 @@ export class JobManager {
             cues,
             language: picked.language,
             signal: abort.signal,
-            onProgress,
+            // every step of the cue check is progress, even when the number stays the same
+            onProgress: (p) => {
+              job.syncProgressAt = this.now();
+              onProgress(p);
+            },
+            log: (info) => log.info({ stage: 'SOURCE', ...info }, 'cue check'),
           })
           .catch(() => undefined);
         if (result) method = 'cues';

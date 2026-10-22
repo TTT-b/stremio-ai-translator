@@ -12,15 +12,16 @@ import { pickWindows } from './videoFit';
  * video has no usable track or the pieces do not give a clear answer.
  */
 
-const WINDOW_SEC = 120;
+/** Short: a piece is read by downloading that much of the video (the track is mixed in with the picture). */
+const WINDOW_SEC = 60;
 /** The two pieces read first; more are read only where neighbours disagree. */
 const FIRST_SHARES = [0.25, 0.75];
 /** At most this many more pieces, each between the two neighbours that differ most. */
 const MAX_EXTRA_PIECES = 3;
 const MIN_LENGTH_SEC = 300;
 const MIN_CUES = 20;
-const PROBE_TIMEOUT_MS = 20_000;
-const PIECE_TIMEOUT_MS = 60_000;
+const PROBE_TIMEOUT_MS = 15_000;
+const PIECE_TIMEOUT_MS = 40_000;
 const MAX_PIECE_BYTES = 2 * 1024 * 1024;
 
 export type ReadPiece = (o: {
@@ -42,6 +43,8 @@ export interface CueFitOptions {
   signal: AbortSignal;
   /** Share of the reading done, 0..100. */
   onProgress?: (percent: number) => void;
+  /** One line per step for the log: codes and numbers only. */
+  log?: (info: Record<string, unknown>) => void;
   /** Replaced in tests. */
   exec?: Exec;
   readPiece?: ReadPiece;
@@ -117,11 +120,20 @@ export async function fitSubtitleToEmbeddedCues(
   const exec = opts.exec ?? defaultExec;
   const read = opts.readPiece ?? readPieceWithFfmpeg;
 
-  const tracks = await listTextTracks(opts.ffprobe, opts.url, exec, PROBE_TIMEOUT_MS).catch(
-    () => [],
-  );
+  const probeStart = Date.now();
+  let probeFailed = false;
+  const tracks = await listTextTracks(opts.ffprobe, opts.url, exec, PROBE_TIMEOUT_MS).catch(() => {
+    probeFailed = true;
+    return [];
+  });
   const track = rankTracks(tracks, opts.language, opts.language)[0]?.track;
+  opts.log?.({
+    cue: track ? 'track' : probeFailed ? 'probe-failed' : 'no-track',
+    tracks: tracks.length,
+    ms: Date.now() - probeStart,
+  });
   if (!track) return undefined;
+  opts.onProgress?.(3);
 
   const taken: { from: number; to: number }[] = [];
   const matches: WindowMatch[] = [];
@@ -130,6 +142,7 @@ export async function fitSubtitleToEmbeddedCues(
   const readRound = async (shares: readonly number[]): Promise<void> => {
     for (const fromSec of pickWindows(opts.cues, shares, WINDOW_SEC, lengthSec, taken)) {
       let raw = '';
+      const pieceStart = Date.now();
       try {
         raw = await read({
           ffmpeg: opts.ffmpeg,
@@ -146,6 +159,15 @@ export async function fitSubtitleToEmbeddedCues(
       opts.onProgress?.(Math.round((done / total) * 100));
       const ref = raw ? parseSubtitle(raw, 'srt').cues : [];
       const hit = alignWindow(opts.cues, ref);
+      opts.log?.({
+        cue: 'piece',
+        fromSec: Math.round(fromSec),
+        ms: Date.now() - pieceStart,
+        lines: ref.length,
+        ...(hit
+          ? { matched: hit.matched, usable: hit.usable, offsetMs: hit.offsetMs }
+          : { unsure: true }),
+      });
       if (hit) matches.push(hit);
     }
   };

@@ -37,6 +37,13 @@ const SAFE_FIELDS = [
   'parts',
   'score',
   'method',
+  'cue',
+  'ms',
+  'lines',
+  'fromSec',
+  'usable',
+  'matched',
+  'unsure',
 ] as const;
 
 const STAGES = new Set([
