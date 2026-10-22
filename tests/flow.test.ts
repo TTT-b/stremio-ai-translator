@@ -1956,7 +1956,7 @@ ${tag}
     expect((await status()).backgroundSync).toBeNull();
   });
 
-  it('starting another episode stops the sound check still listening to the old one', async () => {
+  it('the sound check keeps listening when another episode starts, until the user stops it', async () => {
     type Status = {
       backgroundSync: { percent: number; episode?: number } | null;
       lastSync: unknown;
@@ -1981,6 +1981,13 @@ ${tag}
     expect(await waitFor(async () => (await status()).backgroundSync?.percent === 30)).toBe(true);
 
     await current.get(episodePath(current, 1, 4, 'Show.S01E04.mkv'));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(stopped).toBe(false);
+    expect((await status()).backgroundSync?.percent).toBe(30);
+
+    expect(((await (await post(current, '/api/sync-stop', {})).json()) as { ok: boolean }).ok).toBe(
+      true,
+    );
     expect(await waitFor(() => stopped)).toBe(true);
     expect((await status()).lastSync).toBeNull();
   });

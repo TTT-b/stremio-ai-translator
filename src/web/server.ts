@@ -464,6 +464,13 @@ export function createApp(deps: ServerDeps): express.Express {
   });
 
   // "Sync by sound": listen to the video of the latest subtitle and move it onto the speech.
+  // The Stop button of the sound check: the check listens until it is done or the user stops it.
+  app.post('/api/sync-stop', (_req, res) => {
+    const stopped = jobs.stopSync();
+    logger.info({ stage: 'API', stopped }, 'sync stop');
+    res.json({ ok: stopped });
+  });
+
   app.post('/api/sync-now', (_req, res) => {
     const r = jobs.syncNow();
     logger.info({ stage: 'API', started: r.ok, ...(r.ok ? {} : { code: r.code }) }, 'sync now');

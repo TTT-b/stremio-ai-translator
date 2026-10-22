@@ -412,14 +412,6 @@ export class JobManager {
         }
       }
     }
-    // Moving on to another episode ends the sound check still listening to the old one.
-    if (!restored && !spec.prefetch) {
-      for (const other of this.jobs.values()) {
-        if (other.syncPercent !== undefined && videoKey(other.spec) !== videoKey(spec)) {
-          other.syncStopped = true;
-        }
-      }
-    }
     const job: Job = {
       id,
       spec,
@@ -1173,6 +1165,15 @@ export class JobManager {
    * moves that subtitle onto the speech, even when it was thought to be exact. How far it is and how
    * it ended show on the main screen, like the background check.
    */
+  /** The user pressed Stop on the sound check that is listening; nothing else ends it but its own result. */
+  stopSync(): boolean {
+    const listening = [...this.jobs.values()].filter(
+      (j) => j.syncPercent !== undefined && !j.syncStopped,
+    );
+    for (const job of listening) job.syncStopped = true;
+    return listening.length > 0;
+  }
+
   syncNow(): { ok: true } | { ok: false; code: 'NO_SUBTITLE' | 'NO_VIDEO' | 'BUSY' } {
     const all = [...this.jobs.values()];
     const done = all.filter((j) => j.status === 'done' && j.result && !j.spec.prefetch);

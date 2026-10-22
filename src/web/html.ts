@@ -428,7 +428,7 @@ ${checks('r-', 'sample', 'sample-out')}
 <div id="st-progress-text" class="text-[26px] font-extrabold leading-tight text-warm-tx">${tt('noSub')}</div>
 <div class="h-2.5 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('progressAria')}" aria-valuemin="0" aria-valuemax="100"><div id="st-progress" class="h-full w-0 rounded-full bg-warm-ac transition-[width] duration-500"></div></div>
 <div id="st-delivered" class="hidden text-[13px] font-semibold text-warm-ok" role="status"></div>
-<div id="st-sync" class="hidden flex-col gap-1.5 rounded-xl border border-warm-ln bg-warm-bg px-3 py-2" role="status"><div id="st-sync-text" class="text-[13px] text-warm-tx"></div><div id="st-sync-bar" class="h-1.5 overflow-hidden rounded-full bg-warm-ln"><div id="st-sync-fill" class="h-full w-0 rounded-full bg-warm-ok transition-[width] duration-500"></div></div><div id="st-sync-ok-row" dir="ltr" class="flex justify-start"><button type="button" id="st-sync-ok" class="${btn} !px-4 !py-1.5 !text-[13px]">${tt('toastOk')}</button></div></div>
+<div id="st-sync" class="hidden flex-col gap-1.5 rounded-xl border border-warm-ln bg-warm-bg px-3 py-2" role="status"><div id="st-sync-text" class="text-[13px] text-warm-tx"></div><div id="st-sync-bar" class="flex items-center gap-3"><div class="h-3 flex-1 overflow-hidden rounded-full bg-warm-ln" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="st-sync-fill" class="h-full w-0 rounded-full bg-warm-ok transition-[width] duration-500"></div></div><div id="st-sync-pct" dir="ltr" class="min-w-[3.5rem] text-end text-xl font-extrabold text-warm-ok">0%</div><button type="button" id="st-sync-stop" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('syncStopBtn')}</button></div><div id="st-sync-ok-row" dir="ltr" class="flex justify-start"><button type="button" id="st-sync-ok" class="${btn} !px-4 !py-1.5 !text-[13px]">${tt('toastOk')}</button></div></div>
 </section>
 <section id="st-queue" class="${tile} hidden flex-col gap-2.5"><h2 class="text-sm font-bold text-warm-tx">${tt('qTitle')}</h2><ul id="st-queue-list" class="flex flex-col gap-2"></ul></section>
 <div class="grid gap-3.5">
@@ -964,6 +964,10 @@ const dismissSyncNotices = () => {
 };
 $('st-upgrade-close').addEventListener('click', dismissSyncNotices);
 $('st-sync-ok').addEventListener('click', dismissSyncNotices);
+$('st-sync-stop').addEventListener('click', async () => {
+  try { await post('/api/sync-stop', {}); } catch { toast(false, FAILED); }
+  refreshStatus();
+});
 const refreshStatus = async () => {
   try {
     const r = await (await fetch('/api/status')).json();
@@ -996,6 +1000,7 @@ const refreshStatus = async () => {
     if (bs) {
       $('st-sync-text').textContent = f(T.syncRunning, {p: bs.percent, name: nameOf(bs)});
       $('st-sync-fill').style.width = bs.percent + '%';
+      $('st-sync-pct').textContent = bs.percent + '%';
     } else if (syncShown) {
       $('st-sync-text').textContent = ls.outcome === 'moved' ? f(T.syncMoved, {name: nameOf(ls), s: (Math.abs(ls.offsetMs || 0) / 1000).toFixed(1)}) : ls.outcome === 'inSync' ? f(T.syncInSync, {name: nameOf(ls)}) : ls.outcome === 'unavailable' ? f(T.syncUnavailable, {name: nameOf(ls)}) : f(T.syncKept, {name: nameOf(ls)});
     }

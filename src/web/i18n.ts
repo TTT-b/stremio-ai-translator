@@ -505,6 +505,7 @@ const S = {
     he: 'מקשיב לקול של הפרק ומתאים אליו את הכתוביות: {p}% ({name})',
     en: 'Listening to the episode and lining the subtitles up with it: {p}% ({name})',
   },
+  syncStopBtn: { he: 'עצור סנכרון', en: 'Stop sync' },
   syncMoved: {
     he: 'הסתיים: הכתוביות של {name} הוזזו ב-{s} שניות כדי להתאים לקול. כדי לראות את השינוי, בחר שוב את הכתוביות ב-Stremio.',
     en: 'Sync done: the subtitle of {name} was moved by {s} seconds. Select the subtitles again in Stremio.',
