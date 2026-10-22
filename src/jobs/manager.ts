@@ -92,6 +92,10 @@ export interface Job {
   lateFit?: Promise<SoundFit | undefined>;
   /** When the sound check last made progress (the video's data may not be arriving). */
   syncProgressAt?: number;
+  /** The user moved on to another video: the sound check of this one stops listening. */
+  syncStopped?: boolean;
+  /** The sound check could not start: the video is not on this computer's Stremio server. */
+  syncNoVideo?: boolean;
   /**
    * The translated start of a long subtitle, served while the rest is still being translated.
    * Memory only: it is never cached or listed. `served` is set once Stremio was given it.
@@ -336,7 +340,7 @@ export class JobManager {
     title: string;
     season?: number;
     episode?: number;
-    outcome: 'moved' | 'kept';
+    outcome: 'moved' | 'kept' | 'inSync' | 'unavailable';
     offsetMs?: number;
     at: number;
   } | null = null;
@@ -405,6 +409,14 @@ export class JobManager {
       for (const other of this.jobs.values()) {
         if (other.status === 'pending' && videoKey(other.spec) !== videoKey(spec)) {
           this.jobs.delete(other.id);
+        }
+      }
+    }
+    // Moving on to another episode ends the sound check still listening to the old one.
+    if (!restored && !spec.prefetch) {
+      for (const other of this.jobs.values()) {
+        if (other.syncPercent !== undefined && videoKey(other.spec) !== videoKey(spec)) {
+          other.syncStopped = true;
         }
       }
     }
@@ -670,7 +682,7 @@ export class JobManager {
       title: string;
       season?: number;
       episode?: number;
-      outcome: 'moved' | 'kept';
+      outcome: 'moved' | 'kept' | 'inSync' | 'unavailable';
       offsetMs?: number;
       at: number;
     } | null;
@@ -1129,7 +1141,7 @@ export class JobManager {
       return;
     }
     const before = job.result;
-    if (!moved) void this.noteSync(job, 'kept');
+    if (!moved && !job.syncStopped) void this.noteSync(job, 'kept');
     if (!moved || !before || !this.canUpgrade(job)) return;
     try {
       const cues = parseSubtitle(before.content).cues;
@@ -1156,6 +1168,73 @@ export class JobManager {
     }
   }
 
+  /**
+   * "Sync by sound", pressed by the user: listens to the video of the latest finished subtitle and
+   * moves that subtitle onto the speech, even when it was thought to be exact. How far it is and how
+   * it ended show on the main screen, like the background check.
+   */
+  syncNow(): { ok: true } | { ok: false; code: 'NO_SUBTITLE' | 'NO_VIDEO' | 'BUSY' } {
+    const all = [...this.jobs.values()];
+    const done = all.filter((j) => j.status === 'done' && j.result && !j.spec.prefetch);
+    if (done.length === 0) return { ok: false, code: 'NO_SUBTITLE' };
+    if (all.some((j) => j.syncPercent !== undefined || j.lateFit))
+      return { ok: false, code: 'BUSY' };
+    const job = done
+      .filter((j) => j.spec.filename)
+      .sort((a, b) => (b.finishedAt ?? b.startedAt) - (a.finishedAt ?? a.startedAt))[0];
+    const before = job?.result;
+    if (!job || !before) return { ok: false, code: 'NO_VIDEO' };
+    const log = this.deps.logger.child({ jobId: job.id.slice(0, 8), stage: 'SOURCE' });
+    const picked: ChosenSource = {
+      kind: 'direct',
+      language: job.spec.targetLanguage,
+      raw: before.content,
+      exact: true,
+    };
+    this.lastSync = null;
+    job.syncPercent = 0;
+    job.syncProgressAt = this.now();
+    const run = this.fitToSpeech(job, this.deps.config(), log, picked, () => false);
+    job.lateFit = run;
+    void run
+      .then(async (moved) => {
+        if (!moved) return job.syncStopped ? undefined : this.noteSync(job, 'kept');
+        if (moved.fit.scale === 1 && Math.abs(moved.fit.offsetMs) < 100) {
+          return this.noteSync(job, 'inSync');
+        }
+        const cues = parseSubtitle(before.content).cues;
+        const content = serializeSubtitle({ format: 'srt', cues: applyFit(cues, moved.fit) });
+        const result: JobResult = { ...before, content, exact: true, timing: 'speech' };
+        // The job may have been cleared, replaced or upgraded while the sound was being checked.
+        const stillCurrent = () => this.jobs.get(job.id) === job && job.result === before;
+        if (!stillCurrent()) return;
+        if (before.exactKey)
+          this.safeSet(before.exactKey, 'translation', content, before.cues, log);
+        if (before.outKey && before.outKey !== before.exactKey) {
+          this.safeSet(before.outKey, 'translation', content, before.cues, log);
+        }
+        job.result = result;
+        void this.record(job, result, log);
+        log.info(
+          { upgrade: 'done', via: 'sound-now' },
+          'subtitle moved onto the speech on request',
+        );
+        await this.noteSync(job, 'moved', moved.fit.offsetMs);
+        await this.announceUpgrade(job);
+      })
+      .catch((err: unknown) => {
+        log.warn(
+          { upgrade: 'failed', errorCode: isAppError(err) ? err.code : 'UNKNOWN' },
+          'could not sync the subtitle to the sound on request; it stays as it was',
+        );
+        return this.noteSync(job, 'kept');
+      })
+      .finally(() => {
+        if (job.lateFit === run) delete job.lateFit;
+      });
+    return { ok: true };
+  }
+
   /** Remember that Stremio took a finished subtitle, for the main screen. */
   async noteDelivered(job: Job): Promise<void> {
     if (job.status !== 'done' || !job.result || job.spec.prefetch) return;
@@ -1170,8 +1249,14 @@ export class JobManager {
   }
 
   /** Remember how the background sound check ended, for the main screen. */
-  private async noteSync(job: Job, outcome: 'moved' | 'kept', offsetMs?: number): Promise<void> {
+  private async noteSync(
+    job: Job,
+    result: 'moved' | 'kept' | 'inSync',
+    offsetMs?: number,
+  ): Promise<void> {
     const v = job.spec.video;
+    // "Not sure" is not the same as "never listened": say so when the video was not found.
+    const outcome = result === 'kept' && job.syncNoVideo ? 'unavailable' : result;
     this.lastSync = {
       title: await this.titleFor(job),
       ...(v.season !== undefined ? { season: v.season } : {}),
@@ -1602,10 +1687,14 @@ export class JobManager {
     const ffmpeg = this.deps.ffmpegFor
       ? this.deps.ffmpegFor(cfg)
       : locateTools(cfg.ffmpegPath)?.ffmpeg;
-    if (!fit || !filename || !ffmpeg) return undefined;
+    delete job.syncNoVideo;
+    if (!fit || !filename || !ffmpeg) {
+      job.syncNoVideo = true;
+      return undefined;
+    }
     const abort = new AbortController();
     const watch = setInterval(() => {
-      if (job.cancelled || wasSkipped()) abort.abort();
+      if (job.cancelled || job.syncStopped || wasSkipped()) abort.abort();
       else if (
         job.syncProgressAt !== undefined &&
         this.now() - job.syncProgressAt > (this.deps.limits?.syncNoDataMs ?? SYNC_NO_DATA_MS)
@@ -1621,7 +1710,10 @@ export class JobManager {
     try {
       const find = this.deps.findStream ?? findStream;
       const stream = await find(cfg.stremioServerUrl, filename, this.deps.fetchImpl);
-      if (!stream) return undefined;
+      if (!stream) {
+        job.syncNoVideo = true;
+        return undefined;
+      }
       job.syncPercent = 0;
       job.syncProgressAt = this.now();
       const cues = parseSubtitle(picked.raw).cues;

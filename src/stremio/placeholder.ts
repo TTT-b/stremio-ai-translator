@@ -17,11 +17,7 @@ export function pendingMessage(lang: 'he' | 'en'): string {
 export const CANCELLED_MESSAGE = 'Translation cancelled';
 
 /** What the job is doing, as the player shows it while the subtitle is not ready. */
-export function progressMessage(
-  lang: 'he' | 'en',
-  stage: string | undefined,
-  percent: number | null,
-): string {
+export function progressMessage(lang: 'he' | 'en', stage: string | undefined): string {
   const again =
     lang === 'he' ? 'בחר שוב את הכתוביות בסוף התהליך' : 'reselect the subtitles when it finishes';
   const he: Record<string, string> = {
@@ -36,10 +32,8 @@ export function progressMessage(
     search: 'Searching for subtitles',
     sync: 'Syncing the subtitles',
   };
-  const translating =
-    lang === 'he'
-      ? `מתרגם את הכתוביות${percent === null ? '' : ` ${percent}%`}`
-      : `Translating the subtitles${percent === null ? '' : ` ${percent}%`}`;
+  // No percentage: Stremio loads this text once, so a number would stay frozen on the screen.
+  const translating = lang === 'he' ? 'מתרגם את הכתוביות' : 'Translating the subtitles';
   const line =
     stage === 'translate' ? translating : ((lang === 'he' ? he : en)[stage ?? ''] ?? translating);
   return `${line} - ${again}`;

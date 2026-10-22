@@ -502,19 +502,39 @@ const S = {
   testStarted: { he: 'בקשת בדיקה נוספה לתור', en: 'Test request added to the queue' },
   stageSync: { he: 'מסנכרן לפי הקול... {p}%', en: 'Syncing to the speech... {p}%' },
   syncRunning: {
-    he: 'מסנכרן את התזמון לפי הקול... {p}% · {name}',
-    en: 'Syncing the timing to the speech... {p}% · {name}',
+    he: 'מקשיב לקול של הפרק ומתאים אליו את הכתוביות: {p}% ({name})',
+    en: 'Listening to the episode and lining the subtitles up with it: {p}% ({name})',
   },
   syncMoved: {
-    he: 'הסנכרון הסתיים: הכתובית של {name} הוזזה ב-{s} שניות. בחר שוב את הכתוביות ב-Stremio.',
+    he: 'הסתיים: הכתוביות של {name} הוזזו ב-{s} שניות כדי להתאים לקול. כדי לראות את השינוי, בחר שוב את הכתוביות ב-Stremio.',
     en: 'Sync done: the subtitle of {name} was moved by {s} seconds. Select the subtitles again in Stremio.',
   },
   deliveredText: {
     he: 'Stremio לקח את הכתובית: {name}',
     en: 'Stremio took the subtitle: {name}',
   },
+  syncNowBtn: { he: 'סנכרון קול', en: 'Sync to sound' },
+  syncNowHint: {
+    he: 'מקשיב לקול של הסרטון שמתנגן ומיישר אליו את הכתובית האחרונה. צריך שהפרק יהיה פתוח ב-Stremio.',
+    en: 'Listens to the sound of the video that is playing and lines the latest subtitle up with it. The episode must be open in Stremio.',
+  },
+  syncNowStarted: { he: 'מתחיל סנכרון לפי הקול', en: 'Starting the sound sync' },
+  syncNowNoSub: { he: 'אין עדיין כתובית לסנכרן', en: 'There is no subtitle to sync yet' },
+  syncNowNoVideo: {
+    he: 'הסרטון לא נמצא. פתח את הפרק ב-Stremio ונסה שוב.',
+    en: 'The video was not found. Open the episode in Stremio and try again.',
+  },
+  syncNowBusy: { he: 'סנכרון כבר רץ', en: 'A sync is already running' },
+  syncInSync: {
+    he: 'הסתיים: הכתוביות של {name} כבר תואמות לקול, אז לא הזזתי כלום.',
+    en: 'Sync done: the subtitle of {name} is already in step with the sound.',
+  },
+  syncUnavailable: {
+    he: 'לא הצלחתי להקשיב לקול של {name}, כי הפרק לא נמצא ב-Stremio שבמחשב הזה. פתח אותו שם ונסה שוב.',
+    en: 'The sound of {name} could not be checked: the video was not found on the Stremio server of this computer.',
+  },
   syncKept: {
-    he: 'הסנכרון הסתיים: לא נמצא שינוי בטוח, התזמון של {name} נשאר כמו שהיה.',
+    he: 'הסתיים: לא הצלחתי לקבוע בביטחון אם יש הבדל בין הכתוביות של {name} לקול, אז השארתי אותן כמו שהן.',
     en: 'Sync done: no sure change was found, the timing of {name} stays as it was.',
   },
   libDeleteFail: { he: 'המחיקה נכשלה.', en: 'The delete failed.' },

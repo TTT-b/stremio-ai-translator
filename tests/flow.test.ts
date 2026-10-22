@@ -1908,6 +1908,70 @@ ${tag}
     expect((await status()).backgroundSync).toBeNull();
   });
 
+  it('starting another episode stops the sound check still listening to the old one', async () => {
+    type Status = {
+      backgroundSync: { percent: number; episode?: number } | null;
+      lastSync: unknown;
+    };
+    const status = async () => (await (await current!.get('/api/status')).json()) as Status;
+    let stopped = false;
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'background' },
+      findStream: stream,
+      speechFit: (o) =>
+        new Promise((resolve) => {
+          o.onProgress?.(30);
+          o.signal?.addEventListener('abort', () => {
+            stopped = true;
+            resolve(undefined);
+          });
+        }),
+    });
+    const first = await subUrl(current, episodePath(current, 1, 3, 'Show.S01E03.mkv'));
+    await current.get(first);
+    expect(await waitFor(async () => (await status()).backgroundSync?.percent === 30)).toBe(true);
+
+    await current.get(episodePath(current, 1, 4, 'Show.S01E04.mkv'));
+    expect(await waitFor(() => stopped)).toBe(true);
+    expect((await status()).lastSync).toBeNull();
+  });
+
+  it('"sync to sound" on request moves the latest subtitle, says when it is already in step, and when the video is missing', async () => {
+    type Status = { lastSync: { outcome: string; offsetMs?: number } | null };
+    const status = async () => (await (await current!.get('/api/status')).json()) as Status;
+    let offsetMs = 1500;
+    let found = true;
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'off' },
+      findStream: async () => (found ? await stream() : undefined),
+      speechFit: async () => ({ scale: 1, offsetMs, score: 0.3, baseline: 0 }),
+    });
+    expect((await post(current, '/api/sync-now', {})).status).toBe(409); // nothing to sync yet
+    const path = await subUrl(current, MOVIE_FILE);
+    const ready = await waitFor(async () =>
+      (await (await current!.get(path)).text()).includes('HE:'),
+    );
+    expect(ready).toBe(true);
+
+    expect((await post(current, '/api/sync-now', {})).status).toBe(200);
+    const moved = await waitFor(async () => (await status()).lastSync?.outcome === 'moved');
+    expect(moved).toBe(true);
+    expect((await status()).lastSync?.offsetMs).toBe(1500);
+    expect(await (await current.get(path)).text()).toContain('00:00:02,500 --> 00:00:04,500');
+
+    offsetMs = 20;
+    expect((await post(current, '/api/sync-now', {})).status).toBe(200);
+    expect(await waitFor(async () => (await status()).lastSync?.outcome === 'inSync')).toBe(true);
+
+    found = false;
+    expect((await post(current, '/api/sync-now', {})).status).toBe(200);
+    expect(await waitFor(async () => (await status()).lastSync?.outcome === 'unavailable')).toBe(
+      true,
+    );
+  });
+
   it('tells the main screen which subtitle Stremio took, once a finished one is delivered', async () => {
     type Status = { lastDelivered: { title: string; via: string } | null };
     const status = async () => (await (await current!.get('/api/status')).json()) as Status;

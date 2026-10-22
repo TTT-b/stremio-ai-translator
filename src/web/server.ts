@@ -461,6 +461,13 @@ export function createApp(deps: ServerDeps): express.Express {
     res.json({ ok: action !== 'none', action });
   });
 
+  // "Sync by sound": listen to the video of the latest subtitle and move it onto the speech.
+  app.post('/api/sync-now', (_req, res) => {
+    const r = jobs.syncNow();
+    logger.info({ stage: 'API', started: r.ok, ...(r.ok ? {} : { code: r.code }) }, 'sync now');
+    res.status(r.ok ? 200 : 409).json(r);
+  });
+
   // Delete translated subtitles from the local cache. Downloaded source files are kept.
   app.post('/api/cache/clear', (_req, res) => {
     try {
@@ -958,19 +965,7 @@ export function createApp(deps: ServerDeps): express.Express {
     } else if (job.partial) {
       send(jobs.partialSrt(job, uiLang, false) ?? '', 'partial', job.id);
     } else {
-      send(
-        placeholderSrt(
-          progressMessage(
-            uiLang,
-            job.stage,
-            job.progress && job.progress.total > 0
-              ? Math.min(100, Math.floor((job.progress.done / job.progress.total) * 100))
-              : null,
-          ),
-        ),
-        'in-progress',
-        job.id,
-      );
+      send(placeholderSrt(progressMessage(uiLang, job.stage)), 'in-progress', job.id);
     }
   });
 

@@ -422,7 +422,7 @@ ${checks('r-', 'sample', 'sample-out')}
 <div class="flex flex-col gap-[18px] lg:grid lg:grid-cols-2 lg:items-start lg:gap-5"><div class="flex flex-col gap-[18px]">
 <section id="st-upgrade" class="${tile} hidden flex-col gap-3 !border-warm-ac/60" role="status"><div><div class="text-sm font-bold text-warm-tx">${tt('upgradeTitle')}</div><div id="st-upgrade-text" class="mt-0.5 text-xs text-warm-mu"></div></div><div dir="ltr" class="flex justify-start"><button type="button" id="st-upgrade-close" class="${btn} !px-4 !py-1.5 !text-[13px]">${tt('toastOk')}</button></div></section>
 <section class="flex flex-col gap-3.5 rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-xl shadow-black/20">
-<div class="flex flex-wrap items-center justify-between gap-3"><div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('resumeHint')}">${tt('resumeBtn')}</button></div>
+<div class="flex flex-wrap items-center justify-between gap-3"><div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div><div class="flex items-center gap-2"><button type="button" id="sync-now-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('syncNowHint')}">${tt('syncNowBtn')}</button><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('resumeHint')}">${tt('resumeBtn')}</button></div></div>
 <div id="st-progress-text" class="text-[26px] font-extrabold leading-tight text-warm-tx">${tt('noSub')}</div>
 <div class="h-2.5 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('progressAria')}" aria-valuemin="0" aria-valuemax="100"><div id="st-progress" class="h-full w-0 rounded-full bg-warm-ac transition-[width] duration-500"></div></div>
 <div id="st-delivered" class="hidden text-[13px] font-semibold text-warm-ok" role="status"></div>
@@ -727,6 +727,18 @@ $('resume-btn').addEventListener('click', async () => {
   } catch { toast(false, FAILED); }
   refreshStatus();
 });
+$('sync-now-btn').addEventListener('click', async () => {
+  const btn = $('sync-now-btn');
+  btn.disabled = true;
+  setTimeout(() => { btn.disabled = false; }, 1500);
+  try {
+    const r = await post('/api/sync-now', {});
+    const why = {NO_SUBTITLE: T.syncNowNoSub, NO_VIDEO: T.syncNowNoVideo, BUSY: T.syncNowBusy};
+    toast(r.ok, r.ok ? T.syncNowStarted : why[r.code] || FAILED);
+  } catch { toast(false, FAILED); }
+  dismissedUpgrade = 0;
+  refreshStatus();
+});
 $('q-lang').addEventListener('change', quickSave);
 $('q-dual').addEventListener('change', quickSave);
 $('rerun').addEventListener('click', () => { setDrawer(false); fromDash = true; go(1); setView('wizard'); });
@@ -757,12 +769,15 @@ document.querySelectorAll('[data-test]').forEach(b => b.addEventListener('click'
 document.querySelectorAll('[data-sample]').forEach(b => b.addEventListener('click', async () => {
   const id = b.dataset.res, out = $(b.dataset.out);
   show(id, null, T.translating);
+  // The old result must not stay on screen while a new one is being made.
+  out.textContent = T.translating;
+  out.hidden = false;
   try {
     const r = await post('/api/dev/sample');
     const count = r.ok && /\\d+/.exec(r.message || '');
     show(id, r.ok, r.ok ? (count ? f(T.translatedN, {n: count[0]}) : T.translatedOk) : errText(r, FAILED));
     if (r.ok) { out.textContent = r.preview; out.hidden = false; } else { out.hidden = true; }
-  } catch { show(id, false, FAILED); }
+  } catch { show(id, false, FAILED); out.hidden = true; }
 }));
 $('d-src').addEventListener('change', async () => {
   try {
@@ -929,6 +944,7 @@ const renderQueue = (items) => {
 };
 // The "better subtitle is ready" notice can be closed; it comes back only for a newer one.
 let dismissedUpgrade = 0;
+const NOTICE_MS = 60000;
 try { dismissedUpgrade = Number(localStorage.getItem('upgradeDismissed')) || 0; } catch { /* no storage: it just shows again */ }
 const dismissSyncNotices = () => {
   dismissedUpgrade = Date.now();
@@ -952,13 +968,16 @@ const refreshStatus = async () => {
     $('st-progress-text').textContent = p ? (p.percent >= 100 && r.running === 0 ? f(T.progressDone, {t: p.total}) : f(T.progressText, {d: p.done, t: p.total, p: p.percent})) : (r.running > 0 && stageText) || T.noSub;
     $('st-progress').style.width = (p ? p.percent : 0) + '%'; // CSSOM, allowed by the nonce-only CSP
     // The sound check that goes on beside (or after) the translation, and how it ended.
-    const nameOf = (x) => x.title + (x.season !== undefined && x.episode !== undefined ? (UI === 'he' ? ' עונה ' + x.season + ' פרק ' + x.episode : ' S' + x.season + 'E' + x.episode) : '');
+    const nameOf = (x) => '⁨' + x.title + '⁩' + (x.season !== undefined && x.episode !== undefined ? (UI === 'he' ? ' עונה ' + x.season + ' פרק ' + x.episode : ' S' + x.season + 'E' + x.episode) : '');
     const bs = r.backgroundSync, ls = r.lastSync;
     const dl = r.lastDelivered;
     $('st-delivered').classList.toggle('hidden', !dl);
     if (dl) $('st-delivered').textContent = f(T.deliveredText, {name: nameOf(dl)});
     const syncBox = $('st-sync');
-    const syncShown = !!bs || (!!ls && ls.at > dismissedUpgrade);
+    // A finished notice goes away by itself after a minute. When an exact subtitle arrived after the
+    // sound check, only that one is shown: the check's "kept" answer is no longer the whole story.
+    const fresh = (x) => !!x && x.at > dismissedUpgrade && Date.now() - x.at < NOTICE_MS;
+    const syncShown = !!bs || (fresh(ls) && !(r.upgrade && r.upgrade.at >= ls.at));
     syncBox.classList.toggle('hidden', !syncShown);
     syncBox.classList.toggle('flex', syncShown);
     $('st-sync-bar').classList.toggle('hidden', !bs);
@@ -967,7 +986,7 @@ const refreshStatus = async () => {
       $('st-sync-text').textContent = f(T.syncRunning, {p: bs.percent, name: nameOf(bs)});
       $('st-sync-fill').style.width = bs.percent + '%';
     } else if (syncShown) {
-      $('st-sync-text').textContent = ls.outcome === 'moved' ? f(T.syncMoved, {name: nameOf(ls), s: (Math.abs(ls.offsetMs || 0) / 1000).toFixed(1)}) : f(T.syncKept, {name: nameOf(ls)});
+      $('st-sync-text').textContent = ls.outcome === 'moved' ? f(T.syncMoved, {name: nameOf(ls), s: (Math.abs(ls.offsetMs || 0) / 1000).toFixed(1)}) : ls.outcome === 'inSync' ? f(T.syncInSync, {name: nameOf(ls)}) : ls.outcome === 'unavailable' ? f(T.syncUnavailable, {name: nameOf(ls)}) : f(T.syncKept, {name: nameOf(ls)});
     }
     const q = r.quota;
     $('st-quota').classList.toggle('hidden', !q);
@@ -984,7 +1003,7 @@ const refreshStatus = async () => {
     if (subdlOn) $('st-subdl-text').textContent = f(T.stSubdlCount, {n: r.subdlDownloads || 0});
     // Always a normal button; it only lights up when there is something to continue.
     const up = r.upgrade;
-    const upVisible = !!up && up.at > dismissedUpgrade;
+    const upVisible = fresh(up);
     $('st-upgrade').classList.toggle('hidden', !upVisible);
     $('st-upgrade').classList.toggle('flex', upVisible);
     if (upVisible) {

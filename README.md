@@ -269,7 +269,7 @@ and whether it was `ready-made` (already in your language) or `translated from E
 makes for one episode are one line (their cache files are all deleted together). While the sound check
 listens in the background, a bar on the main screen shows how far it is, and when it ends it says
 whether the subtitle was moved (and by how many seconds) or the timing was left as it was. A line also
-says which subtitle Stremio took last. The notices after a sound check have an OK button that closes them,
+says which subtitle Stremio took last. The **Sync to sound** button next to Continue listens to the video that is playing and lines the latest subtitle up with it on request (the episode must be open in Stremio; if the video is not found on the Stremio server of this computer, it says so). The notices after a sound check go away by themselves after a minute, and have an OK button that closes them sooner,
 and the "Open Stremio" button asks before it opens the program.
 
 ### Developer settings (Settings > About)
