@@ -286,7 +286,9 @@ if (!app.requestSingleInstanceLock()) {
     if (!win) return null;
     const result = await dialog.showOpenDialog(win, {
       title:
-        (uiLang === 'he' ? 'בחר את קובץ הסרטון' : 'Choose the video file') +
+        (uiLang === 'he'
+          ? 'הסרטון לא נמצא ב-Stremio. בחר את קובץ הסרטון שבמחשב'
+          : 'The video was not found in Stremio. Choose the video file on this computer') +
         (episode ? ' - ' + episode : ''),
       properties: ['openFile'],
       filters: [

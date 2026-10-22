@@ -480,14 +480,15 @@ config ID in the manifest URL, authentication, rate limiting, SSRF hardening and
 
 ### Save a video with the subtitle inside
 
-In **My subtitles**, the **Save video with subtitles** button (desktop app) asks you to choose the
-video file you have on this computer, then saves a copy next to it (`Name.heb.mkv`) with the
+In **My subtitles**, the **Save as MKV (computer)** button (desktop app) saves the video with the subtitle inside. When
+the video is not available in Stremio right now it asks you to choose the
+video file you have on this computer (the window says so), then saves a copy next to it (`Name.heb.mkv`) with the
 translated subtitle as an extra, switchable track. Picture and sound are copied as they are (no
 re-encoding, so it takes seconds and loses no quality) and the original file is never changed or
 overwritten. It uses the ffmpeg that comes with Stremio. The subtitle is the first track and is set
 as the default one.
 
-The **Save as MP4** button next to it makes the same copy as an MP4
+The **Save as MP4 (phone)** button next to it makes the same copy as an MP4
 (`Name.heb.mp4`). iPad, iPhone and many phones play MKV only in an app such as VLC, but they open an
 MP4 in the built-in player, where the subtitle shows under the subtitles button (choose Hebrew; it is
 not switched on by itself). The MP4 keeps only the translated subtitle (not the other subtitle
