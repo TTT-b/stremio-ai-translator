@@ -1720,6 +1720,21 @@ describe('ask mode (translate only after the user says yes)', () => {
     expect(current.translator.calls).toBeLessThanOrEqual(2); // no further requests after the cancel
   });
 
+  it('a cancelled translation shows no progress bar, even when answers still arrive', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    current = await start({ settings: { translationMode: 'ask' }, subWaitMs: 50, gate });
+    await request(current, 'tt0944947:1:1');
+    const id = (await queueOf(current))[0]!.id;
+    await post(current, `/api/jobs/${id}/approve`, {});
+    await until(async () => current!.translator.calls > 0);
+    await post(current, `/api/jobs/${id}/cancel`, {});
+    release();
+    await until(async () => (await queueOf(current!)).length === 0);
+    const status = (await (await current.get('/api/status')).json()) as { progress: unknown };
+    expect(status.progress).toBeNull();
+  });
+
   it('auto mode (the default) still translates at once', async () => {
     current = await start({ subWaitMs: 50 });
     const url = await request(current, 'tt0944947:1:1');

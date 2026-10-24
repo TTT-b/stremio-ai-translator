@@ -67,6 +67,16 @@ describe('rankTracks', () => {
     ]);
   });
 
+  it('skips signs and songs tracks and puts the Dialog track first', () => {
+    const ranked = rankTracks(
+      [t(3, 'eng', 'S&S'), t(4, 'eng', 'Coalgirls Subs'), t(5, 'eng', 'Dialog - ENG')],
+      'he',
+      'en',
+    );
+    expect(ranked.map((r) => r.track.index)).toEqual([5, 4]);
+    expect(rankTracks([t(1, 'eng', 'Signs & Songs')], 'he', 'en')).toEqual([]);
+  });
+
   it('never uses forced or commentary tracks', () => {
     expect(rankTracks([t(2, 'eng', 'Forced'), t(3, 'eng', 'Commentary')], 'he', 'en')).toEqual([]);
   });

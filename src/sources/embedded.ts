@@ -408,19 +408,26 @@ export async function listTextTracks(
 
 /**
  * Tracks to try, best first: the target language before the source language; within a language,
- * full dialogue before hearing-impaired (SDH/CC) tracks; forced and commentary tracks never.
+ * full dialogue before hearing-impaired (SDH/CC) tracks, a track named Dialog first; forced and commentary tracks never.
  */
 export function rankTracks(
   tracks: TextTrack[],
   targetLanguage: string,
   sourceLanguage: string,
 ): { track: TextTrack; language: string }[] {
-  const usable = tracks.filter((t) => !/forced|commentary|signs/i.test(t.title));
+  // Signs/songs tracks ("S&S", "Signs & Songs") hold typesetting lines, thousands of them, not dialogue.
+  const usable = tracks.filter(
+    (t) => !/forced|commentary|signs|songs?|karaoke|\bs\s*[&+]\s*s\b/i.test(t.title),
+  );
+  const dialogue = (t: TextTrack) => /dialog/i.test(t.title);
   const hearing = (t: TextTrack) => /sdh|hearing|\bcc\b|caption/i.test(t.title);
   const rank = (code: string) =>
     usable
       .filter((t) => languageMatches(t.language, code))
-      .sort((a, b) => Number(hearing(a)) - Number(hearing(b)))
+      .sort(
+        (a, b) =>
+          Number(hearing(a)) - Number(hearing(b)) || Number(dialogue(b)) - Number(dialogue(a)),
+      )
       .map((track) => ({ track, language: code }));
   const target = rank(targetLanguage);
   return sourceLanguage.toLowerCase() === targetLanguage.toLowerCase()

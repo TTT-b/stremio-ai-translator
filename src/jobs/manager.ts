@@ -747,7 +747,9 @@ export class JobManager {
             ? 'error'
             : 'idle';
     // The file being worked on now, else the most recent one that reported progress.
-    const withProgress = [...this.jobs.values()].filter((j) => j.progress);
+    const withProgress = [...this.jobs.values()].filter(
+      (j) => j.progress && j.status !== 'cancelled',
+    );
     // While something is running, the card describes that, never an earlier finished subtitle.
     const runningWithProgress = withProgress.filter((j) => j.status === 'running');
     const current = running > 0 ? runningWithProgress.pop() : withProgress.pop();
@@ -1736,6 +1738,7 @@ export class JobManager {
         },
         onProgress: (done, total) => {
           for (const w of watchers) {
+            if (w.cancelled) continue; // answers still in flight must not move a cancelled bar
             w.progress = { done, total };
             w.progressAt = this.now();
           }
