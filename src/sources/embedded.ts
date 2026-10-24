@@ -171,22 +171,20 @@ export function locateTools(
   return undefined;
 }
 
-const statsSchema = z.record(
-  z.string(),
-  z
-    .object({
-      infoHash: z.string().regex(/^[0-9a-f]{40}$/i),
-      /** How much of the torrent is on disk and how fast it is coming in (bytes, bytes per second). */
-      downloaded: z.number().optional(),
-      downloadSpeed: z.number().optional(),
-      files: z
-        .array(
-          z.object({ path: z.string().max(1024), length: z.number().optional() }).passthrough(),
-        )
-        .max(5000),
-    })
-    .passthrough(),
-);
+const torrentSchema = z
+  .object({
+    infoHash: z.string().regex(/^[0-9a-f]{40}$/i),
+    /** How much of the torrent is on disk and how fast it is coming in (bytes, bytes per second). */
+    downloaded: z.number().optional(),
+    downloadSpeed: z.number().optional(),
+    files: z
+      .array(z.object({ path: z.string().max(1024), length: z.number().optional() }).passthrough())
+      .max(5000),
+  })
+  .passthrough();
+
+/** A torrent still loading has no file list (null): it is skipped, it must not hide the others. */
+const statsSchema = z.record(z.string(), z.unknown());
 
 export interface LocalStream {
   infoHash: string;
@@ -225,7 +223,10 @@ export async function findStream(
   const parsed = statsSchema.safeParse(JSON.parse(text));
   if (!parsed.success) return undefined;
   const wanted = filename.toLowerCase();
-  for (const torrent of Object.values(parsed.data)) {
+  for (const entry of Object.values(parsed.data)) {
+    const checked = torrentSchema.safeParse(entry);
+    if (!checked.success) continue;
+    const torrent = checked.data;
     const idx = torrent.files.findIndex(
       (f) => basename(f.path.replace(/\\/g, '/')).toLowerCase() === wanted,
     );

@@ -82,6 +82,16 @@ describe('findStream', () => {
     });
   });
 
+  it('still finds the playing file when another torrent has no file list yet', async () => {
+    const other = 'b'.repeat(40);
+    const body = JSON.stringify({
+      [other]: { infoHash: other, name: 'Loading', files: null },
+      [HASH]: { infoHash: HASH, name: 'Show', files: [{ path: `Show\\${FILE}`, length: 1 }] },
+    });
+    const r = await findStream('http://127.0.0.1:11470', FILE, fetchStats(body));
+    expect(r).toMatchObject({ infoHash: HASH, fileIdx: 0 });
+  });
+
   it('returns nothing for a file that is not on the local server', async () => {
     expect(
       await findStream('http://127.0.0.1:11470', 'Other.mkv', fetchStats(stats())),
