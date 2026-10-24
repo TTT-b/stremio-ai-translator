@@ -272,6 +272,8 @@ whether the subtitle was moved (and by how many seconds) or the timing was left 
 says which subtitle Stremio took last. The **Sync to sound** button next to Continue listens to the video that is playing and lines the latest subtitle up with it on request (the episode must be open in Stremio; if the video is not found on the Stremio server of this computer, it says so). The notices after a sound check go away by themselves after a minute, and have an OK button that closes them sooner,
 and the "Open Stremio" button asks before it opens the program.
 
+When several subtitles are found, the one whose release name is closest to the playing file is preferred (so it is more likely to be in sync). Reading the video's own subtitle track is tried when it should take up to about 3 minutes (the estimate comes from Stremio's download speed). The OpenSubtitles and SubDL password/key fields have an eye button to show what you typed.
+
 ### Developer settings (Settings > About)
 
 Everything here is saved at once and is meant for trying things:

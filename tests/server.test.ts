@@ -235,7 +235,7 @@ describe('local web server', () => {
       seasonPacks: true,
       prefetchNext: true,
       embeddedWaitSec: 15,
-      embeddedMaxEtaSec: 60,
+      embeddedMaxEtaSec: 180,
     });
   });
 

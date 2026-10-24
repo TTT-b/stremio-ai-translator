@@ -211,7 +211,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     prefetchNext: false,
     soundCheck: 'background',
     embeddedWaitSec: 15,
-    embeddedMaxEtaSec: 60,
+    embeddedMaxEtaSec: 180,
     stremioServerUrl: e.STREMIO_SERVER_URL,
     ffmpegPath: e.FFMPEG_PATH,
     newsEnabled: e.NEWS_ENABLED,

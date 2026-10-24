@@ -249,10 +249,3 @@ export function videoTable(logDir: string, count = 5): string[] {
     ...body.map((cells, i) => format(String(i + 1), cells)),
   ];
 }
-
-/** The ids of the latest videos, in the order of the table (for the creator-only titles). */
-export function recentVideoIds(logDir: string, count = 5): string[] {
-  return videoRows(readLogLines(logDir))
-    .slice(-count)
-    .map((r) => r.videoId);
-}

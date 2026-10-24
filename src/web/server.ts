@@ -5,7 +5,6 @@ import { FileCache } from '../cache/fileCache';
 import { Library, srtFileName } from '../jobs/library';
 import { RELEASE_NOTES } from '../electron/whatsNew';
 import { recentLogLines, videoTable } from '../logging/diagnostics';
-import { creatorMode, registerCreatorDiagnostics } from './creatorDiagnostics'; // creator only
 import { findStream, locateTools } from '../sources/embedded';
 import { compareVersionsDesc, NEWS_URL, NewsFeed } from '../news/news';
 import { isJobId, JobManager, type JobManagerDeps } from '../jobs/manager';
@@ -337,7 +336,6 @@ export function createApp(deps: ServerDeps): express.Express {
         subdlKeyConfigured: c.subdlApiKey !== '',
         jimakuKeyConfigured: c.jimakuApiKey !== '',
         dev: devPageValues(c),
-        creator: creatorMode(), // creator only
         openSubtitlesLoginConfigured:
           c.openSubtitlesUsername !== '' && c.openSubtitlesPassword !== '',
         openSubtitlesUsername: c.openSubtitlesUsername,
@@ -677,8 +675,6 @@ export function createApp(deps: ServerDeps): express.Express {
     res.type('text/plain').send(lines.join('\n'));
   });
 
-  registerCreatorDiagnostics(app, deps.logDir, () => library.list()); // creator only
-
   app.post('/api/news/seen', (req, res) => {
     const ids: unknown = (req.body as { ids?: unknown } | undefined)?.ids;
     if (!news.markSeen(ids)) {
@@ -840,7 +836,7 @@ export function createApp(deps: ServerDeps): express.Express {
           ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
         }),
       });
-      const selection = selectSubtitle(candidates, c.targetLanguage);
+      const selection = selectSubtitle(candidates, c.targetLanguage, 'en', filename);
       res.json({
         ok: true,
         found: candidates.length,

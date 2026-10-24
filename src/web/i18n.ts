@@ -131,6 +131,8 @@ const S = {
   },
   username: { he: 'שם משתמש', en: 'Username' },
   password: { he: 'סיסמה', en: 'Password' },
+  showPassword: { he: 'הצג סיסמה', en: 'Show password' },
+  hidePassword: { he: 'הסתר סיסמה', en: 'Hide password' },
   osUserPh: { he: 'שם המשתמש ב-opensubtitles.com', en: 'Your opensubtitles.com username' },
   osPassPh: { he: 'הסיסמה ב-opensubtitles.com', en: 'Your opensubtitles.com password' },
   createOsAccount: { he: 'צור חשבון OpenSubtitles', en: 'Create an OpenSubtitles account' },

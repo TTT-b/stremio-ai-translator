@@ -2003,8 +2003,11 @@ export class JobManager {
     // Developer option: translate from English even when a ready subtitle in the language exists.
     if (cfg.preferTranslation && forceLanguage === undefined) forceLanguage = 'en';
     const candidates = only ? found.filter((c) => (c.provider ?? 'opensubtitles') === only) : found;
-    let selection = selectSubtitle(candidates, lang.code);
-    const forced = forceLanguage ? rankSameLanguage(candidates, forceLanguage)[0] : undefined;
+    const videoName = job.spec.filename;
+    let selection = selectSubtitle(candidates, lang.code, 'en', videoName);
+    const forced = forceLanguage
+      ? rankSameLanguage(candidates, forceLanguage, videoName)[0]
+      : undefined;
     if (forced) {
       selection = { kind: forceLanguage === lang.code ? 'direct' : 'translate', candidate: forced };
     }
@@ -2054,7 +2057,7 @@ export class JobManager {
       this.downloadsLeft !== undefined &&
       this.downloadsLeft >= CONSENSUS_MIN_LEFT
     ) {
-      const pool = rankSameLanguage(candidates.filter(isMain), candidate.language).slice(
+      const pool = rankSameLanguage(candidates.filter(isMain), candidate.language, videoName).slice(
         0,
         CONSENSUS_POOL_SIZE,
       );
@@ -2088,6 +2091,7 @@ export class JobManager {
       rankSameLanguage(
         candidates.filter((c) => !isMain(c)),
         candidate.language,
+        videoName,
       )[0];
     if (this.downloadsLeft === 0 && isMain(candidate)) candidate = spare() ?? candidate;
     let raw: string;
@@ -2104,6 +2108,7 @@ export class JobManager {
             ? rankSameLanguage(
                 candidates.filter((c) => c !== failed && !c.pack),
                 failed.language,
+                videoName,
               )[0]
             : undefined;
       if (!alt) throw err;

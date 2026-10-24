@@ -21,7 +21,7 @@ export interface StatusPageData {
   aiModel: string;
   dualSubtitles: boolean;
   /** Use subtitle tracks stored inside the video file (default on). */
-  embeddedSubtitles?: boolean; // creator only
+  embeddedSubtitles?: boolean;
   cleanSubtitles?: boolean;
   /** auto: translate right away. ask: wait for the user's OK first. */
   translationMode?: 'auto' | 'ask';
@@ -30,8 +30,6 @@ export interface StatusPageData {
   /** Developer test mode is on (made-up subtitles, pretend AI). */
   testMode?: boolean;
   jimakuKeyConfigured?: boolean;
-  /** Creator only: shows the diagnostics-with-titles button. */
-  creator?: boolean;
   /** Settings > Developers: the current values. */
   dev?: {
     soundCheck: 'background' | 'wait' | 'off';
@@ -169,6 +167,9 @@ export function renderStatusPage(d: StatusPageData): string {
   /** Text for HTML content and attributes. */
   const tt = (key: StrKey, vars?: Record<string, string | number>) =>
     escapeHtml(t(lang, key, vars));
+  /** A password input with an eye button that shows or hides what was typed. */
+  const passwordField = (id: string, placeholder: string): string =>
+    `<div class="relative"><input class="${field} !pe-11" id="${id}" type="password" autocomplete="off" placeholder="${placeholder}"><button type="button" data-reveal="${id}" aria-pressed="false" aria-label="${tt('showPassword')}" title="${tt('showPassword')}" class="absolute end-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-warm-mu transition hover:text-warm-tx focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac/40"><svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path data-slash class="hidden" d="M4 4l16 16"/></svg></button></div>`;
   /** "Forward" arrow: points left in right-to-left screens. */
   const arrow = lang === 'he' ? '&larr;' : '&rarr;';
   const nudge =
@@ -310,7 +311,7 @@ ${testRow(tt('testSample'), testBtn(`id="${sampleId}" data-sample data-res="${rp
     preferTranslation: false,
     prefetchNext: false,
     embeddedWaitSec: 15,
-    embeddedMaxEtaSec: 60,
+    embeddedMaxEtaSec: 180,
     sources: [
       { id: 'subdl' as const, on: true, hasKey: d.subdlKeyConfigured === true },
       { id: 'opensubtitles' as const, on: true, hasKey: true },
@@ -393,7 +394,7 @@ ${d.desktop ? titleBar : ''}
 <div><label class="${labelCls}" for="k-user">${tt('username')}</label>
 <input class="${field}" id="k-user" type="text" autocomplete="off" placeholder="${d.openSubtitlesUsername ? tt('savedPh') : tt('osUserPh')}"></div>
 <div><label class="${labelCls}" for="k-pass">${tt('password')}</label>
-<input class="${field}" id="k-pass" type="password" autocomplete="off" placeholder="${d.openSubtitlesLoginConfigured ? tt('savedPh') : tt('osPassPh')}"></div>
+${passwordField('k-pass', d.openSubtitlesLoginConfigured ? tt('savedPh') : tt('osPassPh'))}</div>
 </div>
 <div class="flex flex-wrap gap-2">${keyLink('https://www.opensubtitles.com/en/users/sign_up', t(lang, 'createOsAccount'), true)}${keyLink('https://www.opensubtitles.com/consumers', t(lang, 'getOsKey'), true)}</div>
 <div class="mt-1 border-t border-warm-ln pt-3.5"><label class="${labelCls}" for="k-subdl">${tt('subdlKeyLabel')}</label>
@@ -492,7 +493,7 @@ ${group(
 </ul>
 <div><label class="${labelCls}" for="d-ai">${tt('aiKeyLabel')}</label><input class="${field}" id="d-ai" type="password" autocomplete="off" placeholder="${keyPh(d.aiConfigured)}"></div>
 <div><label class="${labelCls}" for="d-os">${tt('osKeyLabel')}</label><input class="${field}" id="d-os" type="password" autocomplete="off" placeholder="${keyPh(d.openSubtitlesKeyConfigured)}"></div>
-<div class="grid grid-cols-2 gap-3"><div><label class="${labelCls}" for="d-user">${tt('username')}</label><input class="${field}" id="d-user" type="text" autocomplete="off" placeholder="${d.openSubtitlesUsername ? tt('keptPh') : tt('username')}"></div><div><label class="${labelCls}" for="d-pass">${tt('password')}</label><input class="${field}" id="d-pass" type="password" autocomplete="off" placeholder="${d.openSubtitlesLoginConfigured ? tt('keptPh') : tt('password')}"></div></div>
+<div class="grid grid-cols-2 gap-3"><div><label class="${labelCls}" for="d-user">${tt('username')}</label><input class="${field}" id="d-user" type="text" autocomplete="off" placeholder="${d.openSubtitlesUsername ? tt('keptPh') : tt('username')}"></div><div><label class="${labelCls}" for="d-pass">${tt('password')}</label>${passwordField('d-pass', d.openSubtitlesLoginConfigured ? tt('keptPh') : tt('password'))}</div></div>
 <div><label class="${labelCls}" for="d-subdl">${tt('subdlKeyLabel')}</label><input class="${field}" id="d-subdl" type="password" autocomplete="off" placeholder="${keyPh(d.subdlKeyConfigured ?? false)}"><p class="mt-1 text-xs text-warm-mu">${tt('subdlHint')}</p></div>
 <div><label class="${labelCls}" for="d-jimaku">${tt('jimakuKeyLabel')}</label><input class="${field}" id="d-jimaku" type="password" autocomplete="off" placeholder="${keyPh(d.jimakuKeyConfigured ?? false)}"><p class="mt-1 text-xs text-warm-mu">${tt('jimakuHint')}</p></div>`,
 )}
@@ -510,7 +511,7 @@ ${group(
   `<p class="text-xs text-warm-mu">${tt('clearNote')}</p>
 <div class="grid grid-cols-2 gap-2.5"><button type="button" id="clear-cache" class="${btn}">${tt('clearCache')}</button><button type="button" id="rerun" class="${btn}">${tt('rerun')}</button></div>
 <span class="${result} text-center" id="clear-result"></span>
-<div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><p class="text-xs text-warm-mu">${tt('diagNote')}</p><button type="button" id="copy-diag" class="${btn}">${tt('diagBtn')}</button>${d.creator ? `<button type="button" id="copy-diag-titles" class="${btn}">Copy diagnostics + titles (creator)</button>` : ''}</div>`,
+<div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><p class="text-xs text-warm-mu">${tt('diagNote')}</p><button type="button" id="copy-diag" class="${btn}">${tt('diagBtn')}</button></div>`,
 )}
 ${group('menuAbout', `<p class="text-xs text-warm-mu">${tt('aboutDesc')}</p>${d.desktop ? updatesRow : ''}${devSection}`)}
 </div>
@@ -769,6 +770,16 @@ document.querySelectorAll('[data-test]').forEach(b => b.addEventListener('click'
   try { const r = await post('/api/test/' + name); show(id, r.ok, r.ok ? TEST_OK[name] : errText(r, FAILED)); }
   catch { show(id, false, FAILED); }
 }));
+// Eye button: shows or hides what was typed in a password field (nothing saved is ever sent here).
+document.querySelectorAll('[data-reveal]').forEach(b => b.addEventListener('click', () => {
+  const input = $(b.dataset.reveal);
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  b.setAttribute('aria-pressed', String(show));
+  b.setAttribute('aria-label', show ? T.hidePassword : T.showPassword);
+  b.title = show ? T.hidePassword : T.showPassword;
+  b.querySelector('[data-slash]').classList.toggle('hidden', !show);
+}));
 document.querySelectorAll('[data-sample]').forEach(b => b.addEventListener('click', async () => {
   const id = b.dataset.res, out = $(b.dataset.out);
   show(id, null, T.translating);
@@ -866,15 +877,6 @@ $('copy-diag').addEventListener('click', async () => {
   try {
     const text = await (await fetch('/api/diagnostics')).text();
     await navigator.clipboard.writeText(text);
-    toast(true, T.diagCopied);
-  } catch { toast(false, FAILED); }
-});
-// creator only
-$('copy-diag-titles')?.addEventListener('click', async () => {
-  try {
-    const base = await (await fetch('/api/diagnostics')).text();
-    const titles = await (await fetch('/api/diagnostics-titles')).text();
-    await navigator.clipboard.writeText(base + '\\n\\n' + titles);
     toast(true, T.diagCopied);
   } catch { toast(false, FAILED); }
 });

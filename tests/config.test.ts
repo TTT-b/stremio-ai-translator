@@ -24,7 +24,7 @@ describe('loadConfig', () => {
       prefetchNext: false,
       soundCheck: 'background',
       embeddedWaitSec: 15,
-      embeddedMaxEtaSec: 60,
+      embeddedMaxEtaSec: 180,
       jimakuApiKey: 'jk-abcdef-123456',
     });
     expect(loadConfig({}).jimakuApiKey).toBe('');
