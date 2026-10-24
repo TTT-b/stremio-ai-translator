@@ -421,9 +421,9 @@ const S = {
     en: 'If something does not work, copy this and send it to the author. It has no keys and no subtitle text.',
   },
   diagCopied: { he: 'פרטי האבחון הועתקו', en: 'Diagnostics copied' },
-  srcLabel: { he: 'מקור כתוביות ראשון', en: 'First subtitle source' },
-  srcOs: { he: 'OpenSubtitles (ברירת מחדל)', en: 'OpenSubtitles (default)' },
-  srcSubdl: { he: 'SubDL', en: 'SubDL' },
+  srcLabel: { he: 'מקור כתוביות מועדף', en: 'Preferred subtitle source' },
+  srcOs: { he: 'OpenSubtitles', en: 'OpenSubtitles' },
+  srcSubdl: { he: 'SubDL (מומלץ)', en: 'SubDL (recommended)' },
   srcInUse: { he: 'בשימוש', en: 'In use' },
   srcBackup: { he: 'גיבוי', en: 'Backup' },
   stSubdl: { he: 'הורדות כתוביות מ-SubDL', en: 'SubDL downloads' },
@@ -480,8 +480,8 @@ const S = {
     en: 'The app does not get a quota figure from SubDL, so only the downloads in this session are shown.',
   },
   srcHint: {
-    he: 'המקור השני משמש רק כשאין כתובית במקור הראשון. SubDL דורש מפתח SubDL (בחשבונות ומפתחות), בלי מפתח משתמשים ב-OpenSubtitles. ב-SubDL התזמון פחות מדויק, ואין הורדות יומיות שנספרות מול OpenSubtitles.',
-    en: 'The other source is used only when the first has no subtitle. SubDL needs a SubDL key (under Accounts and keys); without one OpenSubtitles is used. SubDL timing is less exact, and it does not use up the OpenSubtitles daily downloads.',
+    he: 'כל המקורות נבדקים יחד, והתוכנה בוחרת את הכתובית שהכי מתאימה לקובץ שמנגן (אותו קובץ בדיוק, אחר כך אותה גרסה). המקור המועדף קובע רק כשכמה כתוביות מתאימות באותה מידה. SubDL דורש מפתח SubDL (בחשבונות ומפתחות), ואין בו הורדות יומיות שנספרות מול OpenSubtitles.',
+    en: 'All sources are searched together and the subtitle that best fits the playing file is chosen (the exact file first, then the same release). The preferred source decides only when several subtitles fit equally well. SubDL needs a SubDL key (under Accounts and keys) and does not use up the OpenSubtitles daily downloads.',
   },
   menuAbout: { he: 'אודות התוכנה', en: 'About' },
   aboutDesc: {
