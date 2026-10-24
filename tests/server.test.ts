@@ -123,6 +123,19 @@ describe('local web server', () => {
     expect(html).not.toContain(OS_PASSWORD);
   });
 
+  it('shows the gear button in Stremio and sends /configure to the settings screen', async () => {
+    const manifest = (await (await get('/manifest.json')).json()) as {
+      behaviorHints?: { configurable?: boolean };
+    };
+    expect(manifest.behaviorHints?.configurable).toBe(true);
+    const res = await fetch(base + '/configure', {
+      headers: { Host: hostHeader },
+      redirect: 'manual',
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/');
+  });
+
   it('rejects unknown Host headers and foreign origins', async () => {
     // fetch() cannot override Host/Origin, so use a raw HTTP request.
     const raw = (method: string, path: string, headers: Record<string, string>) =>

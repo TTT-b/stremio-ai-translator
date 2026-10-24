@@ -18,6 +18,8 @@ export const MANIFEST: Manifest = {
   // tt = IMDb, kitsu = Kitsu anime ids, tmdb = TMDB ids
   idPrefixes: ['tt', 'kitsu', 'tmdb'],
   catalogs: [],
+  // Shows the gear button next to the add-on in Stremio; it opens `<add-on address>/configure`.
+  behaviorHints: { configurable: true },
 };
 
 /** Stremio calls this for every video; we answer immediately and work in the background. */

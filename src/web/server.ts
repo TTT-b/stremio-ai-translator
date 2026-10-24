@@ -313,6 +313,11 @@ export function createApp(deps: ServerDeps): express.Express {
     };
   };
 
+  // The gear button in Stremio's add-on list opens this address; it leads to the settings screen.
+  app.get('/configure', (_req, res) => {
+    res.redirect(302, '/');
+  });
+
   app.get('/', (req, res) => {
     const c = current();
     const nonce = randomBytes(16).toString('base64');
