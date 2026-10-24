@@ -57,6 +57,11 @@ export function createStremioRouter(deps: {
           jobId: job.id.slice(0, 8),
           jobStatus: job.status,
           hasHash: hash !== undefined,
+          // What Stremio sends besides the name (names only): tells whether the file size arrives.
+          extraKeys: Object.keys(extra)
+            .filter((k) => /^[A-Za-z]{1,20}$/.test(k))
+            .slice(0, 10)
+            .join(','),
           targetLanguage: lang.code,
         },
         'subtitles requested',
