@@ -1,4 +1,5 @@
 import type { Cue } from '../subtitles/types';
+import { offsetAt } from './cueAlign';
 
 /**
  * Finds how a subtitle's timing differs from the real speech of the video, as a constant offset
@@ -42,6 +43,8 @@ export interface FitOptions {
   maxRunnerUp?: number;
   /** 1 where the video's sound was really read; omitted = all of it. */
   mask?: Uint8Array;
+  /** Look only at a shift, never at a stretch (for checking one piece of the video). */
+  plainOnly?: boolean;
 }
 
 export interface TimingFit {
@@ -52,6 +55,10 @@ export interface TimingFit {
   score: number;
   /** Agreement of the untouched subtitle, for comparison. */
   baseline: number;
+  /** What is still off in each listened piece after the fit (ms), to see if the shift changes during the video. */
+  parts?: { atSec: number; offsetMs: number | null }[];
+  /** A shift that changes along the video, as points on the subtitle's own timeline; it replaces scale and offsetMs. */
+  knots?: { atMs: number; offsetMs: number }[];
 }
 
 interface Curve {
@@ -131,7 +138,7 @@ export function fitTiming(
   const maxRunnerUp = opts.maxRunnerUp ?? 0.85;
   const maxLag = Math.round((opts.maxOffsetMs ?? 40_000) / FRAME_MS);
   if (cues.length < 20 || speech.length < 400) return undefined;
-  const curves: Curve[] = SCALE_CANDIDATES.map((scale) => ({
+  const curves: Curve[] = (opts.plainOnly ? [1] : SCALE_CANDIDATES).map((scale) => ({
     scale,
     r: curve(activity(cues, scale, speech.length), speech, opts.mask, maxLag),
   }));
@@ -177,8 +184,10 @@ export function fitTiming(
 /** The cues moved by a fit. Text, order and count stay as they were. */
 export function applyFit(cues: Cue[], fit: TimingFit): Cue[] {
   return cues.map((c) => {
-    const startMs = Math.max(0, Math.round(c.startMs * fit.scale + fit.offsetMs));
-    const endMs = Math.max(startMs + 1, Math.round(c.endMs * fit.scale + fit.offsetMs));
+    const shift =
+      fit.knots && fit.knots.length >= 2 ? offsetAt(fit.knots, c.startMs) : fit.offsetMs;
+    const startMs = Math.max(0, Math.round(c.startMs * fit.scale + shift));
+    const endMs = Math.max(startMs + 1, Math.round(c.endMs * fit.scale + shift));
     return { ...c, startMs, endMs };
   });
 }

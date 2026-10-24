@@ -1,5 +1,5 @@
 import type { Cue } from '../subtitles/types';
-import { FRAME_MS, type TimingFit } from './fit';
+import { FRAME_MS, applyFit, type TimingFit } from './fit';
 import { detectSpeech, fitAcrossLevels } from './speech';
 
 /**
@@ -7,13 +7,30 @@ import { detectSpeech, fitAcrossLevels } from './speech';
  * (not the whole video), and returns how to move it, or undefined when it is not sure.
  */
 
-/** Where the pieces start, as a share of the subtitle's length. */
-const WINDOW_STARTS = [0.03, 0.4, 0.78];
-const MIN_WINDOW_SEC = 240;
-const MAX_WINDOW_SEC = 420;
+/** Where the pieces are looked for, as a share of the subtitle's length (the second round differs). */
+const ROUNDS: readonly (readonly number[])[] = [
+  [0.3, 0.65],
+  [0.12, 0.85],
+  [0.48, 0.93],
+];
+/** Short pieces: the data of a piece comes through Stremio's torrent, so every second costs download time. */
+const WINDOW_SEC = 100;
+/** An early answer needs at least this agreement with the speech (short pieces give chance matches around 0.2). */
+const EARLY_MIN_SCORE = 0.3;
+/** After all rounds, an answer whose pieces still disagree needs at least this agreement. */
+const LATE_MIN_SCORE = 0.2;
+/** Pieces that agree to within this (ms) after the fit are taken as a clear answer. */
+const AGREE_PARTS_MS = 800;
+/** Skipped at the start: an opening song says nothing about when people speak. */
+const INTRO_SKIP_SEC = 120;
+/** How far (share of the length) and in what steps a piece may move to find more dialogue. */
+const SEARCH_SPAN = 0.08;
+const SEARCH_STEP_SEC = 15;
 /** The subtitle may be this much off; the sound array has room for it. */
 const MARGIN_SEC = 100;
 const DEAD_DB = -120;
+/** A piece is checked for what is left over only within this much (ms) after the fit. */
+const PART_REACH_MS = 6000;
 
 export interface VideoFitOptions {
   ffmpeg: string;
@@ -26,35 +43,128 @@ export interface VideoFitOptions {
   detect?: typeof detectSpeech;
 }
 
+interface Span {
+  from: number;
+  to: number;
+}
+
+/** Seconds of subtitle speech inside [from, to). More dialogue = a better piece to listen to. */
+function speechSeconds(cues: Cue[], from: number, to: number): number {
+  let total = 0;
+  for (const c of cues) {
+    const a = Math.max(c.startMs / 1000, from);
+    const b = Math.min(c.endMs / 1000, to);
+    if (b > a) total += b - a;
+  }
+  return total;
+}
+
+/**
+ * Picks where to listen: near each wanted place, the piece with the most dialogue, never inside
+ * the opening and never overlapping a piece already taken.
+ */
+export function pickWindows(
+  cues: Cue[],
+  shares: readonly number[],
+  windowSec: number,
+  lengthSec: number,
+  taken: Span[],
+): number[] {
+  const lowest = Math.min(INTRO_SKIP_SEC, Math.max(0, lengthSec - windowSec));
+  const highest = Math.max(lowest, lengthSec - windowSec);
+  const starts: number[] = [];
+  for (const share of shares) {
+    const centre = lengthSec * share - windowSec / 2;
+    const reach = lengthSec * SEARCH_SPAN;
+    let best: { at: number; score: number } | undefined;
+    for (let at = centre - reach; at <= centre + reach; at += SEARCH_STEP_SEC) {
+      const from = Math.max(lowest, Math.min(highest, at));
+      const to = from + windowSec;
+      if (taken.some((t) => from < t.to && to > t.from)) continue;
+      const score = speechSeconds(cues, from, to);
+      if (!best || score > best.score) best = { at: from, score };
+    }
+    if (!best) continue;
+    taken.push({ from: best.at, to: best.at + windowSec });
+    starts.push(best.at);
+  }
+  return starts;
+}
+
 export async function fitSubtitleToVideo(opts: VideoFitOptions): Promise<TimingFit | undefined> {
   const detect = opts.detect ?? detectSpeech;
   const lengthSec = Math.max(...opts.cues.map((c) => c.endMs), 0) / 1000;
   if (opts.cues.length < 20 || lengthSec < 300) return undefined;
 
-  const windowSec = Math.min(MAX_WINDOW_SEC, Math.max(MIN_WINDOW_SEC, lengthSec * 0.14));
+  const windowSec = Math.min(WINDOW_SEC, lengthSec * 0.14);
   const frames = Math.ceil(((lengthSec + MARGIN_SEC) * 1000) / FRAME_MS);
   const loudness = new Array<number>(frames).fill(DEAD_DB);
   const mask = new Uint8Array(frames);
+  const taken: Span[] = [];
+  const heard: { startSec: number; frames: number }[] = [];
 
-  let done = 0;
-  for (const share of WINDOW_STARTS) {
-    const startSec = Math.max(0, Math.min(lengthSec * share, lengthSec - windowSec));
-    const scan = await detect(
-      opts.ffmpeg,
-      opts.url,
-      opts.signal,
-      (sec) =>
-        opts.onProgress?.(Math.round(((done + sec / windowSec) / WINDOW_STARTS.length) * 100)),
-      { startSec, durationSec: windowSec },
+  /** Listens to one round of pieces; the progress bar covers [low, high] of 0..1. */
+  const listen = async (shares: readonly number[], low: number, high: number): Promise<void> => {
+    const starts = pickWindows(opts.cues, shares, windowSec, lengthSec, taken);
+    let done = 0;
+    for (const startSec of starts) {
+      const scan = await detect(
+        opts.ffmpeg,
+        opts.url,
+        opts.signal,
+        (sec) => {
+          const part = (done + Math.min(1, sec / windowSec)) / starts.length;
+          opts.onProgress?.(Math.round((low + (high - low) * part) * 100));
+        },
+        { startSec, durationSec: windowSec },
+      );
+      const first = Math.round((startSec * 1000) / FRAME_MS);
+      heard.push({ startSec, frames: scan.loudness.length });
+      scan.loudness.forEach((v, i) => {
+        if (first + i < frames) {
+          loudness[first + i] = v;
+          mask[first + i] = 1;
+        }
+      });
+      done++;
+    }
+  };
+
+  /** What is still off in each piece after the fit: a shift that changes during the video shows here. */
+  const withParts = (fit: TimingFit | undefined): TimingFit | undefined => {
+    if (!fit) return undefined;
+    const moved = applyFit(opts.cues, fit);
+    const parts = [...heard]
+      .sort((p, q) => p.startSec - q.startSec)
+      .map((h) => {
+        const own = new Uint8Array(frames);
+        const from = Math.round((h.startSec * 1000) / FRAME_MS);
+        own.fill(1, from, Math.min(frames, from + h.frames));
+        const left = fitAcrossLevels(moved, loudness, own, {
+          maxOffsetMs: PART_REACH_MS,
+          plainOnly: true,
+        });
+        return { atSec: Math.round(h.startSec), offsetMs: left ? left.offsetMs : null };
+      });
+    return { ...fit, parts };
+  };
+
+  /** At least two pieces were judged, and they agree on what is left. */
+  const clear = (fit: TimingFit): boolean => {
+    const left = (fit.parts ?? []).flatMap((p) => (p.offsetMs === null ? [] : [p.offsetMs]));
+    return (
+      fit.score >= EARLY_MIN_SCORE &&
+      left.length >= 2 &&
+      Math.max(...left) - Math.min(...left) <= AGREE_PARTS_MS
     );
-    const first = Math.round((startSec * 1000) / FRAME_MS);
-    scan.loudness.forEach((v, i) => {
-      if (first + i < frames) {
-        loudness[first + i] = v;
-        mask[first + i] = 1;
-      }
-    });
-    done++;
+  };
+
+  // Two short pieces first; more only while the answer is missing or the pieces disagree.
+  let last: TimingFit | undefined;
+  for (const [i, shares] of ROUNDS.entries()) {
+    await listen(shares, i / ROUNDS.length, (i + 1) / ROUNDS.length);
+    last = withParts(fitAcrossLevels(opts.cues, loudness, mask));
+    if (last && clear(last)) return last;
   }
-  return fitAcrossLevels(opts.cues, loudness, mask);
+  return last && last.score >= LATE_MIN_SCORE ? last : undefined;
 }

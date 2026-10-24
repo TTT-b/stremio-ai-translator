@@ -9,8 +9,10 @@ import {
   languageCode3,
   MuxError,
   muxArgs,
+  mp4Args,
   muxSubtitle,
   outputPathFor,
+  parseCodecs,
 } from '../src/video/mux';
 
 const dirs: string[] = [];
@@ -162,5 +164,94 @@ describe('saving from Stremio’s own server', () => {
         language: 'he',
       }),
     ).rejects.toMatchObject({ code: 'BAD_PATH' });
+  });
+});
+
+describe('MP4 copy (for iPad, iPhone and phones)', () => {
+  const stderr = [
+    "Input #0, matroska,webm, from 'in.mkv':",
+    '  Stream #0:0: Video: hevc (Main 10), yuv420p10le, 3840x2160',
+    '  Stream #0:1(eng): Audio: aac (LC), 48000 Hz, 5.1, fltp',
+    '  Stream #0:2(eng): Subtitle: subrip',
+    '  Stream #0:3(fre): Audio: ac3, 48000 Hz, 5.1',
+  ].join('\n');
+  const after = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
+
+  it('reads the first video and audio codec from what ffmpeg prints', () => {
+    expect(parseCodecs(stderr)).toEqual({ video: 'hevc', audio: 'aac' });
+    expect(parseCodecs('nothing useful')).toEqual({});
+  });
+
+  it('puts the subtitle first as mov_text, drops other subtitle tracks, tags HEVC as hvc1', () => {
+    const args = mp4Args('in.mkv', 'sub.srt', 'out.mp4', 'he', { video: 'hevc', audio: 'aac' });
+    expect(after(args, '-c:s')).toBe('mov_text');
+    expect(after(args, '-c:v')).toBe('copy');
+    expect(after(args, '-movflags')).toBe('+faststart');
+    expect(args.indexOf('1:0')).toBeLessThan(args.indexOf('0:v:0'));
+    expect(args).not.toContain('0:s?');
+    expect(after(args, '-tag:v')).toBe('hvc1');
+    expect(args).toContain('language=heb');
+    expect(args.at(-1)).toBe('out.mp4');
+  });
+
+  it('does not tag H.264 and copies audio only when an Apple device can play it', () => {
+    const h264 = mp4Args('i', 's', 'o.mp4', 'he', { video: 'h264', audio: 'ac3' });
+    expect(h264).not.toContain('-tag:v');
+    expect(after(h264, '-c:a')).toBe('copy');
+    expect(after(mp4Args('i', 's', 'o.mp4', 'he', { video: 'h264', audio: 'dts' }), '-c:a')).toBe(
+      'aac',
+    );
+    expect(after(mp4Args('i', 's', 'o.mp4', 'he', {}), '-c:a')).toBe('aac');
+  });
+
+  it('names the file .mp4 and accepts an .mp4 place', () => {
+    const dir = tmp();
+    const none = () => false;
+    expect(outputPathFor(join(dir, 'Movie.mkv'), 'he', none, 'mp4')).toBe(
+      join(dir, 'Movie.heb.mp4'),
+    );
+    expect(outputPathFor(join(dir, 'Movie.mkv'), 'he', none)).toBe(join(dir, 'Movie.heb.mkv'));
+    expect(checkOutputPath(join(dir, 'a.mp4'))).toBe(join(dir, 'a.mp4'));
+  });
+
+  it('writes the MP4 and the SRT next to it, and the original is untouched', async () => {
+    const file = join(tmp(), 'Movie.mkv');
+    writeFileSync(file, 'video');
+    let ran: string[] = [];
+    const out = await muxSubtitle({
+      ffmpeg: 'ffmpeg',
+      video: file,
+      srt: '1\n00:00:01,000 --> 00:00:02,000\nשלום\n',
+      language: 'he',
+      format: 'mp4',
+      probe: async () => ({ video: 'hevc', audio: 'aac' }),
+      run: async (_f, args) => {
+        ran = args;
+        writeFileSync(args.at(-1) as string, 'muxed');
+      },
+    });
+    expect(out.endsWith('Movie.heb.mp4')).toBe(true);
+    expect(ran).toContain('mov_text');
+    expect(readFileSync(out.replace(/\.mp4$/, '.srt'), 'utf8')).toContain('שלום');
+    expect(readFileSync(file, 'utf8')).toBe('video');
+  });
+
+  it('removes a half-written MP4 when ffmpeg breaks', async () => {
+    const file = join(tmp(), 'Movie.mkv');
+    writeFileSync(file, 'video');
+    const failing = muxSubtitle({
+      ffmpeg: 'ffmpeg',
+      video: file,
+      srt: 'x',
+      language: 'he',
+      format: 'mp4',
+      probe: async () => ({}),
+      run: async (_f, args) => {
+        writeFileSync(args.at(-1) as string, 'half');
+        throw new Error('boom');
+      },
+    });
+    await expect(failing).rejects.toMatchObject({ code: 'FAILED' });
+    expect(existsSync(file.replace('.mkv', '.heb.mp4'))).toBe(false);
   });
 });

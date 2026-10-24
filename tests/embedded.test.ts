@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   decodeSubtitleBytes,
+  estimateReadSeconds,
   findSidecars,
   findStream,
   languageMatches,
@@ -483,5 +484,98 @@ describe('time budget', () => {
       }),
     );
     expect(quick).toMatchObject({ language: 'en', source: 'file' });
+  });
+});
+
+describe('a video too big to read in time', () => {
+  const GB = 1024 * 1024 * 1024;
+  const statsOf = (length: number, extra: object = {}, files: string[] = [FILE]) =>
+    JSON.stringify({
+      [HASH]: {
+        infoHash: HASH,
+        name: 'Show',
+        files: files.map((path, i) => ({ path, length: i === 0 ? length : 100 })),
+        ...extra,
+      },
+    });
+  const run = (body: string, maxEtaSec: number | undefined, calls: string[][]) =>
+    loadEmbeddedSubtitle(
+      { filename: FILE, targetLanguage: 'he' },
+      {
+        serverUrl: 'http://127.0.0.1:11470',
+        ffmpegPath: '',
+        logger: silentLogger(),
+        fetchImpl: fetchStats(body),
+        exec: async (_cmd, args) => {
+          calls.push(args);
+          return args.includes('json')
+            ? probe([{ index: 2, codec_name: 'subrip', tags: { language: 'eng' } }])
+            : Buffer.from(srt(40));
+        },
+        waitMs: 0,
+        toolDirs: [tools()],
+        ...(maxEtaSec !== undefined ? { maxEtaSec } : {}),
+      },
+    );
+
+  it('estimates the time to read the file from its size and the download speed', async () => {
+    const stream = await findStream(
+      'http://127.0.0.1:11470',
+      FILE,
+      fetchStats(statsOf(GB, { downloaded: GB / 2, downloadSpeed: GB / 100 })),
+    );
+    expect(estimateReadSeconds(stream!)).toBeCloseTo(50, 5);
+    const noSpeed = await findStream('http://127.0.0.1:11470', FILE, fetchStats(statsOf(GB)));
+    expect(estimateReadSeconds(noSpeed!)).toBeUndefined();
+    const idle = await findStream(
+      'http://127.0.0.1:11470',
+      FILE,
+      fetchStats(statsOf(GB, { downloadSpeed: 0 })),
+    );
+    expect(estimateReadSeconds(idle!)).toBeUndefined();
+  });
+
+  it('does not read the tracks when it would take longer than the limit', async () => {
+    const calls: string[][] = [];
+    // 1 GB left at 10 MB/s: about 100 s, over a limit of 60 s.
+    const out = await run(statsOf(GB, { downloadSpeed: 10 * 1024 * 1024 }), 60, calls);
+    expect(out).toBeUndefined();
+    expect(calls).toEqual([]); // not even ffprobe was started
+  });
+
+  it('still reads it when it is quick enough, when speed is unknown, or when the limit is 0', async () => {
+    for (const [body, limit] of [
+      [statsOf(GB, { downloadSpeed: 100 * 1024 * 1024 }), 60], // about 10 s
+      [statsOf(GB), 60], // no speed reported: no guess
+      [statsOf(GB, { downloadSpeed: 1024 }), 0], // limit off
+      [statsOf(GB, { downloadSpeed: 1024 }), undefined], // no limit given
+    ] as const) {
+      const calls: string[][] = [];
+      expect(await run(body, limit, calls)).toMatchObject({ language: 'en', cues: 40 });
+    }
+  });
+
+  it('a subtitle file stored beside the video is still read when the video itself is too big', async () => {
+    const paths = [FILE, 'Subs/Show - S01E08 - Winter Solstice/2_English.srt'];
+    const wanted = FILE;
+    const out = await loadEmbeddedSubtitle(
+      { filename: wanted, targetLanguage: 'he' },
+      {
+        serverUrl: 'http://127.0.0.1:11470',
+        ffmpegPath: '',
+        logger: silentLogger(),
+        waitMs: 0,
+        maxEtaSec: 60,
+        toolDirs: [tools()],
+        exec: async () => {
+          throw new Error('ffmpeg must not run');
+        },
+        fetchImpl: (async (input: string | URL | Request) =>
+          String(input).endsWith('/stats.json')
+            ? new Response(statsOf(GB, { downloadSpeed: 1024 }, paths))
+            : new Response(srt(40))) as typeof fetch,
+      },
+    );
+    expect(out).toMatchObject({ source: 'file', language: 'en' });
   });
 });

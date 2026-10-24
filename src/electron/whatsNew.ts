@@ -12,6 +12,36 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '1.8.0': {
+    en: [
+      {
+        title: 'More sources, in the order you choose',
+        text: 'SubDL (with season packs) and Jimaku (Japanese, for anime) join OpenSubtitles. Every subtitle in My subtitles shows where it came from, and Developer settings (Settings, About) lets you order the sources and ask again from one source.',
+      },
+      {
+        title: 'Translation starts at once; the sound check goes on in the background',
+        text: 'The main screen shows how far the sound check is and whether it moved the subtitle. Videos too big to read for their own subtitle are skipped quickly.',
+      },
+      {
+        title: 'Cleaner screens',
+        text: 'One line per episode in My subtitles, a Jimaku connection test, the queue only when 2 or more wait, OK buttons on the sync notices, and a question before Stremio is opened.',
+      },
+    ],
+    he: [
+      {
+        title: 'עוד מקורות, בסדר שאתה בוחר',
+        text: 'SubDL (כולל חבילות עונה) ו-Jimaku (יפנית, לאנימה) מצטרפים ל-OpenSubtitles. כל כתובית ב"הכתוביות שלי" מראה מאיפה הגיעה, וב"הגדרות מפתח" (הגדרות, אודות) אפשר לסדר את המקורות ולבקש שוב ממקור אחד.',
+      },
+      {
+        title: 'התרגום מתחיל מיד, בדיקת הקול ממשיכה ברקע',
+        text: 'המסך הראשי מראה כמה בדיקת הקול התקדמה והאם הכתובית הוזזה. סרטונים גדולים מדי לקריאת הכתובית שבתוכם מדולגים מהר.',
+      },
+      {
+        title: 'מסכים נקיים יותר',
+        text: 'שורה אחת לכל פרק ב"הכתוביות שלי", בדיקת חיבור ל-Jimaku, תור התרגומים מופיע רק כשממתינים 2 ומעלה, כפתורי אישור בהודעות הסנכרון, ושאלה לפני פתיחת Stremio.',
+      },
+    ],
+  },
   '1.7.0': {
     en: [
       {

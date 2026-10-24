@@ -9,6 +9,7 @@ import type {
   SubtitleCandidate,
   SubtitleQuery,
 } from '../types';
+import { pickEpisodeEntry } from '../pack';
 import { extractZipEntry, readZipEntries } from '../zip';
 
 /**
@@ -18,7 +19,7 @@ import { extractZipEntry, readZipEntries } from '../zip';
 export const SUBDL_API_URL = 'https://api.subdl.com/api/v1';
 export const SUBDL_DOWNLOAD_URL = 'https://dl.subdl.com';
 
-const MAX_ZIP_BYTES = 5 * 1024 * 1024;
+const MAX_ZIP_BYTES = 12 * 1024 * 1024; // a season pack holds one file per episode
 const MAX_SUBTITLE_BYTES = 2 * 1024 * 1024;
 const DOWNLOAD_PATH = /^\/subtitle\/[\w.-]+(?:\/[\w.-]+)?$/;
 
@@ -27,6 +28,8 @@ export interface SubdlOptions {
   logger: Logger;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /** Use the file of the right episode inside a whole-season zip (default true). */
+  seasonPacks?: boolean;
 }
 
 interface RawSubtitle {
@@ -146,7 +149,7 @@ export class SubdlProvider implements SourceSubtitleProvider {
         if (typeof name !== 'string' || !normalizeTitle(name).includes(wantedTitle)) continue;
       }
       for (const s of body.subtitles ?? []) {
-        const c = this.candidate(s, lang, isSeries ? episode : undefined);
+        const c = this.candidate(s, lang, isSeries ? { season, episode } : undefined);
         if (c) out.push(c);
       }
     }
@@ -157,10 +160,18 @@ export class SubdlProvider implements SourceSubtitleProvider {
   private candidate(
     s: RawSubtitle,
     language: string,
-    wantedEpisode: number | undefined,
+    wanted: { season: number | undefined; episode: number | undefined } | undefined,
   ): SubtitleCandidate | undefined {
-    if (typeof s.url !== 'string' || !DOWNLOAD_PATH.test(s.url) || s.full_season === true) return;
+    // SubDL appends the caller's api_key to the link of some results (season packs): only the path
+    // is kept, so the key is never stored, cached or sent on to the download host.
+    const path = typeof s.url === 'string' ? s.url.split(/[?#]/)[0] : undefined;
+    if (path === undefined || !DOWNLOAD_PATH.test(path)) return;
+    const pack = s.full_season === true;
+    // A season pack is used only for a known episode, and only when the user allows it.
+    if (pack && (this.opts.seasonPacks === false || wanted?.episode === undefined)) return;
+    const wantedEpisode = wanted?.episode;
     if (
+      !pack &&
       wantedEpisode !== undefined &&
       typeof s.episode === 'number' &&
       s.episode > 0 &&
@@ -168,7 +179,7 @@ export class SubdlProvider implements SourceSubtitleProvider {
     ) {
       return;
     }
-    const ids = /(\d+)-(\d+)/.exec(s.url);
+    const ids = /(\d+)-(\d+)/.exec(path);
     if (!ids) return;
     const fileName =
       typeof s.name === 'string'
@@ -186,7 +197,14 @@ export class SubdlProvider implements SourceSubtitleProvider {
       hearingImpaired: s.hi === true,
       machineTranslated: false,
       provider: 'subdl',
-      downloadPath: s.url,
+      downloadPath: path,
+      ...(pack && wanted
+        ? {
+            pack,
+            ...(wanted.season !== undefined ? { season: wanted.season } : {}),
+            ...(wanted.episode !== undefined ? { episode: wanted.episode } : {}),
+          }
+        : {}),
     };
   }
 
@@ -212,8 +230,16 @@ export class SubdlProvider implements SourceSubtitleProvider {
     let fileName = candidate.fileName;
     if (bytes.length >= 2 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
       try {
-        const entry = readZipEntries(bytes).find((e) => /\.srt$/i.test(e.name));
-        if (!entry) throw new AppError('UNSUPPORTED_SUBTITLE_FORMAT', 'no .srt in the archive');
+        const entries = readZipEntries(bytes);
+        const entry =
+          candidate.pack && candidate.episode !== undefined
+            ? pickEpisodeEntry(entries, candidate.season, candidate.episode)
+            : entries.find((e) => /\.srt$/i.test(e.name));
+        if (!entry) {
+          throw candidate.pack
+            ? new AppError('SOURCE_SUBTITLE_NOT_FOUND', 'episode not in the season pack')
+            : new AppError('UNSUPPORTED_SUBTITLE_FORMAT', 'no .srt in the archive');
+        }
         file = extractZipEntry(bytes, entry, MAX_SUBTITLE_BYTES);
         fileName = entry.name;
       } catch (err) {

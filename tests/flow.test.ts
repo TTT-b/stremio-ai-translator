@@ -12,6 +12,7 @@ import {
   parseVideoId,
   type SourceSubtitleProvider,
   type SubtitleCandidate,
+  type SubtitleQuery,
 } from '../src/sources/types';
 import { createApp } from '../src/web/server';
 import { FakeProvider, silentLogger } from './helpers';
@@ -60,6 +61,7 @@ async function start(opts: {
   searchHangs?: boolean;
   findStream?: NonNullable<Parameters<typeof createApp>[0]['findStream']>;
   speechFit?: NonNullable<Parameters<typeof createApp>[0]['speechFit']>;
+  cueFit?: NonNullable<Parameters<typeof createApp>[0]['cueFit']>;
   settings?: object;
   onPending?: NonNullable<Parameters<typeof createApp>[0]['onPending']>;
   gate?: Promise<void>;
@@ -67,6 +69,10 @@ async function start(opts: {
   dataDir?: string;
   /** A download of this candidate fails with the returned error. */
   downloadError?: (c: SubtitleCandidate) => AppError | undefined;
+  /** The candidates for one search (instead of the same ones every time). */
+  candidatesFor?: (q: SubtitleQuery) => SubtitleCandidate[];
+  /** Called for every search; may throw to make that search fail. */
+  onSearch?: (q: SubtitleQuery) => void;
 }): Promise<Harness> {
   const port = await new Promise<number>((resolve) => {
     const s = createServer().listen(0, '127.0.0.1', () => {
@@ -98,7 +104,8 @@ async function start(opts: {
       h.lastSearch = q;
       if (opts.searchError) throw opts.searchError;
       if (opts.searchHangs) await new Promise<never>(() => undefined);
-      return opts.candidates ?? [cand()];
+      opts.onSearch?.(q);
+      return opts.candidatesFor?.(q) ?? opts.candidates ?? [cand()];
     },
     download: async (c) => {
       const failure = opts.downloadError?.(c);
@@ -107,7 +114,13 @@ async function start(opts: {
       return { content: opts.contentFor?.(c) ?? opts.content ?? SRC, fileName: 'a.srt' };
     },
   };
-  if (opts.settings) writeFileSync(join(h.dataDir, 'settings.json'), JSON.stringify(opts.settings));
+  // Most tests predate the next-episode head start and the sound check that runs beside the
+  // translation: they keep the old behavior (one episode at a time, translation waits for the
+  // check) unless a test says otherwise.
+  writeFileSync(
+    join(h.dataDir, 'settings.json'),
+    JSON.stringify({ prefetchNext: false, soundCheck: 'wait', ...opts.settings }),
+  );
   const app = createApp({
     config: loadConfig({
       PORT: String(port),
@@ -126,10 +139,12 @@ async function start(opts: {
     loadEmbedded: opts.loadEmbedded ?? (async () => undefined),
     // Tests never listen to a real video unless one supplies speechFit.
     speechFit: opts.speechFit ?? (async () => undefined),
+    cueFit: opts.cueFit ?? (async () => undefined),
     ...(opts.speechFit
       ? { findStream: opts.findStream ?? (async () => undefined), ffmpegFor: () => 'ffmpeg.exe' }
       : {}),
-    ...(opts.limits ? { limits: opts.limits } : {}),
+    // A video that is not on Stremio's server is not waited for, unless a test says so.
+    limits: { syncFindWaitMs: 0, ...opts.limits },
     ...(opts.onPending ? { onPending: opts.onPending } : {}),
     ...(opts.logDir ? { logDir: opts.logDir } : {}),
     ...(opts.cancelCooldownMs !== undefined ? { cancelCooldownMs: opts.cancelCooldownMs } : {}),
@@ -289,6 +304,11 @@ describe('an exact subtitle that arrives after the job finished', () => {
     });
     expect(first).toContain('HE:Hello there.'); // the downloaded subtitle, translated
     expect(first).not.toContain('OWN line');
+    // While the video's own subtitle is still on its way, the main screen says so.
+    const waiting = (await (await current.get('/api/status')).json()) as {
+      exactComing: { season?: number; episode?: number } | null;
+    };
+    expect(waiting.exactComing).toMatchObject({ season: 1, episode: 1 });
 
     release(); // the video's own subtitle arrives after the job finished
     let text = '';
@@ -314,6 +334,8 @@ describe('an exact subtitle that arrives after the job finished', () => {
       upgrade: { season?: number; episode?: number; at: number } | null;
     };
     expect(status.upgrade).toMatchObject({ season: 1, episode: 1 });
+    const after = (await (await current.get('/api/status')).json()) as { exactComing: unknown };
+    expect(after.exactComing).toBeNull();
   });
 
   it('changes nothing when the video never gives its own subtitle', async () => {
@@ -1041,6 +1063,54 @@ describe('diagnostics', () => {
     expect(text).not.toContain('noise');
   });
 
+  it('keeps only the latest video and the problems, with the timing numbers', async () => {
+    const logDir = mkdtempSync(join(tmpdir(), 'logs-'));
+    const line = (o: object) => JSON.stringify(o);
+    writeFileSync(
+      join(logDir, 'app-2026-10-22.log'),
+      [
+        line({
+          level: 30,
+          time: 1792334500000,
+          stage: 'SOURCE',
+          videoId: 'tt0000001',
+          sync: 'fit-unsure',
+          msg: 'OLD EPISODE LINE',
+        }),
+        line({ level: 40, time: 1792334510000, msg: 'old problem' }),
+        line({
+          level: 30,
+          time: 1792334600000,
+          stage: 'SOURCE',
+          videoId: 'tt0000002',
+          sync: 'fitted',
+          offsetMs: -2500,
+          scale: 1.0427,
+          msg: 'subtitle moved onto the speech',
+        }),
+        line({
+          level: 30,
+          time: 1792334601000,
+          stage: 'ASSEMBLY',
+          videoId: 'tt0000002',
+          upgrade: 'done',
+          msg: 'job done',
+        }),
+      ].join('\n'),
+    );
+    current = await start({ logDir });
+    const text = await (await current.get('/api/diagnostics')).text();
+    expect(text).toContain('videos (last 5, newest last):');
+    expect(text).toContain('sync=fitted');
+    expect(text).toContain('offsetMs=-2500');
+    expect(text).toContain('scale=1.0427');
+    expect(text).toContain('upgrade=done');
+    expect(text).toContain('old problem');
+    expect(text).not.toContain('OLD EPISODE LINE');
+    const all = await (await current.get('/api/diagnostics?scope=all')).text();
+    expect(all).toContain('OLD EPISODE LINE');
+  });
+
   it('does not copy the titles of what the user watches', async () => {
     current = await start({ settings: { translationMode: 'ask' }, subWaitMs: 50 });
     await current.get('/subtitles/series/tt0944947%3A1%3A1.json');
@@ -1119,6 +1189,133 @@ describe('timing from the sound of the video', () => {
     });
     const { s } = await served('');
     expect(s).toContain('HE:');
+  });
+
+  it('translates after a while without the sound check, then moves the finished subtitle when it finishes', async () => {
+    const upgraded: unknown[] = [];
+    current = await start({
+      findStream: async () => stream,
+      subWaitMs: 50,
+      limits: { syncWaitMs: 40 },
+      onUpgraded: (item) => upgraded.push(item),
+      speechFit: async () => {
+        await new Promise((r) => setTimeout(r, 400));
+        return { scale: 1, offsetMs: 2000, score: 0.2, baseline: 0 };
+      },
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    const sub = ((await (await current.get(FILE_PATH)).json()) as SubsResponse).subtitles[0]!;
+    const path = new URL(sub.url).pathname;
+    const firstStart = (srt: string) => {
+      const m = /(\d\d):(\d\d):(\d\d),(\d\d\d) -->/.exec(srt);
+      return m
+        ? ((Number(m[1]) * 60 + Number(m[2])) * 60 + Number(m[3])) * 1000 + Number(m[4])
+        : -1;
+    };
+    let text = '';
+    for (let i = 0; i < 120 && !text.includes('HE:'); i++) {
+      text = await (await current.get(path)).text();
+      if (!text.includes('HE:')) await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(text).toContain('HE:'); // translated before the sound check was done
+    const before = firstStart(text);
+    let after = before;
+    for (let i = 0; i < 160 && after === before; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      after = firstStart(await (await current.get(path)).text());
+    }
+    expect(after - before).toBe(2000);
+    expect(upgraded).toHaveLength(1);
+    const status = (await (await current.get('/api/status')).json()) as { upgrade: unknown };
+    expect(status.upgrade).not.toBeNull();
+    let lib: { items: { timing?: string }[] } = { items: [] };
+    for (let i = 0; i < 40 && lib.items[0]?.timing !== 'speech'; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      lib = (await (await current.get('/api/library')).json()) as typeof lib;
+    }
+    expect(lib.items[0]?.timing).toBe('speech');
+  });
+
+  it('waits for the video to start playing in Stremio, then listens to it', async () => {
+    let looks = 0;
+    let listened = false;
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'background' },
+      limits: { syncFindWaitMs: 5000, syncFindEveryMs: 20 },
+      findStream: async () => (++looks > 3 ? stream : undefined),
+      speechFit: async () => {
+        listened = true;
+        return { scale: 1, offsetMs: 1500, score: 0.3, baseline: 0 };
+      },
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    await served('');
+    for (let i = 0; i < 160 && !listened; i++) await new Promise((r) => setTimeout(r, 25));
+    expect(listened).toBe(true);
+    expect(looks).toBeGreaterThan(3);
+  });
+
+  it('takes the timing from the video own subtitle track when it has one, without listening', async () => {
+    let listened = false;
+    let cueCalls = 0;
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'background' },
+      findStream: async () => stream,
+      cueFit: async () => {
+        cueCalls++;
+        return {
+          scale: 1,
+          offsetMs: 1500,
+          score: 1,
+          baseline: 0,
+          parts: [
+            { atSec: 200, offsetMs: 1500 },
+            { atSec: 900, offsetMs: 1500 },
+          ],
+        };
+      },
+      speechFit: async () => {
+        listened = true;
+        return undefined;
+      },
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    await served('');
+    type St = { lastSync: { outcome: string; offsetMs?: number } | null };
+    let last: St['lastSync'] = null;
+    for (let i = 0; i < 160 && last?.outcome !== 'moved'; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      last = ((await (await current.get('/api/status')).json()) as St).lastSync;
+    }
+    expect(cueCalls).toBe(1);
+    expect(listened).toBe(false);
+    expect(last?.outcome).toBe('moved');
+    expect(last?.offsetMs).toBe(1500);
+  });
+
+  it('reads the video once when Stremio asks twice for the same episode', async () => {
+    let cueCalls = 0;
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'background' },
+      findStream: async () => stream,
+      cueFit: async () => {
+        cueCalls++;
+        await new Promise((r) => setTimeout(r, 200));
+        return undefined;
+      },
+      speechFit: async () => undefined,
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    const other = FILE_PATH.replace('.json', '&videoHash=8e245d9679d31e12.json').replace(
+      'filename=Movie.2020.1080p.mkv',
+      'filename=Movie.2020.1080p.mkv',
+    );
+    await Promise.all([current.get(FILE_PATH), current.get(other)]);
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(cueCalls).toBe(1);
   });
 
   it('gives up listening when the video sends no sound, and goes on with the subtitle', async () => {
@@ -1552,5 +1749,610 @@ describe('ask mode (translate only after the user says yes)', () => {
     current = await start({ settings: { translationMode: 'ask' } });
     expect((await post(current, '/api/jobs/not-an-id/approve', {})).status).toBe(400);
     expect((await post(current, `/api/jobs/${'a'.repeat(32)}/explode`, {})).status).toBe(400);
+  });
+});
+
+describe('partial subtitles (the first part is shown while the rest is translated)', () => {
+  const PATH = '/subtitles/movie/tt0111161.json';
+  const LONG = Array.from(
+    { length: 12 },
+    (_, i) =>
+      `${i + 1}\n00:00:${String(i * 2).padStart(2, '0')},000 --> 00:00:${String(i * 2 + 1).padStart(2, '0')},500\nLine ${i + 1}\n`,
+  ).join('\n');
+  // 12 lines in chunks of 2: a quarter is 3 lines, so two finished chunks (4 lines) are enough.
+  const LIMITS = { partialMinTotalCues: 10 };
+  /** The AI answers the first two chunks at once and holds back every later one until released. */
+  const held = () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const translate: NonNullable<Parameters<typeof start>[0]['translate']> = async (req) => {
+      if (Number(req.cues[0]?.id) >= 5) await gate;
+      return { translations: req.cues.map((c) => ({ id: c.id, text: `HE:${c.text}` })) };
+    };
+    return { release, translate };
+  };
+  const subPath = async () =>
+    new URL(((await (await current!.get(PATH)).json()) as SubsResponse).subtitles[0]!.url).pathname;
+  const until = async (path: string, ok: (text: string) => boolean) => {
+    let text = '';
+    for (let i = 0; i < 160 && !ok(text); i++) {
+      text = await (await current!.get(path)).text();
+      if (!ok(text)) await new Promise((r) => setTimeout(r, 25));
+    }
+    return text;
+  };
+
+  it('serves the translated first part with a note instead of the progress message', async () => {
+    const h = held();
+    current = await start({ content: LONG, subWaitMs: 50, limits: LIMITS, translate: h.translate });
+    const path = await subPath();
+    const text = await until(path, (t) => t.includes('HE:Line 1'));
+    expect(text).toContain('HE:Line 1');
+    expect(text).toContain('HE:Line 4');
+    expect(text).not.toContain('HE:Line 5');
+    expect(text).not.toContain('מתרגם את הכתוביות');
+    expect(text).toContain('התרגום ממשיך ברקע');
+    // The note runs from the end of the part to the end of the movie (the last line ends at 23.5 s).
+    expect(text).toMatch(/00:00:\d\d,\d{3} --> 00:00:23,500\nהתרגום ממשיך ברקע/);
+    h.release();
+  });
+
+  it('never stores the part: nothing is listed or cached until the whole subtitle is done', async () => {
+    const h = held();
+    current = await start({ content: LONG, subWaitMs: 50, limits: LIMITS, translate: h.translate });
+    const path = await subPath();
+    await until(path, (t) => t.includes('HE:Line 1'));
+    const lib = (await (await current.get('/api/library')).json()) as { items: unknown[] };
+    expect(lib.items).toHaveLength(0);
+    h.release();
+    const full = await until(path, (t) => t.includes('HE:Line 12'));
+    expect(full).not.toContain('התרגום ממשיך ברקע');
+    let items: unknown[] = [];
+    for (let i = 0; i < 40 && items.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      items = ((await (await current.get('/api/library')).json()) as { items: unknown[] }).items;
+    }
+    expect(items).toHaveLength(1);
+  });
+
+  it('tells the user to reselect once the whole subtitle is ready', async () => {
+    const h = held();
+    const upgraded: unknown[] = [];
+    current = await start({
+      content: LONG,
+      subWaitMs: 50,
+      limits: LIMITS,
+      translate: h.translate,
+      onUpgraded: (item) => upgraded.push(item),
+    });
+    const path = await subPath();
+    await until(path, (t) => t.includes('HE:Line 1'));
+    expect(upgraded).toHaveLength(0);
+    h.release();
+    await until(path, (t) => t.includes('HE:Line 12'));
+    for (let i = 0; i < 40 && upgraded.length === 0; i++)
+      await new Promise((r) => setTimeout(r, 25));
+    expect(upgraded).toHaveLength(1);
+  });
+
+  it('says nothing extra when no part was ever shown', async () => {
+    const upgraded: unknown[] = [];
+    current = await start({
+      content: LONG,
+      subWaitMs: 2000,
+      limits: LIMITS,
+      onUpgraded: (item) => upgraded.push(item),
+    });
+    const text = await until(await subPath(), (t) => t.includes('HE:Line 12'));
+    expect(text).toContain('HE:Line 12');
+    await new Promise((r) => setTimeout(r, 100));
+    expect(upgraded).toHaveLength(0);
+  });
+
+  it('keeps showing the part, with a stopped note, when the translation fails', async () => {
+    current = await start({
+      content: LONG,
+      subWaitMs: 50,
+      limits: LIMITS,
+      translate: async (req) => {
+        if (Number(req.cues[0]?.id) >= 5) {
+          await new Promise((r) => setTimeout(r, 100));
+          throw new AppError('PROVIDER_MODEL_UNAVAILABLE');
+        }
+        return { translations: req.cues.map((c) => ({ id: c.id, text: `HE:${c.text}` })) };
+      },
+    });
+    const path = await subPath();
+    const text = await until(path, (t) => t.includes('התרגום נעצר'));
+    expect(text).toContain('HE:Line 1');
+    expect(text).toContain('התרגום נעצר');
+    expect(text).not.toContain('Subtitle unavailable');
+  });
+
+  it('does not show a part when the setting is off', async () => {
+    const h = held();
+    current = await start({
+      content: LONG,
+      subWaitMs: 50,
+      limits: LIMITS,
+      translate: h.translate,
+      settings: { partialSubtitles: false },
+    });
+    const path = await subPath();
+    await new Promise((r) => setTimeout(r, 300));
+    const text = await (await current.get(path)).text();
+    expect(text).not.toContain('HE:Line 1');
+    expect(text).toContain('מתרגם את הכתוביות');
+    h.release();
+  });
+
+  it('does not show a part for a short file', async () => {
+    const h = held();
+    current = await start({ content: LONG, subWaitMs: 50, translate: h.translate }); // default minimum is 1000 lines
+    const path = await subPath();
+    await new Promise((r) => setTimeout(r, 300));
+    const text = await (await current.get(path)).text();
+    expect(text).not.toContain('HE:Line 1');
+    h.release();
+  });
+
+  it('moves the part, and then the whole subtitle, when the late sound check finishes', async () => {
+    const h = held();
+    current = await start({
+      content: LONG,
+      subWaitMs: 50,
+      limits: { ...LIMITS, syncWaitMs: 40 },
+      translate: h.translate,
+      findStream: async () => ({
+        infoHash: 'a'.repeat(40),
+        fileIdx: 0,
+        url: 'http://127.0.0.1:11470/x/0',
+        videoPath: 'Movie.2020.1080p.mkv',
+        files: [],
+      }),
+      speechFit: async () => {
+        await new Promise((r) => setTimeout(r, 300));
+        return { scale: 1, offsetMs: 2000, score: 0.2, baseline: 0 };
+      },
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    const made = (await (
+      await current.get('/subtitles/movie/tt0111161/filename=Movie.2020.1080p.mkv.json')
+    ).json()) as SubsResponse;
+    const path = new URL(made.subtitles[0]!.url).pathname;
+    const firstStart = (t: string) =>
+      /(\d\d):(\d\d):(\d\d),(\d{3}) -->/.exec(t)?.slice(1).join(':');
+    const early = await until(path, (t) => t.includes('HE:Line 1'));
+    expect(firstStart(early)).toBe('00:00:00:000');
+    const moved = await until(path, (t) => firstStart(t) === '00:00:02:000');
+    expect(firstStart(moved)).toBe('00:00:02:000');
+    expect(moved).toContain('HE:Line 4');
+    expect(moved).not.toContain('HE:Line 12');
+    h.release();
+    const full = await until(
+      path,
+      (t) => t.includes('HE:Line 12') && firstStart(t) === '00:00:02:000',
+    );
+    expect(firstStart(full)).toBe('00:00:02:000');
+  });
+
+  it('gives both requests of the same episode the part', async () => {
+    const h = held();
+    current = await start({ content: LONG, subWaitMs: 50, limits: LIMITS, translate: h.translate });
+    const a = await subPath();
+    const b = new URL(
+      (
+        (await (
+          await current.get('/subtitles/movie/tt0111161/filename=Other.2020.mkv.json')
+        ).json()) as SubsResponse
+      ).subtitles[0]!.url,
+    ).pathname;
+    expect(a).not.toBe(b);
+    const [ta, tb] = await Promise.all([
+      until(a, (t) => t.includes('HE:Line 1')),
+      until(b, (t) => t.includes('HE:Line 1')),
+    ]);
+    expect(ta).toContain('HE:Line 4');
+    expect(tb).toContain('HE:Line 4');
+    h.release();
+  });
+});
+
+describe('developer settings: sound check modes, next episode ahead, season packs, redo', () => {
+  const tagged = (tag: string) => `1
+00:00:01,000 --> 00:00:03,000
+${tag}
+`;
+  const MOVIE_FILE = '/subtitles/movie/tt0111161/filename=Movie.2020.1080p.mkv.json';
+  const stream = async () => ({
+    infoHash: 'a'.repeat(40),
+    fileIdx: 0,
+    url: 'http://127.0.0.1:11470/x/0',
+    videoPath: 'Movie.2020.1080p.mkv',
+    files: [],
+  });
+  const episodePath = (h: Harness, season: number, episode: number, file?: string) =>
+    `/subtitles/series/${encodeURIComponent(`tt0944947:${season}:${episode}`)}${file ? `/filename=${file}` : ''}.json`;
+  const subUrl = async (h: Harness, path: string) =>
+    new URL(((await (await h.get(path)).json()) as SubsResponse).subtitles[0]!.url).pathname;
+  const waitFor = async (check: () => boolean | Promise<boolean>, ms = 4000) => {
+    for (let i = 0; i < ms / 25 && !(await check()); i++)
+      await new Promise((r) => setTimeout(r, 25));
+    return check();
+  };
+  const post = (h: Harness, path: string, body: unknown) =>
+    fetch(h.base + path, {
+      method: 'POST',
+      headers: { Host: h.host, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  interface Lib {
+    items: { id: string; season?: number; episode?: number }[];
+  }
+  const library = async (h: Harness) => (await (await h.get('/api/library')).json()) as Lib;
+
+  it('background mode: the translation does not wait for the sound check', async () => {
+    let fitFinished = false;
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'background' },
+      findStream: stream,
+      speechFit: async () => {
+        await new Promise((r) => setTimeout(r, 1500));
+        fitFinished = true;
+        return { scale: 1, offsetMs: 2000, score: 0.2, baseline: 0 };
+      },
+    });
+    const path = await subUrl(current, MOVIE_FILE);
+    const early = await waitFor(
+      async () => (await (await current!.get(path)).text()).includes('HE:'),
+      1200,
+    );
+    expect(early).toBe(true);
+    expect(fitFinished).toBe(false); // translated while the check was still listening
+    // ...and the check still moves the finished subtitle when it is done.
+    const moved = await waitFor(
+      async () =>
+        (await (await current!.get(path)).text()).includes('00:00:03,000 --> 00:00:05,000'),
+      4000,
+    );
+    expect(moved).toBe(true);
+  });
+
+  it('shows the background sound check on the main screen, and how it ended', async () => {
+    type Status = {
+      backgroundSync: { percent: number } | null;
+      lastSync: { outcome: string; offsetMs?: number } | null;
+    };
+    const status = async () => (await (await current!.get('/api/status')).json()) as Status;
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'background' },
+      findStream: stream,
+      speechFit: async (o) => {
+        o.onProgress?.(40);
+        await new Promise((r) => setTimeout(r, 700));
+        return { scale: 1, offsetMs: 2000, score: 0.2, baseline: 0 };
+      },
+    });
+    const path = await subUrl(current, MOVIE_FILE);
+    await current.get(path);
+    const running = await waitFor(async () => (await status()).backgroundSync?.percent === 40);
+    expect(running).toBe(true);
+    expect((await status()).lastSync).toBeNull();
+    const done = await waitFor(async () => (await status()).lastSync?.outcome === 'moved');
+    expect(done).toBe(true);
+    expect((await status()).lastSync?.offsetMs).toBe(2000);
+    expect((await status()).backgroundSync).toBeNull();
+  });
+
+  it('the sound check keeps listening when another episode starts, until the user stops it', async () => {
+    type Status = {
+      backgroundSync: { percent: number; etaSec: number | null; episode?: number } | null;
+      lastSync: unknown;
+    };
+    const status = async () => (await (await current!.get('/api/status')).json()) as Status;
+    let stopped = false;
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'background' },
+      findStream: stream,
+      speechFit: (o) =>
+        new Promise((resolve) => {
+          o.onProgress?.(30);
+          o.signal?.addEventListener('abort', () => {
+            stopped = true;
+            resolve(undefined);
+          });
+        }),
+    });
+    const first = await subUrl(current, episodePath(current, 1, 3, 'Show.S01E03.mkv'));
+    await current.get(first);
+    expect(await waitFor(async () => (await status()).backgroundSync?.percent === 30)).toBe(true);
+
+    await current.get(episodePath(current, 1, 4, 'Show.S01E04.mkv'));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(stopped).toBe(false);
+    expect((await status()).backgroundSync?.percent).toBe(30);
+    expect((await status()).backgroundSync?.etaSec).toBeNull(); // too early to estimate
+
+    expect(((await (await post(current, '/api/sync-stop', {})).json()) as { ok: boolean }).ok).toBe(
+      true,
+    );
+    expect(await waitFor(() => stopped)).toBe(true);
+    expect((await status()).lastSync).toBeNull();
+  });
+
+  it('"sync to sound" on request moves the latest subtitle, says when it is already in step, and when the video is missing', async () => {
+    type Status = { lastSync: { outcome: string; offsetMs?: number } | null };
+    const status = async () => (await (await current!.get('/api/status')).json()) as Status;
+    let offsetMs = 1500;
+    let found = true;
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'off' },
+      findStream: async () => (found ? await stream() : undefined),
+      speechFit: async () => ({ scale: 1, offsetMs, score: 0.3, baseline: 0 }),
+    });
+    expect((await post(current, '/api/sync-now', {})).status).toBe(409); // nothing to sync yet
+    const path = await subUrl(current, MOVIE_FILE);
+    const ready = await waitFor(async () =>
+      (await (await current!.get(path)).text()).includes('HE:'),
+    );
+    expect(ready).toBe(true);
+
+    expect((await post(current, '/api/sync-now', {})).status).toBe(200);
+    const moved = await waitFor(async () => (await status()).lastSync?.outcome === 'moved');
+    expect(moved).toBe(true);
+    expect((await status()).lastSync?.offsetMs).toBe(1500);
+    expect(await (await current.get(path)).text()).toContain('00:00:02,500 --> 00:00:04,500');
+
+    offsetMs = 20;
+    expect((await post(current, '/api/sync-now', {})).status).toBe(200);
+    expect(await waitFor(async () => (await status()).lastSync?.outcome === 'inSync')).toBe(true);
+
+    found = false;
+    expect((await post(current, '/api/sync-now', {})).status).toBe(200);
+    expect(await waitFor(async () => (await status()).lastSync?.outcome === 'unavailable')).toBe(
+      true,
+    );
+  });
+
+  it('tells the main screen which subtitle Stremio took, once a finished one is delivered', async () => {
+    type Status = { lastDelivered: { title: string; via: string } | null };
+    const status = async () => (await (await current!.get('/api/status')).json()) as Status;
+    current = await start({ subWaitMs: 50, settings: { prefetchNext: false } });
+    const path = await subUrl(current, episodePath(current, 1, 3));
+    expect((await status()).lastDelivered).toBeNull();
+    const ready = await waitFor(async () =>
+      (await (await current!.get(path)).text()).includes('HE:'),
+    );
+    expect(ready).toBe(true);
+    const shown = await waitFor(async () => (await status()).lastDelivered !== null);
+    expect(shown).toBe(true);
+  });
+
+  it('lists where each subtitle came from, and whether it was translated', async () => {
+    current = await start({
+      subWaitMs: 50,
+      settings: { prefetchNext: false },
+      candidates: [
+        cand({ fileId: 1, language: 'en', provider: 'subdl' }),
+        cand({ fileId: 2, language: 'he' }),
+      ],
+      contentFor: (c) => tagged(`From${c.fileId}`),
+    });
+    const path = await subUrl(current, MOVIE_FILE);
+    await waitFor(async () => (await (await current!.get(path)).text()).includes('From'));
+    await waitFor(async () => (await library(current!)).items.length > 0);
+    const item = (await library(current)).items[0] as unknown as {
+      source?: { provider: string; language: string; kind: string };
+    };
+    // A ready subtitle in the language wins over a translation, from OpenSubtitles here.
+    expect(item.source).toEqual({ provider: 'opensubtitles', language: 'he', kind: 'direct' });
+    expect(current.translator.calls).toBe(0);
+  });
+
+  it('translates from English even when a ready subtitle exists, when asked to', async () => {
+    current = await start({
+      subWaitMs: 50,
+      settings: { prefetchNext: false, preferTranslation: true },
+      candidates: [
+        cand({ fileId: 1, language: 'en', provider: 'subdl' }),
+        cand({ fileId: 2, language: 'he' }),
+      ],
+      contentFor: (c) => tagged(`From${c.fileId}`),
+    });
+    const path = await subUrl(current, MOVIE_FILE);
+    expect(
+      await waitFor(async () => (await (await current!.get(path)).text()).includes('HE:From1')),
+    ).toBe(true);
+    await waitFor(async () => (await library(current!)).items.length > 0);
+    const item = (await library(current)).items[0] as unknown as { source?: unknown };
+    expect(item.source).toEqual({ provider: 'subdl', language: 'en', kind: 'translate' });
+    expect(current.translator.calls).toBeGreaterThan(0);
+  });
+
+  it('says so when the background sound check is not sure', async () => {
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'background' },
+      findStream: stream,
+      speechFit: async () => undefined,
+    });
+    await current.get(await subUrl(current, MOVIE_FILE));
+    const kept = await waitFor(
+      async () =>
+        (
+          (await (await current!.get('/api/status')).json()) as {
+            lastSync: { outcome: string } | null;
+          }
+        ).lastSync?.outcome === 'kept',
+    );
+    expect(kept).toBe(true);
+  });
+
+  it('wait mode: the translation waits for the sound check; off: it is never started', async () => {
+    let started = 0;
+    current = await start({
+      subWaitMs: 50,
+      settings: { soundCheck: 'off' },
+      findStream: stream,
+      speechFit: async () => {
+        started++;
+        return undefined;
+      },
+    });
+    const path = await subUrl(current, MOVIE_FILE);
+    expect(
+      await waitFor(async () => (await (await current!.get(path)).text()).includes('HE:')),
+    ).toBe(true);
+    expect(started).toBe(0);
+  });
+
+  it('translates the next episode ahead, once, and the real request then needs no new AI work', async () => {
+    const asked: number[] = [];
+    current = await start({
+      subWaitMs: 50,
+      settings: { prefetchNext: true },
+      onSearch: (q) => {
+        asked.push(q.video.episode ?? 0);
+        // Playing episode 4 starts episode 5 ahead; there is none, so it costs no AI work.
+        if (q.video.episode === 5) throw new AppError('SOURCE_SUBTITLE_NOT_FOUND');
+      },
+      candidatesFor: (q) => [cand({ fileId: 500 + (q.video.episode ?? 0) })],
+      contentFor: (c) => tagged(`Ep${c.fileId}`),
+    });
+    const three = await subUrl(current, episodePath(current, 1, 3, 'Show.S01E03.mkv'));
+    await current.get(three);
+    expect(await waitFor(() => asked.includes(4))).toBe(true);
+    await waitFor(async () => (await library(current!)).items.some((e) => e.episode === 4));
+    expect(asked).not.toContain(5); // one episode ahead, no chain
+    const aiBefore = current.translator.calls;
+    const downloadsBefore = current.downloads;
+    const four = await subUrl(current, episodePath(current, 1, 4, 'Show.S01E04.mkv'));
+    const text = await waitFor(async () =>
+      (await (await current!.get(four)).text()).includes('HE:'),
+    );
+    expect(text).toBe(true);
+    expect(current.translator.calls).toBe(aiBefore); // the translation was already there
+    expect(current.downloads).toBe(downloadsBefore); // so was the downloaded subtitle
+  });
+
+  it('does not translate ahead when switched off, for a movie, or in ask mode; a failing next episode shows no error', async () => {
+    const asked: number[] = [];
+    current = await start({
+      subWaitMs: 50,
+      settings: { prefetchNext: false },
+      onSearch: (q) => void asked.push(q.video.episode ?? 0),
+    });
+    await current.get(await subUrl(current, episodePath(current, 1, 3)));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(asked).toEqual([3]);
+    await current.close();
+
+    asked.length = 0;
+    current = await start({
+      subWaitMs: 50,
+      settings: { prefetchNext: true },
+      onSearch: (q) => void asked.push(q.video.episode ?? 0),
+    });
+    await current.get(await subUrl(current, MOVIE_FILE));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(asked).toEqual([0]);
+    await current.close();
+
+    asked.length = 0;
+    current = await start({
+      subWaitMs: 50,
+      settings: { prefetchNext: true },
+      onSearch: (q) => {
+        asked.push(q.video.episode ?? 0);
+        if (q.video.episode === 4) throw new AppError('SOURCE_SUBTITLE_NOT_FOUND');
+      },
+    });
+    const three = await subUrl(current, episodePath(current, 1, 3));
+    await current.get(three);
+    await waitFor(() => asked.includes(4));
+    await new Promise((r) => setTimeout(r, 200));
+    const status = (await (await current.get('/api/status')).json()) as { lastFailed?: boolean };
+    expect(status.lastFailed ?? false).toBe(false);
+  });
+
+  it('takes the right episode of a season pack, and does not mix episodes up in the saved copy', async () => {
+    current = await start({
+      subWaitMs: 50,
+      settings: { prefetchNext: false },
+      candidatesFor: (q) => [
+        cand({
+          fileId: 900,
+          provider: 'subdl',
+          pack: true,
+          season: 1,
+          episode: q.video.episode ?? 0,
+        }),
+      ],
+      contentFor: (c) => tagged(`Episode${c.episode}`),
+    });
+    const three = await subUrl(current, episodePath(current, 1, 3));
+    const four = await subUrl(current, episodePath(current, 1, 4));
+    const t3 = await waitFor(async () =>
+      (await (await current!.get(three)).text()).includes('HE:'),
+    );
+    const t4 = await waitFor(async () => (await (await current!.get(four)).text()).includes('HE:'));
+    expect(t3 && t4).toBe(true);
+    expect(await (await current.get(three)).text()).toContain('Episode3');
+    expect(await (await current.get(four)).text()).toContain('Episode4');
+  });
+
+  it('uses a single-episode file when the season pack has no file for the episode', async () => {
+    current = await start({
+      subWaitMs: 50,
+      settings: { prefetchNext: false },
+      candidates: [
+        cand({ fileId: 1, provider: 'subdl', providerRank: 0, pack: true, season: 1, episode: 3 }),
+        cand({ fileId: 2, providerRank: 1 }),
+      ],
+      downloadError: (c) =>
+        c.fileId === 1 ? new AppError('SOURCE_SUBTITLE_NOT_FOUND') : undefined,
+      contentFor: (c) => tagged(`From${c.fileId}`),
+    });
+    const path = await subUrl(current, episodePath(current, 1, 3));
+    const done = await waitFor(async () =>
+      (await (await current!.get(path)).text()).includes('HE:'),
+    );
+    expect(done).toBe(true);
+    expect(await (await current.get(path)).text()).toContain('From2');
+  });
+
+  it('redo: makes a saved subtitle again from one source only', async () => {
+    current = await start({
+      subWaitMs: 50,
+      settings: { prefetchNext: false },
+      candidates: [
+        cand({ fileId: 1, provider: 'subdl', providerRank: 0 }),
+        cand({ fileId: 2, providerRank: 1 }),
+      ],
+      contentFor: (c) => tagged(`From${c.fileId}`),
+    });
+    const path = await subUrl(current, MOVIE_FILE);
+    await waitFor(async () => (await (await current!.get(path)).text()).includes('HE:'));
+    expect(await (await current.get(path)).text()).toContain('From1'); // the better ranked source first
+    const id = (await library(current)).items[0]!.id;
+    const bad = await post(current, '/api/dev/redo', { id, source: 'jimaku' });
+    expect(bad.status).toBe(400); // no Jimaku key saved
+    expect((await post(current, '/api/dev/redo', { id: 'x', source: 'subdl' })).status).toBe(400);
+    expect(
+      (await post(current, '/api/dev/redo', { id: 'a'.repeat(32), source: 'opensubtitles' }))
+        .status,
+    ).toBe(409);
+    const ok = await post(current, '/api/dev/redo', { id, source: 'opensubtitles' });
+    expect(ok.status).toBe(200);
+    const redone = await waitFor(async () =>
+      (await (await current!.get(path)).text()).includes('From2'),
+    );
+    expect(redone).toBe(true);
   });
 });

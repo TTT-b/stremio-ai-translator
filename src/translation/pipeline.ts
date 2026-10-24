@@ -52,6 +52,14 @@ export interface PipelineOptions {
   onRateLimitWait?: (delta: 1 | -1) => void;
   /** Called after each chunk with cues finished so far and the file's total. */
   onProgress?: (done: number, total: number) => void;
+  /**
+   * Called with the finished cues from the start of the file once at least `partialMinCues` of
+   * them are done, and again each time that unbroken run grows. Never called for the whole file.
+   * The text is exactly what the final result will hold for those cues.
+   */
+  onPartial?: (cues: Cue[]) => void;
+  /** How many leading cues must be finished before `onPartial` is first called. */
+  partialMinCues?: number;
   logger: Logger;
   retryBaseDelayMs?: number;
   retryMaxDelayMs?: number;
@@ -342,6 +350,32 @@ async function runPool<T, R>(
   return results;
 }
 
+/**
+ * Builds the output cues from the source cues and the translations by id: dual-subtitle layout
+ * and the right-to-left fix. Timestamps and order come from the source.
+ */
+export function assembleCues(
+  sourceCues: Cue[],
+  byId: ReadonlyMap<string, string>,
+  opts: Pick<PipelineOptions, 'dualSubtitles' | 'rtlFix'>,
+): Cue[] {
+  return sourceCues.map((c) => {
+    let text = (byId.get(String(c.index)) ?? '').trim();
+    if (opts.dualSubtitles) {
+      // Strictly two lines: original, "\n", translation. Inner line breaks are folded into
+      // spaces so a multi-line cue cannot produce more (or blank) lines that players mis-render.
+      const oneLine = (s: string) => s.replace(/\s*\n\s*/g, ' ').trim();
+      const original = oneLine(c.text);
+      let translated = oneLine(text);
+      if (opts.rtlFix) translated = applyRtlFix(translated);
+      text = translated === '' ? original : `${original}\n${translated}`;
+    } else if (opts.rtlFix) {
+      text = applyRtlFix(text);
+    }
+    return { ...c, text };
+  });
+}
+
 /** Translate a parsed subtitle file. Timestamps and cue order come from the source, never the AI. */
 export async function translateSubtitle(
   source: SubtitleFile,
@@ -362,10 +396,29 @@ export async function translateSubtitle(
   const throttle = createThrottle(opts);
   let doneCues = 0;
   opts.onProgress?.(0, source.cues.length);
+  const finished = new Map<number, { translations: ChunkCue[] }>();
+  let reportedCues = 0;
+  const reportPartial = (): void => {
+    if (!opts.onPartial) return;
+    // The unbroken run of finished chunks from the start of the file.
+    let runCues = 0;
+    let next = 0;
+    while (finished.has(next)) runCues += chunks[next++]?.cues.length ?? 0;
+    if (runCues < (opts.partialMinCues ?? 0) || runCues <= reportedCues) return;
+    if (runCues >= source.cues.length) return; // the whole file is the final result
+    reportedCues = runCues;
+    const byId = new Map<string, string>();
+    for (let i = 0; i < next; i++) {
+      for (const t of finished.get(i)?.translations ?? []) byId.set(t.id, t.text);
+    }
+    opts.onPartial(assembleCues(source.cues.slice(0, runCues), byId, opts));
+  };
   const results = await runPool(chunks, opts.concurrency, async (chunk) => {
     const r = await translateOneChunk(chunk, chunks.length, provider, opts, throttle);
     doneCues += chunk.cues.length;
     opts.onProgress?.(doneCues, source.cues.length);
+    finished.set(chunk.number, r);
+    reportPartial();
     return r;
   });
 
@@ -377,21 +430,7 @@ export async function translateSubtitle(
     usage.outputTokens += r.usage.outputTokens;
   }
 
-  const cues: Cue[] = source.cues.map((c) => {
-    let text = (byId.get(String(c.index)) ?? '').trim();
-    if (opts.dualSubtitles) {
-      // Strictly two lines: original, "\n", translation. Inner line breaks are folded into
-      // spaces so a multi-line cue cannot produce more (or blank) lines that players mis-render.
-      const oneLine = (s: string) => s.replace(/\s*\n\s*/g, ' ').trim();
-      const original = oneLine(c.text);
-      let translated = oneLine(text);
-      if (opts.rtlFix) translated = applyRtlFix(translated);
-      text = translated === '' ? original : `${original}\n${translated}`;
-    } else if (opts.rtlFix) {
-      text = applyRtlFix(text);
-    }
-    return { ...c, text };
-  });
+  const cues = assembleCues(source.cues, byId, opts);
   assertSameStructure(source.cues, cues);
 
   opts.logger.info(

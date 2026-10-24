@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import type { Cue } from '../subtitles/types';
-import { FRAME_MS, fitTiming, type TimingFit } from './fit';
+import { FRAME_MS, fitTiming, type FitOptions, type TimingFit } from './fit';
 
 /**
  * Finds WHEN someone is talking in a video, from the loudness of its voice band only. No words and
@@ -156,10 +156,15 @@ export function fitAcrossLevels(
   cues: Cue[],
   loudness: ArrayLike<number>,
   mask?: Uint8Array,
+  opts: FitOptions = {},
 ): TimingFit | undefined {
   const fits: TimingFit[] = [];
   for (const level of LEVELS) {
-    const fit = fitTiming(cues, speechFromLoudness(loudness, level), mask ? { mask } : {});
+    const fit = fitTiming(
+      cues,
+      speechFromLoudness(loudness, level),
+      mask ? { ...opts, mask } : opts,
+    );
     if (fit) fits.push(fit);
   }
   // The biggest group of thresholds that agree on stretch and shift wins; its middle shift is used.

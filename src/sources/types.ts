@@ -103,9 +103,15 @@ export interface SubtitleCandidate {
   /** True when the provider marks it as machine/AI translated. */
   machineTranslated: boolean;
   /** Which provider it came from; OpenSubtitles when absent. */
-  provider?: 'opensubtitles' | 'subdl';
-  /** Provider-specific download path (SubDL). */
+  provider?: 'opensubtitles' | 'subdl' | 'jimaku';
+  /** Provider-specific download path (SubDL, Jimaku). */
   downloadPath?: string;
+  /** A whole-season zip: the file of `episode` is taken out of it when it is downloaded. */
+  pack?: boolean;
+  season?: number;
+  episode?: number;
+  /** Where the provider sits in the user's source order (0 = asked first). */
+  providerRank?: number;
 }
 
 export interface DownloadedSubtitle {

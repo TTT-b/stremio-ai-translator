@@ -13,6 +13,19 @@ const settingsSchema = z.object({
   dualSubtitles: z.boolean().optional(),
   embeddedSubtitles: z.boolean().optional(),
   cleanSubtitles: z.boolean().optional(),
+  partialSubtitles: z.boolean().optional(),
+  /** Developer settings (Settings > Developers). */
+  seasonPacks: z.boolean().optional(),
+  preferTranslation: z.boolean().optional(),
+  prefetchNext: z.boolean().optional(),
+  soundCheck: z.enum(['background', 'wait', 'off']).optional(),
+  embeddedWaitSec: z.number().int().min(0).max(120).optional(),
+  embeddedMaxEtaSec: z.number().int().min(0).max(600).optional(),
+  /** Order the subtitle sources are preferred in; a source left out is not used. */
+  sourceOrder: z
+    .array(z.enum(['subdl', 'opensubtitles', 'jimaku']))
+    .max(3)
+    .optional(),
   /** auto: translate right away. ask: wait for the user's OK in the app. */
   translationMode: z.enum(['auto', 'ask']).optional(),
   /** Language of the app's own screens. */
@@ -56,6 +69,13 @@ export function effectiveConfig(config: Config, settings: Settings): Config {
     dualSubtitles: settings.dualSubtitles ?? config.dualSubtitles,
     embeddedSubtitles: settings.embeddedSubtitles ?? config.embeddedSubtitles,
     cleanSubtitles: settings.cleanSubtitles ?? config.cleanSubtitles,
+    partialSubtitles: settings.partialSubtitles ?? config.partialSubtitles,
+    seasonPacks: settings.seasonPacks ?? config.seasonPacks,
+    preferTranslation: settings.preferTranslation ?? config.preferTranslation,
+    prefetchNext: settings.prefetchNext ?? config.prefetchNext,
+    soundCheck: settings.soundCheck ?? config.soundCheck,
+    embeddedWaitSec: settings.embeddedWaitSec ?? config.embeddedWaitSec,
+    embeddedMaxEtaSec: settings.embeddedMaxEtaSec ?? config.embeddedMaxEtaSec,
     translationMode: settings.translationMode ?? config.translationMode,
   };
 }

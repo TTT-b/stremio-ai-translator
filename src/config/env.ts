@@ -32,6 +32,8 @@ const envSchema = z.object({
   OPENSUBTITLES_API_KEY: optionalString,
   /** Optional second subtitle source (free key from subdl.com). */
   SUBDL_API_KEY: optionalString,
+  /** Optional third source for anime (free key from jimaku.cc; its subtitles are Japanese). */
+  JIMAKU_API_KEY: optionalString,
   OPENSUBTITLES_USERNAME: optionalString,
   OPENSUBTITLES_PASSWORD: optionalString,
   OPENSUBTITLES_USER_AGENT: optionalString.transform((v) => v || 'StremioAITranslator v1.0'),
@@ -57,9 +59,15 @@ const envSchema = z.object({
     .transform((v) => (v ?? '').trim().toLowerCase())
     .pipe(z.enum(['', 'true', 'false', '1', '0']))
     .transform((v) => v !== 'false' && v !== '0'),
-  /** Use text subtitle tracks stored inside the playing video file (default on). */
   /** Remove speaker names and sound notes from subtitles before translating (default on). */
   CLEAN_SUBTITLES: z
+    .string()
+    .optional()
+    .transform((v) => (v ?? '').trim().toLowerCase())
+    .pipe(z.enum(['', 'true', 'false', '1', '0']))
+    .transform((v) => v !== 'false' && v !== '0'),
+  /** Show the first part of a long subtitle while the rest is still being translated (default on). */
+  PARTIAL_SUBTITLES: z
     .string()
     .optional()
     .transform((v) => (v ?? '').trim().toLowerCase())
@@ -103,6 +111,7 @@ export interface Config {
   aiModel: string;
   openSubtitlesApiKey: string;
   subdlApiKey: string;
+  jimakuApiKey: string;
   openSubtitlesUsername: string;
   openSubtitlesPassword: string;
   openSubtitlesUserAgent: string;
@@ -124,6 +133,23 @@ export interface Config {
   embeddedSubtitles: boolean;
   /** Remove speaker names and sound notes before translating. Set on the config page. */
   cleanSubtitles: boolean;
+  /** Serve the first quarter of a long subtitle while the rest is still being translated. */
+  partialSubtitles: boolean;
+  /** Take the right episode out of a whole-season zip (SubDL). Developer setting. */
+  seasonPacks: boolean;
+  /** Translate from English even when a ready subtitle in the language exists. Developer setting. */
+  preferTranslation: boolean;
+  /** Translate the next episode in the background while this one plays. Developer setting. */
+  prefetchNext: boolean;
+  /**
+   * background: translate at once, the sound check goes on beside it. wait: the translation waits
+   * up to 30 s for the sound check. off: no sound check. Developer setting.
+   */
+  soundCheck: 'background' | 'wait' | 'off';
+  /** How long the job waits for the video's own subtitle before it goes on without it. */
+  embeddedWaitSec: number;
+  /** The video's own subtitle is skipped when reading the file would take longer than this. */
+  embeddedMaxEtaSec: number;
   stremioServerUrl: string;
   ffmpegPath: string;
   translationMode: 'auto' | 'ask';
@@ -161,6 +187,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     aiModel: provider.model, // fixed on purpose: not user-selectable
     openSubtitlesApiKey: e.OPENSUBTITLES_API_KEY,
     subdlApiKey: e.SUBDL_API_KEY,
+    jimakuApiKey: e.JIMAKU_API_KEY,
     openSubtitlesUsername: e.OPENSUBTITLES_USERNAME,
     openSubtitlesPassword: e.OPENSUBTITLES_PASSWORD,
     openSubtitlesUserAgent: e.OPENSUBTITLES_USER_AGENT,
@@ -178,6 +205,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dualSubtitles: false,
     embeddedSubtitles: e.EMBEDDED_SUBTITLES,
     cleanSubtitles: e.CLEAN_SUBTITLES,
+    partialSubtitles: e.PARTIAL_SUBTITLES,
+    seasonPacks: true,
+    preferTranslation: false,
+    prefetchNext: false,
+    soundCheck: 'background',
+    embeddedWaitSec: 15,
+    embeddedMaxEtaSec: 180,
     stremioServerUrl: e.STREMIO_SERVER_URL,
     ffmpegPath: e.FFMPEG_PATH,
     newsEnabled: e.NEWS_ENABLED,
@@ -198,5 +232,6 @@ export function secretValues(config: Config): string[] {
     config.openSubtitlesApiKey,
     config.openSubtitlesPassword,
     config.subdlApiKey,
+    config.jimakuApiKey,
   ].filter((v) => v.length >= 4);
 }

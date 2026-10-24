@@ -131,6 +131,8 @@ const S = {
   },
   username: { he: 'שם משתמש', en: 'Username' },
   password: { he: 'סיסמה', en: 'Password' },
+  showPassword: { he: 'הצג סיסמה', en: 'Show password' },
+  hidePassword: { he: 'הסתר סיסמה', en: 'Hide password' },
   osUserPh: { he: 'שם המשתמש ב-opensubtitles.com', en: 'Your opensubtitles.com username' },
   osPassPh: { he: 'הסיסמה ב-opensubtitles.com', en: 'Your opensubtitles.com password' },
   createOsAccount: { he: 'צור חשבון OpenSubtitles', en: 'Create an OpenSubtitles account' },
@@ -177,8 +179,8 @@ const S = {
   qRunning: { he: 'מתרגם...', en: 'Translating...' },
   qRunningPct: { he: 'מתרגם... {p}%', en: 'Translating... {p}%' },
   qLocal: {
-    he: 'בודק אם יש כתובית בתוך הסרטון...',
-    en: 'Looking for a subtitle inside the video...',
+    he: 'בודק כתוביות בתוך הסרטון...',
+    en: 'Checking for subtitles inside the video...',
   },
   qSync: { he: 'מקשיב לקול בסרטון...', en: 'Listening to the video...' },
   qSkip: { he: 'דלג', en: 'Skip' },
@@ -244,10 +246,6 @@ const S = {
   rowSubdl: { he: 'מפתח API של SubDL', en: 'SubDL API key' },
   rowOsLogin: { he: 'התחברות ל-OpenSubtitles', en: 'OpenSubtitles login' },
   aiKeyLabel: { he: 'מפתח ספק AI', en: 'AI provider key' },
-  rtlNote: {
-    he: 'תיקון פיסוק לימין-לשמאל: {state} (אפשרות מתקדמת, ראה Troubleshooting).',
-    en: 'Right-to-left punctuation fix: {state} (advanced option, see Troubleshooting).',
-  },
   clearNote: {
     he: 'מחק תרגומים שמורים כדי שהכתוביות יתורגמו מחדש בפעם הבאה.',
     en: 'Delete saved translations so subtitles are translated again next time.',
@@ -311,8 +309,9 @@ const S = {
   libBack: { he: 'חזרה למסך הראשי', en: 'Back to the main screen' },
   libEmpty: { he: 'עדיין אין כתוביות שמורות.', en: 'No saved subtitles yet.' },
   libLoadFail: { he: 'לא ניתן לטעון את הרשימה.', en: 'Could not load the list.' },
-  libMovies: { he: 'סרטים', en: 'Movies' },
-  libMovieCount: { he: '{n} סרטים', en: '{n} movies' },
+  libSubtitle: { he: 'כתובית', en: 'Subtitle' },
+  libSubtitleN: { he: 'כתובית {n}', en: 'Subtitle {n}' },
+  libSubtitleCount: { he: '{n} כתוביות', en: '{n} subtitles' },
   libSeason: { he: 'עונה {n}', en: 'Season {n}' },
   libEpisode: { he: 'פרק {n}', en: 'Episode {n}' },
   libEpisodes: { he: '{n} פרקים', en: '{n} episodes' },
@@ -332,11 +331,13 @@ const S = {
     he: 'הכתובית הורדה מ-OpenSubtitles וייתכן שהיא לגרסה אחרת של הסרטון. אם היא מוזזת, נסה סטרים אחר או הזז אותה בנגן של Stremio.',
     en: "The subtitle came from OpenSubtitles and may be for another version of the video. If it is off, try another stream or shift it in Stremio's player.",
   },
-  libTotal: { he: '{n} כתוביות · {size}', en: '{n} subtitles · {size}' },
+  libTotal: { he: '{n} כתוביות', en: '{n} subtitles' },
+  libSize: { he: 'נפח כולל {size}', en: 'Total size {size}' },
   libSelectAll: { he: 'בחר הכול', en: 'Select all' },
   libSelectNone: { he: 'נקה בחירה', en: 'Clear selection' },
-  libDeleteSel: { he: 'מחק נבחרות ({n})', en: 'Delete selected ({n})' },
-  libDeleteAll: { he: 'מחק הכול', en: 'Delete all' },
+  libSelectedCount: { he: 'נבחרו {n}', en: '{n} selected' },
+  libDeleteSel: { he: 'מחק את הנבחרות', en: 'Delete selected' },
+  libDeleteAll: { he: 'מחק את כל הכתוביות', en: 'Delete all subtitles' },
   libConfirmSel: { he: 'למחוק {n} כתוביות נבחרות?', en: 'Delete {n} selected subtitles?' },
   libConfirmAll: { he: 'למחוק את כל הכתוביות?', en: 'Delete all subtitles?' },
   libConfirmNote: {
@@ -348,10 +349,15 @@ const S = {
     he: 'שמור את הכתובית כקובץ SRT שאפשר לטעון בכל נגן',
     en: 'Save the subtitle as an SRT file you can load in any player',
   },
-  libMux: { he: 'שמור סרטון עם כתוביות', en: 'Save video with subtitles' },
+  libMux: { he: 'שמור כ-MKV (מחשב)', en: 'Save as MKV (computer)' },
   libMuxTip: {
     he: 'בחר את קובץ הסרטון שבמחשב. התוכנה שומרת לידו עותק (MKV) עם הכתובית בפנים, בלי לפגוע באיכות ובלי לגעת במקור.',
     en: 'Choose the video file on this computer. A copy (MKV) with the subtitle inside is saved next to it, with no loss of quality and the original untouched.',
+  },
+  libMuxMp4: { he: 'שמור כ-MP4 (פלאפון)', en: 'Save as MP4 (phone)' },
+  libMuxMp4Tip: {
+    he: 'עותק MP4 עם הכתובית בפנים, שנפתח בנגן הרגיל של אייפד, אייפון וטלפונים. נשמרת רק הכתובית הזו (בלי שאר הכתוביות), והאיכות לא נפגעת. בנגן יש ללחוץ על כפתור הכתוביות ולבחור עברית.',
+    en: 'An MP4 copy with the subtitle inside that opens in the built-in player of iPad, iPhone and phones. Only this subtitle is kept (not the other tracks) and the picture quality is untouched. In the player, press the subtitles button and pick it.',
   },
   libMuxBusy: { he: 'שומר…', en: 'Saving…' },
   libMuxDone: {
@@ -401,13 +407,12 @@ const S = {
   newsClose: { he: 'סגור', en: 'Close' },
   stageQueued: { he: 'ממתין בתור...', en: 'Waiting in line...' },
   stageLocal: {
-    he: 'בודק אם יש כתובית בתוך הסרטון...',
-    en: 'Checking for a subtitle inside the video...',
+    he: 'בודק כתוביות בתוך הסרטון...',
+    en: 'Checking for subtitles inside the video...',
   },
-  stageSearch: { he: 'מחפש כתובית ב-OpenSubtitles...', en: 'Searching OpenSubtitles...' },
+  stageSearch: { he: 'מחפש כתוביות...', en: 'Searching for subtitles...' },
   stageTranslate: { he: 'מתרגם...', en: 'Translating...' },
   diagBtn: { he: 'העתק פרטי אבחון', en: 'Copy diagnostics' },
-  advanced: { he: 'הגדרות מתקדמות', en: 'Advanced settings' },
   secKeys: { he: 'חשבונות ומפתחות', en: 'Accounts and keys' },
   secTranslate: { he: 'תרגום', en: 'Translation' },
   secMaintenance: { he: 'תחזוקה', en: 'Maintenance' },
@@ -424,6 +429,7 @@ const S = {
   stSubdl: { he: 'הורדות כתוביות מ-SubDL', en: 'SubDL downloads' },
   stSubdlCount: { he: '{n} בסשן הנוכחי', en: '{n} this session' },
   resumeBtn: { he: 'המשך תרגום', en: 'Continue translation' },
+  resumeBusy: { he: 'ממשיך...', en: 'Continuing...' },
   resumeHint: {
     he: 'לחץ אם התרגום נתקע או בוטל',
     en: 'Press if the translation is stuck or was cancelled',
@@ -433,6 +439,18 @@ const S = {
   testNoKeySubdl: {
     he: 'חסר מפתח SubDL. הוסף אותו בהגדרות.',
     en: 'The SubDL key is missing. Add it in Settings.',
+  },
+  toastOk: { he: 'אישור', en: 'OK' },
+  extStremioTitle: { he: 'לפתוח את Stremio?', en: 'Open Stremio?' },
+  extStremioBody: {
+    he: 'תוכנת Stremio תיפתח במחשב שלך, מחוץ לאפליקציה הזאת.',
+    en: 'The Stremio app opens on your computer, outside this app.',
+  },
+  testJimaku: { he: 'בדוק Jimaku (יפנית)', en: 'Test Jimaku (Japanese)' },
+  testOkJimaku: { he: 'Jimaku קיבל את המפתח.', en: 'Jimaku accepted the key.' },
+  testNoKeyJimaku: {
+    he: 'חסר מפתח Jimaku. הוסף אותו בהגדרות.',
+    en: 'The Jimaku key is missing. Add it in Settings.',
   },
   upgradeTitle: { he: 'כתובית מדויקת מוכנה', en: 'An exact subtitle is ready' },
   upgradeText: {
@@ -485,7 +503,155 @@ const S = {
   testDisabled: { he: 'מצב בדיקה כבוי', en: 'Test mode is off' },
   testStarted: { he: 'בקשת בדיקה נוספה לתור', en: 'Test request added to the queue' },
   stageSync: { he: 'מסנכרן לפי הקול... {p}%', en: 'Syncing to the speech... {p}%' },
+  syncRunning: {
+    he: 'מקשיב לקול של הפרק ומתאים אליו את הכתוביות: {p}% ({name})',
+    en: 'Listening to the episode and lining the subtitles up with it: {p}% ({name})',
+  },
+  syncWaitVideo: {
+    he: 'ממתין שהפרק יתחיל לרוץ ב-Stremio כדי להקשיב לקול ({name})',
+    en: 'Waiting for the episode to start playing in Stremio to listen to it ({name})',
+  },
+  syncEta: { he: 'עוד כ-{t}', en: 'about {t} left' },
+  syncEtaWait: { he: 'מחשב זמן...', en: 'estimating...' },
+  syncStopBtn: { he: 'עצור סנכרון', en: 'Stop sync' },
+  syncMoved: {
+    he: 'הסתיים: הכתוביות של {name} הוזזו ב-{s} שניות כדי להתאים לקול. כדי לראות את השינוי, בחר שוב את הכתוביות ב-Stremio.',
+    en: 'Sync done: the subtitle of {name} was moved by {s} seconds. Select the subtitles again in Stremio.',
+  },
+  deliveredText: {
+    he: 'הכתובית האחרונה ש-Stremio לקח: {name}',
+    en: 'Last subtitle Stremio took: {name}',
+  },
+  syncNowBtn: { he: 'סנכרון קול', en: 'Sync to sound' },
+  syncNowHint: {
+    he: 'מקשיב לקול של הסרטון שמתנגן ומיישר אליו את הכתובית האחרונה. צריך שהפרק יהיה פתוח ב-Stremio.',
+    en: 'Listens to the sound of the video that is playing and lines the latest subtitle up with it. The episode must be open in Stremio.',
+  },
+  syncNowStarted: { he: 'מתחיל סנכרון לפי הקול', en: 'Starting the sound sync' },
+  syncNowNoSub: { he: 'אין עדיין כתובית לסנכרן', en: 'There is no subtitle to sync yet' },
+  syncNowNoVideo: {
+    he: 'הסרטון לא נמצא. פתח את הפרק ב-Stremio ונסה שוב.',
+    en: 'The video was not found. Open the episode in Stremio and try again.',
+  },
+  syncNowBusy: { he: 'סנכרון כבר רץ', en: 'A sync is already running' },
+  syncInSync: {
+    he: 'הסתיים: הכתוביות של {name} כבר תואמות לקול, אז לא הזזתי כלום.',
+    en: 'Sync done: the subtitle of {name} is already in step with the sound.',
+  },
+  syncUnavailable: {
+    he: 'לא הצלחתי להקשיב לקול של {name}, כי הפרק לא נמצא ב-Stremio שבמחשב הזה. פתח אותו שם ונסה שוב.',
+    en: 'The sound of {name} could not be checked: the video was not found on the Stremio server of this computer.',
+  },
+  syncWaitExact: {
+    he: 'ממשיך לקרוא את הכתובית שבתוך הסרטון כדי לתת תזמון מדויק ({name}). זה לוקח בערך דקה-שתיים, ואודיע כשהיא מוכנה.',
+    en: 'Still reading the subtitle inside the video to give exact timing ({name}). It takes a minute or two; you will be told when it is ready.',
+  },
+  syncKept: {
+    he: 'הסתיים: לא הצלחתי לקבוע בביטחון אם יש הבדל בין הכתוביות של {name} לקול, אז השארתי אותן כמו שהן.',
+    en: 'Sync done: no sure change was found, the timing of {name} stays as it was.',
+  },
   libDeleteFail: { he: 'המחיקה נכשלה.', en: 'The delete failed.' },
+  secDev: { he: 'הגדרות מפתח', en: 'Developer settings' },
+  devNote: {
+    he: 'כאן אפשר לשנות את ההמתנות ואת סדר המקורות, ולבדוק כל מקור לבד. כל שינוי נשמר מיד. ההמלצות כתובות ליד כל אפשרות.',
+    en: 'Change the waits and the order of the sources here, and try each source on its own. Every change is saved at once. The recommended choice is marked next to each option.',
+  },
+  devSoundLabel: {
+    he: 'בדיקת סאונד (סנכרון לפי הקול)',
+    en: 'Sound check (timing from the speech)',
+  },
+  devSoundBackground: {
+    he: 'לתרגם מיד, הבדיקה ברקע (מומלץ)',
+    en: 'Translate at once, check in the background (recommended)',
+  },
+  devSoundWait: {
+    he: 'להמתין עד 30 שניות לבדיקה לפני התרגום',
+    en: 'Wait up to 30 s for the check before translating',
+  },
+  devSoundOff: { he: 'בלי בדיקת סאונד בכלל', en: 'No sound check at all' },
+  devSoundHint: {
+    he: 'הבדיקה מקשיבה לכמה קטעים מהסרטון ומזיזה כתובית שירדה מהאינטרנט למקום הנכון. ברקע, הכתובית מתחלפת בלי שתצטרך לעשות כלום. כתובית מתוך הסרטון לא צריכה בדיקה.',
+    en: 'The check listens to a few pieces of the video and moves a downloaded subtitle to the right place. In the background the subtitle is swapped in on its own. A subtitle from inside the video needs no check.',
+  },
+  devEmbWaitLabel: {
+    he: 'כמה שניות להמתין לכתובית שבתוך הסרטון',
+    en: 'Seconds to wait for the subtitle inside the video',
+  },
+  devEmbWaitHint: {
+    he: 'ברירת מחדל 15. אחרי הזמן הזה ממשיכים עם כתובית שירדה מהאינטרנט, והחיפוש בסרטון נמשך ברקע.',
+    en: 'Default 15. After that the job goes on with a downloaded subtitle, and the search inside the video continues in the background.',
+  },
+  devEmbEtaLabel: {
+    he: 'לדלג על הכתובית שבתוך הסרטון אם הקריאה תיקח יותר מ... שניות',
+    en: 'Skip the subtitle inside the video if reading it would take more than... seconds',
+  },
+  devEmbEtaHint: {
+    he: 'חילוץ כתובית קורא את כל קובץ הסרטון. התוכנה מעריכה לפי מהירות ההורדה של Stremio. 0 = לעולם לא לדלג. ברירת מחדל 60. מומלץ.',
+    en: "Extracting a subtitle reads the whole video file. The app estimates it from Stremio's download speed. 0 = never skip. Default 60. Recommended.",
+  },
+  devPacksLabel: { he: 'חבילות עונה מ-SubDL', en: 'Season packs from SubDL' },
+  devPacksHint: {
+    he: 'פותחים קובץ zip של עונה שלמה ולוקחים ממנו את הפרק הנכון. מומלץ.',
+    en: 'Opens a whole-season zip and takes the right episode out of it. Recommended.',
+  },
+  devTranslateLabel: {
+    he: 'תמיד לתרגם מאנגלית עם ה-AI',
+    en: 'Always translate from English with the AI',
+  },
+  devTranslateHint: {
+    he: 'בלי זה, כשיש כתובית מוכנה בעברית באחד המקורות, התוכנה משתמשת בה ישירות ולא מתרגמת. כשזה דלוק היא מעדיפה כתובית באנגלית ומתרגמת אותה. לשימוש בבדיקות בלבד.',
+    en: 'Without this, when a source has a ready subtitle in your language the app uses it as it is and does not translate. When on, it prefers an English subtitle and translates it. For testing.',
+  },
+  libSrcVideo: { he: 'מתוך הסרטון', en: 'From the video' },
+  libSrcDirect: { he: 'כתובית מוכנה', en: 'ready-made' },
+  libSrcTranslated: { he: 'תורגם מ-{l}', en: 'translated from {l}' },
+  libSrcTip: {
+    he: 'המקור שממנו נלקחה הכתובית, ואם היא כבר בשפה שלך או שתורגמה.',
+    en: 'Where the subtitle came from, and whether it was already in your language or translated.',
+  },
+  devPrefetchLabel: { he: 'לתרגם מראש את הפרק הבא', en: 'Translate the next episode ahead' },
+  devPrefetchHint: {
+    he: 'כשפרק מסתיים, הפרק שאחריו מתרגם ברקע (מכתובית שירדה מהאינטרנט), כך שהוא מוכן כשתגיע אליו. עולה הורדה אחת ותרגום אחד נוספים.',
+    en: 'When an episode is done, the one after it is translated in the background (from a downloaded subtitle), so it is ready when you get there. It costs one more download and one more translation.',
+  },
+  devOrderTitle: { he: 'סדר המקורות', en: 'Order of the sources' },
+  devOrderHint: {
+    he: 'המקור העליון נבחר קודם. בלי הסימון המקור לא משמש. התאמה מדויקת לקובץ (hash) ב-OpenSubtitles תמיד מנצחת. Jimaku נותן כתוביות ביפנית ולכן מומלץ אחרון.',
+    en: 'The top source is preferred. Unticked sources are not used. An exact file match (hash) on OpenSubtitles always wins. Jimaku gives Japanese subtitles, so it is best last.',
+  },
+  devSrcSubdl: { he: 'SubDL', en: 'SubDL' },
+  devSrcOs: { he: 'OpenSubtitles', en: 'OpenSubtitles' },
+  devSrcJimaku: { he: 'Jimaku (יפנית)', en: 'Jimaku (Japanese)' },
+  devRec: { he: 'מומלץ {n}', en: 'Recommended {n}' },
+  devNoKey: { he: 'אין מפתח', en: 'no key' },
+  devMoveUp: { he: 'הזז למעלה', en: 'Move up' },
+  devMoveDown: { he: 'הזז למטה', en: 'Move down' },
+  devOrderReset: { he: 'חזרה לסדר המומלץ', en: 'Back to the recommended order' },
+  devOrderNone: { he: 'חייב להישאר לפחות מקור אחד', en: 'At least one source must stay on' },
+  devRedoTitle: { he: 'בקש כתוביות שוב, מאפס', en: 'Request the subtitles again, from scratch' },
+  devRedoHint: {
+    he: 'בוחרים כתובית מהרשימה ומקור, והתוכנה יוצרת אותה מחדש רק מהמקור הזה (בלי לחפש בתוך הסרטון). הכתובית הקודמת מוחלפת. תרגום של טקסט זהה נשמר ולא עולה שוב.',
+    en: 'Pick a subtitle from the list and a source, and the app makes it again from that source only (no look inside the video). The earlier subtitle is replaced. A translation of identical text is kept and costs nothing again.',
+  },
+  devRedoItem: { he: 'כתובית', en: 'Subtitle' },
+  devRedoSource: { he: 'מקור', en: 'Source' },
+  devRedoBtn: { he: 'בקש שוב מאפס', en: 'Request again from scratch' },
+  devRedoStarted: {
+    he: 'הבקשה התחילה. אפשר לראות אותה בתור.',
+    en: 'The request started. You can see it in the queue.',
+  },
+  devRedoBusy: {
+    he: 'הכתובית הזו בעבודה כרגע, או שלא נמצאה.',
+    en: 'That subtitle is being worked on right now, or was not found.',
+  },
+  devRedoNoKey: { he: 'למקור הזה אין מפתח שמור.', en: 'That source has no saved key.' },
+  devRedoNone: { he: 'אין עדיין כתוביות ברשימה.', en: 'There are no subtitles in the list yet.' },
+  jimakuKeyLabel: { he: 'מפתח API של Jimaku (אופציונלי)', en: 'Jimaku API key (optional)' },
+  jimakuHint: {
+    he: 'כתוביות לאנימה, כמעט כולן ביפנית. משמש כמוצא אחרון. מפתח חינמי מ-jimaku.cc (בהגדרות החשבון).',
+    en: 'Anime subtitles, almost all in Japanese. Used as a last resort. Free key from jimaku.cc (in the account settings).',
+  },
+  rowJimaku: { he: 'מפתח API של Jimaku', en: 'Jimaku API key' },
 } as const satisfies Record<string, Pair>;
 
 export type StrKey = keyof typeof S;
