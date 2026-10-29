@@ -395,6 +395,13 @@ describe('unsaved changes in the settings drawer', () => {
     desktop: true,
   });
 
+  it('offers the library download as two icon buttons: subtitles, and a video menu with MKV and MP4', () => {
+    expect(html).toContain('libSubsBtn');
+    expect(html).toContain("muxOption('MKV'");
+    expect(html).toContain("muxOption('MP4'");
+    expect(html).not.toContain('libMuxMp4)');
+  });
+
   it('asks to save, discard or keep editing before closing with changes', () => {
     for (const id of ['unsaved-modal', 'unsaved-save', 'unsaved-discard', 'unsaved-stay']) {
       expect(html).toContain(`id="${id}"`);

@@ -12,6 +12,28 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '1.9.1': {
+    en: [
+      {
+        title: 'Cleaner subtitles',
+        text: 'After translating, the app quietly checks each line. A line that came back with a stray English word is translated once more on its own. Nothing to do on your side.',
+      },
+      {
+        title: 'Tidier library',
+        text: 'Each subtitle in My subtitles now has two buttons: Subtitles (SRT file) and Video, with a small menu for MKV or MP4.',
+      },
+    ],
+    he: [
+      {
+        title: 'כתוביות נקיות יותר',
+        text: 'אחרי התרגום התוכנה בודקת בשקט כל שורה. שורה שחזרה עם מילה באנגלית שלא שייכת אליה מתורגמת שוב פעם אחת בנפרד. אין מה לעשות מצדך.',
+      },
+      {
+        title: 'ספרייה מסודרת יותר',
+        text: 'לכל כתובית ב"הכתוביות שלי" יש עכשיו שני כפתורים: כתוביות (קובץ SRT) וסרטון, עם תפריט קטן ל-MKV או ל-MP4.',
+      },
+    ],
+  },
   '1.9.0': {
     en: [
       {

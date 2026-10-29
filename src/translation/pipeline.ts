@@ -3,7 +3,12 @@ import type { Logger } from '../logging/logger';
 import { chunkCues, type Chunk, type ChunkCue } from '../subtitles/chunk';
 import { applyRtlFix } from '../subtitles/rtl';
 import type { Cue, SubtitleFile } from '../subtitles/types';
-import { assertSameStructure, findChunkProblems, stripForeignScripts } from '../subtitles/validate';
+import {
+  assertSameStructure,
+  findChunkProblems,
+  findSuspiciousLines,
+  stripForeignScripts,
+} from '../subtitles/validate';
 import type { TokenUsage, TranslationProvider } from './provider';
 import { withRetry } from './retry';
 
@@ -201,6 +206,81 @@ function withKick<T>(call: Promise<T>, opts: PipelineOptions): Promise<T> {
   });
 }
 
+/** Most lines one chunk may send back for a second look, and how many neighbours give context. */
+const MAX_REPAIR_LINES = 10;
+const REPAIR_NEIGHBOURS = 2;
+
+/**
+ * Quietly translate again the few lines that came back with a stray Latin word (for example "lad"
+ * inside a Hebrew sentence). One extra request per chunk at most, never a loop: whatever comes
+ * back is used only if it is clean, and any failure keeps the first translation.
+ */
+async function repairSuspiciousLines(
+  chunk: Chunk,
+  translations: ChunkCue[],
+  provider: TranslationProvider,
+  opts: PipelineOptions,
+  throttle: Throttle,
+  log: Logger,
+  usage: TokenUsage,
+): Promise<ChunkCue[]> {
+  const ids = findSuspiciousLines(chunk.cues, translations, opts.targetLanguageCode).slice(
+    0,
+    MAX_REPAIR_LINES,
+  );
+  if (ids.length === 0 || opts.isCancelled?.()) return translations;
+  const wanted = new Set(ids);
+  const all = chunk.cues.map((c) => ({ id: String(c.index), text: c.text }));
+  const redo = all.filter((c) => wanted.has(c.id));
+  const near = new Set<number>();
+  all.forEach((c, i) => {
+    if (!wanted.has(c.id)) return;
+    for (let k = i - REPAIR_NEIGHBOURS; k <= i + REPAIR_NEIGHBOURS; k++) near.add(k);
+  });
+  const around = all.filter((c, i) => near.has(i) && !wanted.has(c.id));
+  try {
+    await throttle.pace();
+    const reply = await withKick(
+      provider.translateChunk({
+        targetLanguage: opts.targetLanguageName,
+        targetLanguageCode: opts.targetLanguageCode,
+        cues: redo,
+        context: around,
+        upcoming: [],
+      }),
+      opts,
+    );
+    throttle.onSuccess();
+    usage.inputTokens += reply.usage?.inputTokens ?? 0;
+    usage.outputTokens += reply.usage?.outputTokens ?? 0;
+    const fresh = stripForeignScripts(chunk.cues, reply.translations, opts.targetLanguageCode);
+    const stillBad = new Set(findSuspiciousLines(chunk.cues, fresh, opts.targetLanguageCode));
+    const better = new Map<string, string>();
+    for (const t of fresh) {
+      if (
+        wanted.has(t.id) &&
+        typeof t.text === 'string' &&
+        t.text.trim() !== '' &&
+        !stillBad.has(t.id)
+      ) {
+        better.set(t.id, t.text);
+      }
+    }
+    log.info({ stage: 'VALIDATION', lines: ids.length, fixed: better.size }, 'repaired lines');
+    if (better.size === 0) return translations;
+    return translations.map((t) =>
+      better.has(t.id) ? { ...t, text: better.get(t.id) as string } : t,
+    );
+  } catch (err) {
+    if (err instanceof CancelledError) throw err;
+    log.warn(
+      { stage: 'VALIDATION', lines: ids.length },
+      'repair attempt failed, kept first result',
+    );
+    return translations;
+  }
+}
+
 async function translateOneChunk(
   chunk: Chunk,
   total: number,
@@ -282,9 +362,18 @@ async function translateOneChunk(
       }
       const problems = findChunkProblems(chunk.cues, cleaned);
       if (problems.length === 0) {
+        const repaired = await repairSuspiciousLines(
+          chunk,
+          cleaned,
+          provider,
+          opts,
+          throttle,
+          log,
+          usage,
+        );
         if (opts.chunkStore && storeKey) {
           try {
-            opts.chunkStore.set(storeKey, cleaned);
+            opts.chunkStore.set(storeKey, repaired);
           } catch {
             /* cache problems must not fail the translation */
           }
@@ -293,7 +382,7 @@ async function translateOneChunk(
           { durationMs: Date.now() - started, cues: chunk.cues.length, tokens: usage },
           'chunk translated',
         );
-        return { translations: cleaned, usage };
+        return { translations: repaired, usage };
       }
       lastProblems = problems;
       log.warn(

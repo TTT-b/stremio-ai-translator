@@ -344,21 +344,22 @@ const S = {
     he: 'הן יתורגמו מחדש בפעם הבאה שתנגן אותן. אי אפשר לבטל.',
     en: 'They will be translated again the next time you play them. This cannot be undone.',
   },
-  libSrt: { he: 'הורד SRT', en: 'Download SRT' },
   libSrtTip: {
     he: 'שמור את הכתובית כקובץ SRT שאפשר לטעון בכל נגן',
     en: 'Save the subtitle as an SRT file you can load in any player',
   },
-  libMux: { he: 'שמור כ-MKV (מחשב)', en: 'Save as MKV (computer)' },
   libMuxTip: {
     he: 'בחר את קובץ הסרטון שבמחשב. התוכנה שומרת לידו עותק (MKV) עם הכתובית בפנים, בלי לפגוע באיכות ובלי לגעת במקור.',
     en: 'Choose the video file on this computer. A copy (MKV) with the subtitle inside is saved next to it, with no loss of quality and the original untouched.',
   },
-  libMuxMp4: { he: 'שמור כ-MP4 (פלאפון)', en: 'Save as MP4 (phone)' },
   libMuxMp4Tip: {
     he: 'עותק MP4 עם הכתובית בפנים, שנפתח בנגן הרגיל של אייפד, אייפון וטלפונים. נשמרת רק הכתובית הזו (בלי שאר הכתוביות), והאיכות לא נפגעת. בנגן יש ללחוץ על כפתור הכתוביות ולבחור עברית.',
     en: 'An MP4 copy with the subtitle inside that opens in the built-in player of iPad, iPhone and phones. Only this subtitle is kept (not the other tracks) and the picture quality is untouched. In the player, press the subtitles button and pick it.',
   },
+  libSubsBtn: { he: 'כתוביות', en: 'Subtitles' },
+  libVideoBtn: { he: 'סרטון', en: 'Video' },
+  libMkvDesc: { he: 'למחשב ולטלוויזיה', en: 'For computer and TV' },
+  libMp4Desc: { he: 'לפלאפון ולטאבלט', en: 'For phone and tablet' },
   libMuxBusy: { he: 'שומר…', en: 'Saving…' },
   libMuxDone: {
     he: 'נשמר: {name} (וגם קובץ SRT לידו)',

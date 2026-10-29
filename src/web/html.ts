@@ -1193,7 +1193,10 @@ const episodeRow = (e) => {
   }
   meta.append(el('span', '', f(T.libLines, {n: e.cues})), ltr(dateText(e.createdAt)), ltr(sizeText(e.bytes)));
   row.append(meta);
-  const dl = el('a', 'shrink-0 rounded-lg border border-warm-ln px-2.5 py-1 text-xs font-semibold text-warm-mu transition hover:border-warm-ac/60 hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac', T.libSrt);
+  const btnCls = 'inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-warm-ln px-2.5 py-1 text-xs font-semibold text-warm-mu transition hover:border-warm-ac/60 hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac';
+  const icon = (paths) => { const s = el('span', 'inline-flex'); s.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>'; return s; };
+  const dl = el('a', btnCls);
+  dl.append(icon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/>'), el('span', '', T.libSubsBtn));
   dl.href = '/api/library/' + e.id + '/srt';
   dl.title = T.libSrtTip;
   dl.addEventListener('click', async (ev) => {
@@ -1212,11 +1215,30 @@ const episodeRow = (e) => {
   actions.append(dl);
   row.append(actions);
   if (window.desktop && window.desktop.pickVideo) {
-    const muxButton = (label, tip, format) => {
-      const mux = el('button', dl.className, label);
-      mux.type = 'button';
-      mux.title = tip;
-      mux.addEventListener('click', async () => {
+    const wrap = el('span', '');
+    wrap.style.position = 'relative';
+    const mux = el('button', btnCls);
+    mux.type = 'button';
+    const muxLabel = el('span', '', T.libVideoBtn);
+    mux.append(icon('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/>'), muxLabel, el('span', '', '▾'));
+    const menu = el('div', 'rounded-2xl border border-warm-ln bg-warm-sf p-1.5 text-sm');
+    menu.hidden = true;
+    menu.style.cssText = 'position:absolute;inset-inline-end:0;top:calc(100% + 6px);z-index:20;min-width:210px;box-shadow:0 8px 24px rgba(0,0,0,.35)';
+    const closeMenu = () => { menu.hidden = true; };
+    mux.addEventListener('click', (ev) => { ev.stopPropagation(); menu.hidden = !menu.hidden; });
+    document.addEventListener('click', closeMenu);
+    const muxOption = (name, desc, tip, format) => {
+      const item = el('button', 'flex w-full flex-col items-start rounded-lg px-2.5 py-2 text-start text-warm-tx transition hover:bg-warm-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac');
+      item.type = 'button';
+      item.title = tip;
+      item.append(el('span', 'text-sm font-bold', name), el('span', 'text-xs text-warm-mu', desc));
+      item.addEventListener('click', () => { closeMenu(); runMux(format); });
+      return item;
+    };
+    menu.append(muxOption('MKV', T.libMkvDesc, T.libMuxTip, 'mkv'), muxOption('MP4', T.libMp4Desc, T.libMuxMp4Tip, 'mp4'));
+    wrap.append(mux, menu);
+    const runMux = (format) => {
+      (async () => {
         let payload = null;
         const name = e.kind === 'series' ? e.title + ' S' + String(e.season ?? 0).padStart(2, '0') + 'E' + String(e.episode ?? 0).padStart(2, '0') : e.title;
         try {
@@ -1229,18 +1251,17 @@ const episodeRow = (e) => {
         } catch { payload = null; }
         const video = payload ? 'stremio' : await window.desktop.pickVideo(name);
         if (!video) return;
-        mux.disabled = true; mux.textContent = T.libMuxBusy;
+        mux.disabled = true; muxLabel.textContent = T.libMuxBusy;
         try {
           const r = await fetch('/api/library/' + e.id + '/mux', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload || {video, format})});
           const j = await r.json();
           if (j.ok) toast(true, f(T.libMuxDone, {name: j.name}));
           else toast(false, j.code === 'NO_FFMPEG' ? T.libMuxNoFfmpeg : (j.code === 'NOT_A_VIDEO' || j.code === 'BAD_PATH') ? T.libMuxBadFile : T.libMuxFail);
         } catch { toast(false, T.libMuxFail); }
-        mux.disabled = false; mux.textContent = label;
-      });
-      return mux;
+        mux.disabled = false; muxLabel.textContent = T.libVideoBtn;
+      })();
     };
-    actions.append(muxButton(T.libMux, T.libMuxTip, 'mkv'), muxButton(T.libMuxMp4, T.libMuxMp4Tip, 'mp4'));
+    actions.append(wrap);
   }
   return row;
 };

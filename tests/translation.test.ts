@@ -53,6 +53,38 @@ describe('translateSubtitle', () => {
     expect(r.file.cues[0]?.text).toBe('T:Hello there.');
   });
 
+  it('quietly translates a line with a stray Latin word once more, and never loops', async () => {
+    const HEB = 'שלום';
+    const stray = new FakeProvider((req, call) => ({
+      translations: req.cues.map((c) => ({
+        id: c.id,
+        text: call === 1 && c.id === '2' ? `${HEB} lad` : call >= 2 ? `${HEB} ${c.id}` : HEB,
+      })),
+    }));
+    const r = await translateSubtitle(source, stray, opts({ chunkSize: 10 }));
+    expect(stray.calls).toBe(2);
+    expect(r.file.cues[1]?.text).toBe(`${HEB} 2`);
+    expect(r.file.cues[0]?.text).toBe(HEB);
+
+    const stubborn = new FakeProvider((req) => ({
+      translations: req.cues.map((c) => ({ id: c.id, text: `${HEB} lad` })),
+    }));
+    const kept = await translateSubtitle(source, stubborn, opts({ chunkSize: 10 }));
+    expect(stubborn.calls).toBe(2);
+    expect(kept.file.cues.every((c) => c.text === `${HEB} lad`)).toBe(true);
+  });
+
+  it('keeps the first translation when the repair request fails', async () => {
+    const HEB = 'שלום';
+    const flaky = new FakeProvider((req, call) => {
+      if (call >= 2) throw new AppError('PROVIDER_RESPONSE_INVALID');
+      return { translations: req.cues.map((c) => ({ id: c.id, text: `${HEB} lad` })) };
+    });
+    const r = await translateSubtitle(source, flaky, opts({ chunkSize: 10 }));
+    expect(r.file.cues).toHaveLength(3);
+    expect(r.file.cues[0]?.text).toBe(`${HEB} lad`);
+  });
+
   it('dual mode keeps the original on top and the translation directly below', async () => {
     const r = await translateSubtitle(source, new FakeProvider(), opts({ dualSubtitles: true }));
     expect(r.file.cues[0]?.text).toBe('Hello there.\nT:Hello there.');

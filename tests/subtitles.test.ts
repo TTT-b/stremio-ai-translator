@@ -8,6 +8,7 @@ import { serializeSubtitle } from '../src/subtitles/serialize';
 import {
   assertSameStructure,
   findChunkProblems,
+  findSuspiciousLines,
   stripForeignScripts,
 } from '../src/subtitles/validate';
 
@@ -91,6 +92,24 @@ describe('chunkCues', () => {
     expect(chunks[0]?.upcoming.map((c) => c.id)).toEqual(['5', '6', '7']);
     expect(chunks[1]?.upcoming.map((c) => c.id)).toEqual(['9', '10']);
     expect(chunks[2]?.upcoming).toEqual([]);
+  });
+});
+
+describe('suspicious Latin leftovers', () => {
+  const src = [{ index: 1, startMs: 0, endMs: 1, text: 'No way, Bob! OK' }];
+  const HE = 'שלום';
+  const check = (text: string, code = 'he') => findSuspiciousLines(src, [{ id: '1', text }], code);
+
+  it('flags a Latin word that is not in the source line', () => {
+    expect(check(HE + ' lad')).toEqual(['1']);
+  });
+  it('accepts names from the source, abbreviations and single letters', () => {
+    expect(check(HE + ' Bob')).toEqual([]);
+    expect(check(HE + ' DNA ok kg')).toEqual([]);
+    expect(check(HE + ' T:')).toEqual([]);
+  });
+  it('does not check languages written in Latin', () => {
+    expect(check('hola lad', 'es')).toEqual([]);
   });
 });
 

@@ -96,6 +96,40 @@ export function stripForeignScripts(
   return changed ? cleaned : translations;
 }
 
+const LATIN_WORD = /\p{Script=Latin}{2,}/gu;
+/** Short Latin tokens a translation may add on its own (units, common abbreviations). */
+const ALLOWED_LATIN = new Set(['ok', 'tv', 'kg', 'km', 'cm', 'mm', 'ml', 'vs', 'dj', 'ps', 'pm']);
+
+/**
+ * Ids of lines whose translation holds a Latin word that is not in the source line, for a target
+ * language that is not written in Latin (a leftover like "lad" inside a Hebrew sentence). Words
+ * the source line itself has (names, brands) and ALL-CAPS abbreviations are fine. A hint for one
+ * repair attempt, never a reason to fail a chunk.
+ */
+export function findSuspiciousLines(
+  source: Cue[],
+  translations: ChunkCue[],
+  targetLanguageCode: string,
+): string[] {
+  const own = TARGET_SCRIPTS[targetLanguageCode.toLowerCase()];
+  if (!own || own.length === 0) return [];
+  const sourceById = new Map(source.map((c) => [String(c.index), c.text.toLowerCase()]));
+  const ids: string[] = [];
+  for (const t of translations) {
+    const src = sourceById.get(t?.id);
+    if (src === undefined || typeof t.text !== 'string') continue;
+    const words = t.text.match(LATIN_WORD) ?? [];
+    const stray = words.some(
+      (w) =>
+        !(w === w.toUpperCase()) &&
+        !ALLOWED_LATIN.has(w.toLowerCase()) &&
+        !src.includes(w.toLowerCase()),
+    );
+    if (stray) ids.push(t.id);
+  }
+  return ids;
+}
+
 /**
  * Check one chunk's translation against its source. Returns a list of problems
  * (empty = valid). Problem strings contain IDs only, never dialogue.
