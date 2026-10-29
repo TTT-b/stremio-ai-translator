@@ -9,10 +9,10 @@ import { parseVideoId } from '../sources/types';
 
 export const MANIFEST: Manifest = {
   id: 'community.ai-subtitle-translator.local',
-  version: '1.0.0',
-  name: 'AI Subtitle Translator',
+  version: '1.9.1',
+  name: 'TTT Sub · כתוביות AI',
   description:
-    'Local add-on: serves an existing subtitle in your language from OpenSubtitles, or translates an English one with Gemini.',
+    'מתרגם כתוביות AI ל-Stremio. Local add-on: serves an existing subtitle in your language, or translates an English one with AI.',
   resources: ['subtitles'],
   types: ['movie', 'series', 'anime'],
   // tt = IMDb, kitsu = Kitsu anime ids, tmdb = TMDB ids

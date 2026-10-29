@@ -1,4 +1,4 @@
-# AI Subtitle Translator for Stremio
+# TTT Sub: AI Subtitle Translator for Stremio
 
 A real-time AI subtitle translator for [Stremio](https://www.stremio.com/). When you play a movie
 or episode it offers a subtitle in your language (Hebrew by default). If OpenSubtitles already has
@@ -524,6 +524,24 @@ tracks), copies the picture (HEVC is tagged `hvc1`, which Apple players need), a
 when it is AAC, AC3, E-AC3, MP3 or ALAC, otherwise it converts the sound to AAC. Videos in other
 picture formats (such as VP9 or AV1) may not play on an iPad even as MP4. Not every player shows
 Hebrew punctuation in the right place; VLC is the fallback.
+
+While a video is being saved, a thin bar under the episode row shows the progress, the time left
+(an estimate), and how much has been written. **Cancel** stops it and removes the half-written file.
+When it is done the row shows "The video is ready" with the file size, a **Show in folder** button
+and a close button. The video menu shows the approximate size next to MKV and MP4 when Stremio's
+server knows the file size.
+
+### Timing labels in My subtitles
+
+Each saved subtitle can carry a timing label: **Exact timing** (green, a check mark: the video's own
+subtitle or an exact match), **Timing by speech** (blue, a sound wave: fitted to the voices) and
+**Estimated timing** (orange, a wave: a guess, worth checking).
+
+### Removing a key
+
+In Settings, Accounts and keys, every set key (AI, OpenSubtitles key, OpenSubtitles login, SubDL,
+Jimaku) has a small x inside its "Set" label. It asks "Remove the key?" before clearing it from the
+local `.env` file. Password fields show the eye button only after you type something.
 
 ### Trying changes without installing the app
 

@@ -14,7 +14,8 @@ interface Pair {
 
 /** `{name}` placeholders are filled by fmt(). Text is plain (no HTML); the page escapes it. */
 const S = {
-  appTitle: { he: 'מתרגם כתוביות AI', en: 'AI Subtitle Translator' },
+  appTitle: { he: 'TTT Sub', en: 'TTT Sub' },
+  appTagline: { he: 'מתרגם כתוביות AI ל-Stremio', en: 'AI subtitle translator for Stremio' },
   update: { he: 'עדכן', en: 'Update' },
   updateTitle: {
     he: 'הפעל מחדש והתקן את העדכון שהורד',
@@ -356,15 +357,22 @@ const S = {
     he: 'עותק MP4 עם הכתובית בפנים, שנפתח בנגן הרגיל של אייפד, אייפון וטלפונים. נשמרת רק הכתובית הזו (בלי שאר הכתוביות), והאיכות לא נפגעת. בנגן יש ללחוץ על כפתור הכתוביות ולבחור עברית.',
     en: 'An MP4 copy with the subtitle inside that opens in the built-in player of iPad, iPhone and phones. Only this subtitle is kept (not the other tracks) and the picture quality is untouched. In the player, press the subtitles button and pick it.',
   },
+  removeKeyAria: { he: 'הסר מפתח', en: 'Remove key' },
+  removeKeyAsk: { he: 'להסיר את המפתח?', en: 'Remove the key?' },
+  removeKeyYes: { he: 'הסר', en: 'Remove' },
+  removeKeyNo: { he: 'ביטול', en: 'Cancel' },
+  removeKeyFail: { he: 'לא ניתן להסיר את המפתח.', en: 'Could not remove the key.' },
+  libSaving: { he: 'שומר {f}', en: 'Saving {f}' },
+  libLeft: { he: 'נשארו כ-{t}', en: 'About {t} left' },
+  libReady: { he: 'הסרטון מוכן', en: 'The video is ready' },
+  libCancel: { he: 'ביטול', en: 'Cancel' },
+  libCancelled: { he: 'השמירה בוטלה', en: 'Saving cancelled' },
+  libShowFolder: { he: 'הצג בתיקייה', en: 'Show in folder' },
+  libClose: { he: 'סגור', en: 'Close' },
   libSubsBtn: { he: 'כתוביות', en: 'Subtitles' },
   libVideoBtn: { he: 'סרטון', en: 'Video' },
   libMkvDesc: { he: 'למחשב ולטלוויזיה', en: 'For computer and TV' },
   libMp4Desc: { he: 'לפלאפון ולטאבלט', en: 'For phone and tablet' },
-  libMuxBusy: { he: 'שומר…', en: 'Saving…' },
-  libMuxDone: {
-    he: 'נשמר: {name} (וגם קובץ SRT לידו)',
-    en: 'Saved: {name} (and an SRT file next to it)',
-  },
   libMuxNoFfmpeg: {
     he: 'לא נמצא ffmpeg. הוא מגיע עם Stremio.',
     en: 'ffmpeg was not found. It comes with Stremio.',

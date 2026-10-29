@@ -13,6 +13,7 @@ import {
   muxSubtitle,
   outputPathFor,
   parseCodecs,
+  parseDurationSec,
 } from '../src/video/mux';
 
 const dirs: string[] = [];
@@ -253,5 +254,35 @@ describe('MP4 copy (for iPad, iPhone and phones)', () => {
     });
     await expect(failing).rejects.toMatchObject({ code: 'FAILED' });
     expect(existsSync(file.replace('.mkv', '.heb.mp4'))).toBe(false);
+  });
+});
+
+describe('progress reading', () => {
+  it('reads the video length from the ffmpeg header', () => {
+    expect(
+      parseDurationSec('  Duration: 00:23:40.12, start: 0.000000, bitrate: 5000 kb/s'),
+    ).toBeCloseTo(1420.12);
+    expect(parseDurationSec('Duration: 01:00:00.00')).toBe(3600);
+    expect(parseDurationSec('no length here')).toBeUndefined();
+  });
+
+  it('passes the progress callback to the runner', async () => {
+    const file = join(tmpdir(), 'ai-sub-test-progress.mkv');
+    writeFileSync(file, 'x');
+    dirs.push(file);
+    const seen: number[] = [];
+    await muxSubtitle({
+      ffmpeg: 'ffmpeg',
+      video: file,
+      srt: '1\n00:00:01,000 --> 00:00:02,000\nHi\n',
+      language: 'he',
+      onProgress: (p) => seen.push(p.doneSec),
+      run: async (_f, _a, _s, onProgress) => {
+        onProgress?.({ doneSec: 5, totalSec: 10, bytes: 100 });
+      },
+    });
+    expect(seen).toEqual([5]);
+    rmSync(file.replace('.mkv', '.heb.mkv'), { force: true });
+    rmSync(file.replace('.mkv', '.heb.srt'), { force: true });
   });
 });

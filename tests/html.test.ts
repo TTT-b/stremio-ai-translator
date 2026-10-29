@@ -1,3 +1,4 @@
+import { Script } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import { ERROR_META } from '../src/errors';
 import { ERROR_MESSAGES_HE, renderStatusPage, prettyModel, providerLine } from '../src/web/html';
@@ -400,6 +401,33 @@ describe('unsaved changes in the settings drawer', () => {
     expect(html).toContain("muxOption('MKV'");
     expect(html).toContain("muxOption('MP4'");
     expect(html).not.toContain('libMuxMp4)');
+  });
+
+  it('shows the eye button of a password field only once something is typed', () => {
+    expect(html).toContain('top-1/2 hidden h-8 w-8');
+    expect(html).toContain("b.classList.toggle('hidden', !has)");
+  });
+
+  it('gives clickable controls the hand cursor', () => {
+    expect(html).toContain('select,button,summary');
+    expect(html).toContain('cursor:pointer');
+  });
+
+  it('has a page script that is valid JavaScript', () => {
+    const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1] ?? '');
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const code of scripts) expect(() => new Script(code)).not.toThrow();
+  });
+
+  it('shows the three timing kinds in different colors, each with its own icon', () => {
+    for (const hex of ['#4cc38a', '#5aa9f0', '#f08a4b']) expect(html).toContain(hex);
+    expect(html).not.toContain('border-amber-400 text-amber-400');
+  });
+
+  it('follows a video save with a thin bar, a cancel button, and a done row with folder and close', () => {
+    for (const part of ["'/api/mux/'", "'/cancel'", 'libReady', 'revealVideo', 'libCancel']) {
+      expect(html).toContain(part);
+    }
   });
 
   it('asks to save, discard or keep editing before closing with changes', () => {

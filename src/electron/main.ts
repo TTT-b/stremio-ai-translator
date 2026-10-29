@@ -35,7 +35,7 @@ import {
 import { etaValue, TRAY_LABELS, type TrayStatus } from './trayMenu';
 import { pickWhatsNew } from './whatsNew';
 
-const TITLE = 'Stremio AI Subtitle Translator';
+const TITLE = 'TTT Sub';
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 let running: RunningAddon | undefined;
@@ -404,10 +404,15 @@ if (!app.requestSingleInstanceLock()) {
       .slice(0, 120);
     const result = await dialog.showSaveDialog(win, {
       title: uiLang === 'he' ? 'איפה לשמור את הסרטון?' : 'Where to save the video?',
-      defaultPath: join(app.getPath('videos'), `${stem || 'video'}.${ext}`),
+      defaultPath: join(app.getPath('downloads'), `${stem || 'video'}.${ext}`),
       filters: [{ name: 'Video', extensions: [ext] }],
     });
     return result.canceled ? null : (result.filePath ?? null);
+  });
+  ipcMain.on('video:reveal', (_e, path: unknown) => {
+    if (typeof path === 'string' && /\.(mkv|mp4)$/i.test(path) && existsSync(path)) {
+      shell.showItemInFolder(path);
+    }
   });
   ipcMain.on('app:open-stremio', (_e, url: unknown) => {
     if (typeof url === 'string' && isStremioInstallUrl(url)) void shell.openExternal(url);

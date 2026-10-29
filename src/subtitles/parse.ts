@@ -20,6 +20,13 @@ export function detectFormat(input: string): SubtitleFormat {
   return stripBom(input).trimStart().startsWith('WEBVTT') ? 'vtt' : 'srt';
 }
 
+/**
+ * Position and style blocks from the ASS format ("{\an8}", "{\i1}") that some SRT files carry.
+ * They are never speech, and players that do not know them print them as text.
+ */
+const OVERRIDE_BLOCK = /\{\\[^}]*\}/g;
+export const stripOverrideTags = (text: string): string => text.replace(OVERRIDE_BLOCK, '');
+
 /** Parse SRT or WebVTT text. Throws SUBTITLE_PARSE_FAILED when no cue can be read. */
 export function parseSubtitle(input: string, hint?: SubtitleFormat): SubtitleFile {
   const text = normalizeNewlines(input);
@@ -35,10 +42,7 @@ export function parseSubtitle(input: string, hint?: SubtitleFormat): SubtitleFil
     if (!m) continue;
     const startMs = toMs(m[1], m[2] as string, m[3] as string, m[4] as string);
     const endMs = toMs(m[5], m[6] as string, m[7] as string, m[8] as string);
-    const body = lines
-      .slice(timeIdx + 1)
-      .join('\n')
-      .trim();
+    const body = stripOverrideTags(lines.slice(timeIdx + 1).join('\n')).trim();
     const cue: Cue = { index: cues.length + 1, startMs, endMs, text: body };
     const settings = m[9]?.trim();
     if (format === 'vtt' && settings) cue.settings = settings;

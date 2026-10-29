@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('desktop', {
   pickVideo: (name: string): Promise<string | null> => ipcRenderer.invoke('video:pick', name),
   saveVideo: (name: string, format?: 'mkv' | 'mp4'): Promise<string | null> =>
     ipcRenderer.invoke('video:save', name, format),
+  revealVideo: (path: string) => ipcRenderer.send('video:reveal', path),
   version: (): Promise<string> => ipcRenderer.invoke('app:version'),
   updater: {
     state: (): Promise<unknown> => ipcRenderer.invoke('updater:state'),

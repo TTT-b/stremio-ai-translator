@@ -67,6 +67,10 @@ const CSS = (
     : readFileSync(new URL('./tailwind.generated.css', import.meta.url), 'utf8')
 ).replace(/<\/style/gi, '<\\/style');
 
+/** Everything that can be clicked shows the hand cursor (a disabled control shows the arrow). */
+const POINTER_CSS =
+  'select,button,summary,[role=button],[role=option],label[for],input[type=checkbox],input[type=range]{cursor:pointer}button:disabled,input:disabled,select:disabled{cursor:default}';
+
 /** Hebrew text for the API error codes (kept for callers and tests; see i18n.ts for both languages). */
 export const ERROR_MESSAGES_HE = ERROR_MESSAGES.he;
 
@@ -171,12 +175,20 @@ export function renderStatusPage(d: StatusPageData): string {
     escapeHtml(t(lang, key, vars));
   /** A password input with an eye button that shows or hides what was typed. */
   const passwordField = (id: string, placeholder: string): string =>
-    `<div class="relative"><input class="${field} !pe-11" id="${id}" type="password" autocomplete="off" placeholder="${placeholder}"><button type="button" data-reveal="${id}" aria-pressed="false" aria-label="${tt('showPassword')}" title="${tt('showPassword')}" class="absolute end-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-warm-mu transition hover:text-warm-tx focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac/40"><svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path data-slash class="hidden" d="M4 4l16 16"/></svg></button></div>`;
+    `<div class="relative"><input class="${field} !pe-11" id="${id}" type="password" autocomplete="off" placeholder="${placeholder}"><button type="button" data-reveal="${id}" aria-pressed="false" aria-label="${tt('showPassword')}" title="${tt('showPassword')}" class="absolute end-2 top-1/2 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-warm-mu transition hover:text-warm-tx focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac/40"><svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path data-slash class="hidden" d="M4 4l16 16"/></svg></button></div>`;
   /** "Forward" arrow: points left in right-to-left screens. */
   const arrow = lang === 'he' ? '&larr;' : '&rarr;';
   const nudge =
     'transition-transform duration-200 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1';
 
+  const askBtn = (extra: string) =>
+    `rounded-lg border px-2 py-0.5 font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac ${extra}`;
+  const keyRow = (field: string, label: string, ok: boolean, yes = tt('configured')) =>
+    `<li data-key-row class="flex items-center justify-between gap-3"><span>${label}</span>${
+      ok
+        ? `<span data-rm-normal class="inline-flex items-center"><span class="inline-flex items-center gap-1.5 rounded-full border border-warm-ok/40 bg-warm-ok/10 py-0.5 ps-2.5 pe-1.5 text-xs font-semibold text-warm-ok"><span class="h-1.5 w-1.5 rounded-full bg-warm-ok"></span>${yes}<button type="button" data-rm title="${tt('removeKeyAria')}" aria-label="${tt('removeKeyAria')}" class="ms-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] leading-none transition hover:bg-rose-400/20 hover:text-rose-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">&#10005;</button></span></span><span data-rm-ask class="hidden items-center gap-2 text-xs"><span class="text-warm-mu">${tt('removeKeyAsk')}</span><button type="button" data-rm-yes="${field}" class="${askBtn('border-rose-400/50 text-rose-300 hover:bg-rose-400/10')}">${tt('removeKeyYes')}</button><button type="button" data-rm-no class="${askBtn('border-warm-ln text-warm-mu hover:text-warm-tx')}">${tt('removeKeyNo')}</button></span>`
+        : badge(false)
+    }</li>`;
   const badge = (ok: boolean, yes = tt('configured'), no = tt('missing')) =>
     `<span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
       ok
@@ -194,7 +206,7 @@ export function renderStatusPage(d: StatusPageData): string {
 
   /** Custom title bar for the frameless desktop window (drag area + minimize / close-to-tray). */
   const titleBar = `<div dir="ltr" class="drag fixed inset-x-0 top-0 z-50 flex h-9 items-center justify-between border-b border-warm-ln bg-warm-sf">
-<div class="flex items-center gap-2 pl-3 text-xs font-medium text-warm-mu">${logo}<span dir="${dir}">${tt('appTitle')}</span></div>
+<div class="flex items-center gap-2 pl-3 text-xs font-medium text-warm-mu">${logo}<span dir="${dir}" class="font-bold text-warm-tx">${tt('appTitle')}</span><span dir="${dir}">${tt('appTagline')}</span></div>
 <div class="flex items-center"><button type="button" id="update-btn" class="hidden no-drag mr-2 h-6 items-center gap-1.5 rounded-lg bg-warm-ac px-2.5 text-xs font-bold text-warm-on transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac/60" title="${tt('updateTitle')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v8m0 0L4.5 6.5M8 10l3.5-3.5M3 13h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>${tt('update')}</span></button>
 <button type="button" id="win-min" class="${winBtn}" aria-label="${tt('minimize')}"><svg width="14" height="14" viewBox="0 0 10 10" stroke-width="1.1"><path d="M0 5h10" stroke="currentColor"/></svg></button>
 <button type="button" id="win-max" class="${winBtn}" aria-label="${tt('maximize')}"><svg width="14" height="14" viewBox="0 0 10 10" stroke-width="1.1" fill="none"><rect id="win-max-icon" x=".5" y=".5" width="9" height="9" stroke="currentColor"/></svg></button>
@@ -369,7 +381,7 @@ ${toggle('d-test', d.testMode === true, 'testOn')}
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>${tt('appTitle')}</title>
-<style nonce="${escapeHtml(d.nonce)}">${CSS}</style></head>
+<style nonce="${escapeHtml(d.nonce)}">${CSS}${POINTER_CSS}</style></head>
 <body class="min-h-screen bg-warm-bg font-sans text-warm-tx antialiased">
 ${d.desktop ? titleBar : ''}
 <main class="mx-auto flex min-h-screen w-full flex-col items-center px-4 pb-10 sm:px-10 ${d.desktop ? 'pt-[76px]' : 'pt-10'}">
@@ -501,11 +513,11 @@ ${installCompact}
 ${group(
   'secKeys',
   `<ul class="grid gap-2 text-sm">
-<li class="flex items-center justify-between gap-3"><span>${tt('rowAi')}</span>${badge(d.aiConfigured, escapeHtml(d.aiProviderLabel) || tt('configured'))}</li>
-<li class="flex items-center justify-between gap-3"><span>${tt('rowOsKey')}</span>${badge(d.openSubtitlesKeyConfigured)}</li>
-<li class="flex items-center justify-between gap-3"><span>${tt('rowSubdl')}</span>${badge(d.subdlKeyConfigured ?? false)}</li>
-<li class="flex items-center justify-between gap-3"><span>${tt('rowJimaku')}</span>${badge(d.jimakuKeyConfigured ?? false)}</li>
-<li class="flex items-center justify-between gap-3"><span>${tt('rowOsLogin')}${d.openSubtitlesUsername ? ` (<span class="font-mono" dir="ltr">${escapeHtml(d.openSubtitlesUsername)}</span>)` : ''}</span>${badge(d.openSubtitlesLoginConfigured)}</li>
+${keyRow('aiApiKey', tt('rowAi'), d.aiConfigured, escapeHtml(d.aiProviderLabel) || tt('configured'))}
+${keyRow('openSubtitlesApiKey', tt('rowOsKey'), d.openSubtitlesKeyConfigured)}
+${keyRow('subdlApiKey', tt('rowSubdl'), d.subdlKeyConfigured ?? false)}
+${keyRow('jimakuApiKey', tt('rowJimaku'), d.jimakuKeyConfigured ?? false)}
+${keyRow('openSubtitlesLogin', `${tt('rowOsLogin')}${d.openSubtitlesUsername ? ` (<span class="font-mono" dir="ltr">${escapeHtml(d.openSubtitlesUsername)}</span>)` : ''}`, d.openSubtitlesLoginConfigured)}
 </ul>
 <div><label class="${labelCls}" for="d-ai">${tt('aiKeyLabel')}</label><input class="${field}" id="d-ai" type="password" autocomplete="off" placeholder="${keyPh(d.aiConfigured)}"></div>
 <div><label class="${labelCls}" for="d-os">${tt('osKeyLabel')}</label><input class="${field}" id="d-os" type="password" autocomplete="off" placeholder="${keyPh(d.openSubtitlesKeyConfigured)}"></div>
@@ -767,6 +779,29 @@ document.querySelectorAll('#groups > details').forEach((g) => g.addEventListener
 }));
 // Changes in the drawer are only kept with Save; closing with changes asks first.
 const devGroupEl = $('dev-sound').closest('details');
+// A set key can be removed: the small x asks first, then the key is cleared and the page reloads.
+const swap = (row, asking) => {
+  for (const [sel, on] of [['[data-rm-normal]', !asking], ['[data-rm-ask]', asking]]) {
+    const part = row.querySelector(sel);
+    part.classList.toggle('hidden', !on);
+    part.classList.toggle('inline-flex', on);
+  }
+};
+document.addEventListener('click', async (ev) => {
+  const t = ev.target.closest ? ev.target.closest('[data-rm], [data-rm-no], [data-rm-yes]') : null;
+  if (!t) return;
+  const row = t.closest('[data-key-row]');
+  if (t.hasAttribute('data-rm')) swap(row, true);
+  else if (t.hasAttribute('data-rm-no')) swap(row, false);
+  else {
+    t.disabled = true;
+    try {
+      const r = await fetch('/api/keys/remove', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({field: t.getAttribute('data-rm-yes')})});
+      if (!r.ok) throw new Error('failed');
+      location.reload();
+    } catch { t.disabled = false; toast(false, T.removeKeyFail); }
+  }
+});
 const drawerEls = () => [...drawer.querySelectorAll('input, select')].filter((el) => !devGroupEl.contains(el) && el.id !== 'd-src');
 const elValue = (el) => el.type === 'checkbox' ? el.checked : el.value;
 let drawerSnap = new Map();
@@ -870,6 +905,17 @@ document.querySelectorAll('[data-test]').forEach(b => b.addEventListener('click'
   catch { show(id, false, FAILED); }
 }));
 // Eye button: shows or hides what was typed in a password field (nothing saved is ever sent here).
+document.querySelectorAll('[data-reveal]').forEach(b => {
+  const input = $(b.dataset.reveal);
+  const sync = () => {
+    const has = input.value !== '';
+    b.classList.toggle('hidden', !has);
+    b.classList.toggle('flex', has);
+    if (!has && input.type === 'text') b.click();
+  };
+  input.addEventListener('input', sync);
+  sync();
+});
 document.querySelectorAll('[data-reveal]').forEach(b => b.addEventListener('click', () => {
   const input = $(b.dataset.reveal);
   const show = input.type === 'password';
@@ -1156,7 +1202,9 @@ refreshStatus();
 setInterval(refreshStatus, 1500);
 
 // Subtitle library: everything translated so far, grouped by title, with delete.
-const sizeText = (b) => b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
+const sizeText = (b) => b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : b < 1073741824 ? (b / 1048576).toFixed(1) + ' MB' : (b / 1073741824).toFixed(2) + ' GB';
+const muxJobs = new Map();
+const muxPaint = new Map();
 const dateText = (ms) => new Date(ms).toLocaleDateString(UI === 'he' ? 'he-IL' : 'en-GB');
 let libItems = [];
 const picked = new Set();
@@ -1179,8 +1227,17 @@ const episodeRow = (e) => {
   const meta = el('span', 'flex shrink-0 items-center gap-3 text-xs text-warm-mu');
   const ltr = (text) => { const s = el('span', '', text); s.dir = 'ltr'; return s; };
   if (e.timing) {
-    const tone = e.timing === 'exact' ? 'border-warm-ok text-warm-ok' : e.timing === 'speech' ? 'border-warm-ac text-warm-ac' : 'border-amber-400 text-amber-400';
-    const badge = el('span', 'rounded-full border px-2 py-0.5 text-[11px] font-semibold ' + tone, e.timing === 'exact' ? T.libExact : e.timing === 'speech' ? T.libSpeech : T.libEstimated);
+    const TIMING = {
+      exact: {color: '76,195,138', hex: '#4cc38a', paths: '<path d="M5 12l5 5L20 7"/>', text: T.libExact},
+      speech: {color: '90,169,240', hex: '#5aa9f0', paths: '<path d="M5 10v4M9 7v10M13 4v16M17 8v8M21 11v2"/>', text: T.libSpeech},
+      estimated: {color: '240,138,75', hex: '#f08a4b', paths: '<path d="M3 12c3-6 6 6 9 0s6 6 9 0"/>', text: T.libEstimated},
+    };
+    const kind = TIMING[e.timing];
+    const badge = el('span', 'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold');
+    badge.style.cssText = 'color:' + kind.hex + ';border-color:' + kind.hex + ';background:rgba(' + kind.color + ',.1)';
+    const tIcon = el('span', 'inline-flex');
+    tIcon.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + kind.paths + '</svg>';
+    badge.append(tIcon, el('span', '', kind.text));
     badge.title = e.timing === 'exact' ? T.libExactTip : e.timing === 'speech' ? T.libSpeechTip : T.libEstimatedTip;
     meta.append(badge);
   }
@@ -1225,18 +1282,84 @@ const episodeRow = (e) => {
     menu.hidden = true;
     menu.style.cssText = 'position:absolute;inset-inline-end:0;top:calc(100% + 6px);z-index:20;min-width:210px;box-shadow:0 8px 24px rgba(0,0,0,.35)';
     const closeMenu = () => { menu.hidden = true; };
-    mux.addEventListener('click', (ev) => { ev.stopPropagation(); menu.hidden = !menu.hidden; });
+    const sizeSpans = [];
+    let sizesAsked = false;
+    mux.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      menu.hidden = !menu.hidden;
+      if (menu.hidden || sizesAsked) return;
+      sizesAsked = true;
+      fetch('/api/library/' + e.id + '/stream').then((r) => r.json()).then((s) => {
+        if (s.bytes) for (const sp of sizeSpans) sp.textContent = '~' + sizeText(s.bytes);
+      }).catch(() => {});
+    });
     document.addEventListener('click', closeMenu);
     const muxOption = (name, desc, tip, format) => {
-      const item = el('button', 'flex w-full flex-col items-start rounded-lg px-2.5 py-2 text-start text-warm-tx transition hover:bg-warm-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac');
+      const item = el('button', 'flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-start text-warm-tx transition hover:bg-warm-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac');
       item.type = 'button';
       item.title = tip;
-      item.append(el('span', 'text-sm font-bold', name), el('span', 'text-xs text-warm-mu', desc));
+      const label = el('span', 'flex flex-col');
+      label.append(el('span', 'text-sm font-bold', name), el('span', 'text-xs text-warm-mu', desc));
+      const size = el('span', 'text-xs font-semibold text-warm-ac');
+      size.dir = 'ltr';
+      sizeSpans.push(size);
+      item.append(label, size);
       item.addEventListener('click', () => { closeMenu(); runMux(format); });
       return item;
     };
     menu.append(muxOption('MKV', T.libMkvDesc, T.libMuxTip, 'mkv'), muxOption('MP4', T.libMp4Desc, T.libMuxMp4Tip, 'mp4'));
     wrap.append(mux, menu);
+    const panel = el('div', 'hidden w-full items-center gap-3 text-xs');
+    panel.style.flexBasis = '100%';
+    const edge = el('div');
+    edge.style.cssText = 'position:absolute;inset-inline:0;bottom:0;height:3px;background:#352e25;border-radius:0 0 12px 12px;display:none';
+    const edgeFill = el('i');
+    edgeFill.style.cssText = 'display:block;height:100%;background:#e8b25c;width:0%';
+    edge.append(edgeFill);
+    row.style.position = 'relative';
+    row.append(panel, edge);
+    const etaText = (s) => s < 60 ? s + (UI === 'he' ? ' שנ׳' : ' s') : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + (UI === 'he' ? ' דק׳' : ' min');
+    const smallBtn = (cls, label, onClick) => { const b = el('button', btnCls + ' ' + cls, label); b.type = 'button'; b.addEventListener('click', onClick); return b; };
+    const paint = () => {
+      const st = muxJobs.get(e.id);
+      panel.replaceChildren();
+      if (!st) { panel.classList.add('hidden'); panel.classList.remove('flex'); edge.style.display = 'none'; mux.disabled = false; return; }
+      panel.classList.remove('hidden'); panel.classList.add('flex');
+      if (st.phase === 'run') {
+        mux.disabled = true;
+        edge.style.display = 'block';
+        edgeFill.style.width = (st.percent ?? 0) + '%';
+        const text = el('span', 'min-w-0 flex-1 text-warm-mu');
+        text.append(el('b', 'font-semibold text-warm-tx', f(T.libSaving, {f: st.format.toUpperCase()})));
+        if (st.percent !== null) text.append(' · ' + st.percent + '%');
+        if (st.etaSec) text.append(' · ' + f(T.libLeft, {t: etaText(st.etaSec)}));
+        if (st.bytes) text.append(' · ', ltr(sizeText(st.bytes) + (st.totalBytes ? ' / ' + sizeText(st.totalBytes) : '')));
+        const cancel = smallBtn('text-rose-300 border-rose-400/50', T.libCancel, () => { cancel.disabled = true; fetch('/api/mux/' + st.task + '/cancel', {method: 'POST'}).catch(() => {}); });
+        panel.append(text, cancel);
+        return;
+      }
+      mux.disabled = false;
+      edge.style.display = 'none';
+      row.classList.add('bg-warm-ok/10');
+      const ready = el('span', 'inline-flex items-center gap-1.5 font-semibold text-warm-ok');
+      ready.append(icon('<path d="M5 12l5 5L20 7"/>'), el('span', '', T.libReady));
+      const chip = el('span', 'rounded-full border border-warm-ln px-2 py-0.5 text-[11px] font-semibold text-warm-tx');
+      chip.dir = 'ltr'; chip.textContent = sizeText(st.bytes || 0);
+      const spacer = el('span', 'flex-1');
+      panel.append(ready, st.bytes ? chip : '', spacer);
+      if (window.desktop.revealVideo) {
+        const show = smallBtn('', '', () => window.desktop.revealVideo(st.path));
+        show.title = T.libShowFolder; show.setAttribute('aria-label', T.libShowFolder);
+        show.append(icon('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'));
+        panel.append(show);
+      }
+      const close = smallBtn('', '', () => { muxJobs.delete(e.id); row.classList.remove('bg-warm-ok/10'); paint(); });
+      close.title = T.libClose; close.setAttribute('aria-label', T.libClose);
+      close.append(icon('<path d="M6 6l12 12M18 6L6 18"/>'));
+      panel.append(close);
+    };
+    muxPaint.set(e.id, paint);
+    paint();
     const runMux = (format) => {
       (async () => {
         let payload = null;
@@ -1251,14 +1374,28 @@ const episodeRow = (e) => {
         } catch { payload = null; }
         const video = payload ? 'stremio' : await window.desktop.pickVideo(name);
         if (!video) return;
-        mux.disabled = true; muxLabel.textContent = T.libMuxBusy;
+        const task = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+        const st = {phase: 'run', format, task, percent: null, etaSec: null, bytes: 0, totalBytes: null};
+        muxJobs.set(e.id, st);
+        (muxPaint.get(e.id) || paint)();
+        const timer = setInterval(async () => {
+          try {
+            const p = await (await fetch('/api/mux/' + task)).json();
+            if (p.ok) { st.percent = p.percent; st.etaSec = p.etaSec; st.bytes = p.bytes; st.totalBytes = p.totalBytes; (muxPaint.get(e.id) || paint)(); }
+          } catch { /* the next tick tries again */ }
+        }, 1000);
         try {
-          const r = await fetch('/api/library/' + e.id + '/mux', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload || {video, format})});
+          const r = await fetch('/api/library/' + e.id + '/mux', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({...(payload || {video, format}), task})});
           const j = await r.json();
-          if (j.ok) toast(true, f(T.libMuxDone, {name: j.name}));
-          else toast(false, j.code === 'NO_FFMPEG' ? T.libMuxNoFfmpeg : (j.code === 'NOT_A_VIDEO' || j.code === 'BAD_PATH') ? T.libMuxBadFile : T.libMuxFail);
-        } catch { toast(false, T.libMuxFail); }
-        mux.disabled = false; muxLabel.textContent = T.libVideoBtn;
+          if (j.ok) muxJobs.set(e.id, {phase: 'done', path: j.path, bytes: j.bytes, name: j.name});
+          else {
+            muxJobs.delete(e.id);
+            if (j.code === 'CANCELLED') toast(true, T.libCancelled);
+            else toast(false, j.code === 'NO_FFMPEG' ? T.libMuxNoFfmpeg : (j.code === 'NOT_A_VIDEO' || j.code === 'BAD_PATH') ? T.libMuxBadFile : T.libMuxFail);
+          }
+        } catch { muxJobs.delete(e.id); toast(false, T.libMuxFail); }
+        clearInterval(timer);
+        (muxPaint.get(e.id) || paint)();
       })();
     };
     actions.append(wrap);

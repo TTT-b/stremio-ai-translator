@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../src/errors';
 import { chunkCues } from '../src/subtitles/chunk';
-import { parseSubtitle } from '../src/subtitles/parse';
+import { parseSubtitle, stripOverrideTags } from '../src/subtitles/parse';
 import { applyRtlFix } from '../src/subtitles/rtl';
 import { serializeSubtitle } from '../src/subtitles/serialize';
 import {
@@ -232,5 +232,18 @@ describe('rtl fix', () => {
 
   it('leaves empty lines alone', () => {
     expect(applyRtlFix('א\n\nב')).toBe(`${RLM}א${RLM}\n\n${RLM}ב${RLM}`);
+  });
+});
+
+describe('style blocks inside subtitle text', () => {
+  it('removes position and style blocks such as an8, keeps the words, and leaves other braces alone', () => {
+    const srt =
+      '1\n00:00:01,000 --> 00:00:02,000\n{\\an8}The police said {\\i1}no{\\i0}.\nA {set} of keys\n';
+    const cue = parseSubtitle(srt).cues[0];
+    expect(cue?.text).toBe('The police said no.\nA {set} of keys');
+  });
+  it('strips them from text that is already translated', () => {
+    expect(stripOverrideTags('{\\an8}המשטרה קבעה')).toBe('המשטרה קבעה');
+    expect(stripOverrideTags('בלי תגים')).toBe('בלי תגים');
   });
 });

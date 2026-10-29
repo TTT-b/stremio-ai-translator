@@ -15,6 +15,10 @@ export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
   '1.9.1': {
     en: [
       {
+        title: 'New name: TTT Sub',
+        text: 'The app and the add-on in Stremio are now called TTT Sub. In Stremio the add-on shows as TTT Sub · כתוביות AI. If the old name still shows there, remove the add-on and install it again.',
+      },
+      {
         title: 'Cleaner subtitles',
         text: 'After translating, the app quietly checks each line. A line that came back with a stray English word is translated once more on its own. Nothing to do on your side.',
       },
@@ -22,8 +26,16 @@ export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
         title: 'Tidier library',
         text: 'Each subtitle in My subtitles now has two buttons: Subtitles (SRT file) and Video, with a small menu for MKV or MP4.',
       },
+      {
+        title: 'Saving a video, and clearer labels',
+        text: 'Saving a video shows a progress bar with the time left, a cancel button, and a done row with Show in folder. Timing labels now have different colors and icons, and a set key can be removed with a small x.',
+      },
     ],
     he: [
+      {
+        title: 'שם חדש: TTT Sub',
+        text: 'האפליקציה והתוסף ב-Stremio נקראים עכשיו TTT Sub. ב-Stremio התוסף מופיע כ-TTT Sub · כתוביות AI. אם עדיין מופיע השם הישן, הסר את התוסף והתקן אותו מחדש.',
+      },
       {
         title: 'כתוביות נקיות יותר',
         text: 'אחרי התרגום התוכנה בודקת בשקט כל שורה. שורה שחזרה עם מילה באנגלית שלא שייכת אליה מתורגמת שוב פעם אחת בנפרד. אין מה לעשות מצדך.',
@@ -31,6 +43,10 @@ export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
       {
         title: 'ספרייה מסודרת יותר',
         text: 'לכל כתובית ב"הכתוביות שלי" יש עכשיו שני כפתורים: כתוביות (קובץ SRT) וסרטון, עם תפריט קטן ל-MKV או ל-MP4.',
+      },
+      {
+        title: 'שמירת סרטון ותגיות ברורות',
+        text: 'שמירת סרטון מציגה פס התקדמות עם הזמן שנשאר, כפתור ביטול, ובסיום שורה עם הצג בתיקייה. לתגיות התזמון יש צבעים ואייקונים שונים, ואפשר להסיר מפתח שהוגדר עם איקס קטן.',
       },
     ],
   },

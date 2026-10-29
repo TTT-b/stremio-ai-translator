@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { rmSync } from 'node:fs';
+import { rmSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { FileCache } from '../cache/fileCache';
 import { Library, srtFileName } from '../jobs/library';
@@ -18,7 +18,8 @@ import {
 import { fitSubtitleToEmbeddedCues } from '../sync/cueFit';
 import { fitSubtitleToVideo } from '../sync/videoFit';
 import { openStremio } from '../stremio/launcher';
-import { MuxError, muxSubtitle, type RunFfmpeg } from '../video/mux';
+import { MuxError, muxSubtitle, type MuxProgress, type RunFfmpeg } from '../video/mux';
+import { estimateTranslateSec } from '../jobs/eta';
 import { pickSample, readableLines } from './sample';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { findLanguage, LANGUAGES } from '../config/languages';
@@ -44,7 +45,7 @@ import { selectSubtitle } from '../sources/select';
 import { makeTitleResolver } from '../sources/titles';
 import { parseVideoId, type SourceSubtitleProvider } from '../sources/types';
 import { makeTestProvider, makeTestSource, randomTestVideoId } from '../testmode';
-import { parseSubtitle } from '../subtitles/parse';
+import { parseSubtitle, stripOverrideTags } from '../subtitles/parse';
 import { serializeSubtitle } from '../subtitles/serialize';
 import { GeminiProvider } from '../translation/gemini';
 import { AnthropicProvider, OpenAiProvider } from '../translation/httpProviders';
@@ -553,7 +554,7 @@ export function createApp(deps: ServerDeps): express.Express {
       `attachment; filename*=UTF-8''${encodeURIComponent(srtFileName(entry))}`,
     );
     res.setHeader('Cache-Control', 'no-store');
-    res.send(content);
+    res.send(stripOverrideTags(content));
   });
 
   // Is the video of this subtitle on Stremio's server right now (so it can be saved without picking a file)?
@@ -571,7 +572,51 @@ export function createApp(deps: ServerDeps): express.Express {
   };
   app.get('/api/library/:id/stream', async (req, res) => {
     const { entry } = savedSubtitle(req.params.id ?? '');
-    res.json({ ok: !!entry && !!(await streamFor(entry.filename)) });
+    const stream = entry ? await streamFor(entry.filename) : undefined;
+    const bytes = stream?.files[stream.fileIdx]?.length ?? 0;
+    res.json({ ok: !!stream, ...(bytes > 0 ? { bytes } : {}) });
+  });
+
+  // Saving a video can take minutes: the page follows it by a task id it makes up and can cancel it.
+  const muxTasks = new Map<
+    string,
+    {
+      abort: AbortController;
+      startedAt: number;
+      progress: MuxProgress | undefined;
+      sourceBytes: number;
+    }
+  >();
+  app.get('/api/mux/:task', (req, res) => {
+    const task = muxTasks.get(req.params.task ?? '');
+    if (!task) {
+      res.json({ ok: false });
+      return;
+    }
+    const p = task.progress;
+    // The video's length is not always known (a stream): fall back to bytes written over the source size.
+    const pct = p?.totalSec
+      ? Math.min(1, p.doneSec / p.totalSec)
+      : p && task.sourceBytes > 0
+        ? Math.min(0.99, p.bytes / task.sourceBytes)
+        : undefined;
+    const elapsed = Date.now() - task.startedAt;
+    res.json({
+      ok: true,
+      percent: pct === undefined ? null : Math.round(pct * 100),
+      etaSec: estimateTranslateSec(elapsed, Math.round((pct ?? 0) * 1000), 1000),
+      bytes: p?.bytes ?? 0,
+      totalBytes:
+        task.sourceBytes > 0
+          ? task.sourceBytes
+          : pct && pct > 0.05 && p
+            ? Math.round(p.bytes / pct)
+            : null,
+    });
+  });
+  app.post('/api/mux/:task/cancel', (req, res) => {
+    muxTasks.get(req.params.task ?? '')?.abort.abort();
+    res.json({ ok: true });
   });
 
   // Save a copy of a video file that has the subtitle inside it as an extra track (picture and sound are copied).
@@ -587,6 +632,10 @@ export function createApp(deps: ServerDeps): express.Express {
         stremio: z.boolean().optional(),
         output: z.string().max(1000).optional(),
         format: z.enum(['mkv', 'mp4']).optional(),
+        task: z
+          .string()
+          .regex(/^[0-9a-f]{16,32}$/)
+          .optional(),
       })
       .strict()
       .safeParse(req.body);
@@ -594,7 +643,24 @@ export function createApp(deps: ServerDeps): express.Express {
       res.status(400).json({ ok: false, code: 'BAD_PATH', message: 'No video file chosen.' });
       return;
     }
+    const taskId = body.data.task;
+    const task = {
+      abort: new AbortController(),
+      startedAt: Date.now(),
+      progress: undefined as MuxProgress | undefined,
+      sourceBytes: 0,
+    };
+    if (taskId) muxTasks.set(taskId, task);
     const stream = body.data.stremio ? await streamFor(entry.filename) : undefined;
+    task.sourceBytes = stream
+      ? (stream.files[stream.fileIdx]?.length ?? 0)
+      : (() => {
+          try {
+            return body.data.video ? statSync(body.data.video).size : 0;
+          } catch {
+            return 0;
+          }
+        })();
     if (body.data.stremio && !stream) {
       res.status(404).json({ ok: false, code: 'NO_STREAM' });
       return;
@@ -607,14 +673,31 @@ export function createApp(deps: ServerDeps): express.Express {
         ...(body.data.format ? { format: body.data.format } : {}),
         srt: content,
         language: entry.language,
+        signal: task.abort.signal,
+        onProgress: (p) => {
+          task.progress = p;
+        },
         ...(deps.muxRun ? { run: deps.muxRun } : {}),
       });
       logger.info({ stage: 'API', mux: 'done' }, 'video with subtitle saved');
-      res.json({ ok: true, name: basename(output), folder: dirname(output) });
+      let bytes = 0;
+      try {
+        bytes = statSync(output).size;
+      } catch {
+        /* the size is only shown, not needed */
+      }
+      res.json({ ok: true, name: basename(output), folder: dirname(output), path: output, bytes });
     } catch (err) {
+      if (task.abort.signal.aborted) {
+        logger.info({ stage: 'API', mux: 'cancelled' }, 'saving the video was cancelled');
+        res.json({ ok: false, code: 'CANCELLED' });
+        return;
+      }
       const code = err instanceof MuxError ? err.code : 'FAILED';
       logger.warn({ stage: 'API', mux: 'failed', code }, 'could not save the video');
       res.status(code === 'FAILED' ? 500 : 400).json({ ok: false, code });
+    } finally {
+      if (taskId) muxTasks.delete(taskId);
     }
   });
 
@@ -829,6 +912,44 @@ export function createApp(deps: ServerDeps): express.Express {
     }
   });
 
+  // Remove a saved key or login (the page asks "remove?" first).
+  app.post('/api/keys/remove', (req, res) => {
+    const parsed = z
+      .object({
+        field: z.enum([
+          'aiApiKey',
+          'openSubtitlesApiKey',
+          'subdlApiKey',
+          'jimakuApiKey',
+          'openSubtitlesLogin',
+        ]),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: 'Invalid input.' });
+      return;
+    }
+    const names =
+      parsed.data.field === 'openSubtitlesLogin'
+        ? [KEY_ENV_NAMES.openSubtitlesUsername, KEY_ENV_NAMES.openSubtitlesPassword]
+        : [KEY_ENV_NAMES[parsed.data.field]];
+    const cleared = Object.fromEntries(names.map((n) => [n, '']));
+    try {
+      updateEnvFile(envPath, cleared);
+      const nextEnv = { ...process.env, ...cleared };
+      envConfig = loadConfig(nextEnv);
+      Object.assign(process.env, cleared);
+      deps.onConfigChange?.(envConfig);
+      logger.info({ stage: 'CONFIG', removed: names }, 'key removed from .env');
+      res.json({ ok: true });
+    } catch (err) {
+      const e = isAppError(err) ? err : new AppError('CONFIGURATION_INVALID');
+      logger.warn({ stage: 'CONFIG', errorCode: e.code }, 'removing a key failed');
+      res.status(500).json({ ok: false, message: 'Could not remove the key.' });
+    }
+  });
+
   // Dev route: show what OpenSubtitles has for a title (search only - uses no download quota).
   app.get('/dev/source-search', async (req, res) => {
     const log = (res.locals.log as Logger).child({ route: 'dev-source-search' });
@@ -951,7 +1072,7 @@ export function createApp(deps: ServerDeps): express.Express {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cache-Control', 'no-store');
     const send = (body: string, state: string, jobId?: string) => {
-      res.type('application/x-subrip; charset=utf-8').send(body);
+      res.type('application/x-subrip; charset=utf-8').send(stripOverrideTags(body));
       log.info(
         {
           state,

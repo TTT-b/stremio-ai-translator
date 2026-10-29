@@ -213,6 +213,25 @@ describe('local web server', () => {
     expect(await (await get('/')).text()).not.toContain(key);
   });
 
+  it('removes a saved key after the small x, shows a remove button for a set key, and refuses other fields', async () => {
+    const key = 'subdl-key-REMOVE-123456';
+    await post('/api/keys', { subdlApiKey: key });
+    const page = await (await get('/')).text();
+    expect(page).toContain('data-rm-yes="subdlApiKey"');
+    expect(page).toContain('data-rm-yes="aiApiKey"');
+    expect((await post('/api/keys/remove', { field: 'subdlApiKey' })).status).toBe(200);
+    expect(readFileSync(envPath, 'utf8')).not.toContain(key);
+    expect(await (await get('/')).text()).not.toContain('data-rm-yes="subdlApiKey"');
+    expect((await post('/api/keys/remove', { field: 'evil' })).status).toBe(400);
+    expect((await post('/api/keys/remove', {})).status).toBe(400);
+  });
+
+  it('answers a saving-progress question for a task that does not exist, and accepts a cancel', async () => {
+    const res = await get('/api/mux/' + 'a'.repeat(24));
+    expect(((await res.json()) as { ok: boolean }).ok).toBe(false);
+    expect((await post('/api/mux/' + 'a'.repeat(24) + '/cancel', {})).status).toBe(200);
+  });
+
   it('saves the developer settings, and the page shows them (the order too)', async () => {
     const res = await post('/api/settings', {
       soundCheck: 'wait',
