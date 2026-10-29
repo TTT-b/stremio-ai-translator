@@ -329,6 +329,7 @@ export function createApp(deps: ServerDeps): express.Express {
     res.type('html').send(
       renderStatusPage({
         desktop: (req.get('user-agent') ?? '').includes('Electron/'),
+        devSettings: process.env.SHOW_DEV_SETTINGS === '1',
         nonce,
         aiConfigured: c.aiApiKey !== '',
         aiProviderLabel: PROVIDERS.find((p) => p.id === c.aiProvider)?.label ?? '',
@@ -439,6 +440,18 @@ export function createApp(deps: ServerDeps): express.Express {
   app.get('/api/status', (_req, res) => {
     void jobs.refreshQuota();
     res.json({ ok: true, ...jobs.stats() });
+  });
+
+  // Pause or continue translating (the tray menu uses this too). Body: { paused: boolean }.
+  app.post('/api/pause', (req, res) => {
+    const paused = (req.body as { paused?: unknown } | undefined)?.paused;
+    if (typeof paused !== 'boolean') {
+      res.status(400).json({ ok: false, message: 'Invalid request.' });
+      return;
+    }
+    jobs.setPaused(paused);
+    logger.info({ stage: 'API', paused }, 'pause');
+    res.json({ ok: true, paused });
   });
 
   // Ask mode: the user says yes or no to a translation waiting in the queue (or stops a running one).

@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld('desktop', {
       ipcRenderer.on('updater:state', (_e, state: unknown) => cb(state)),
   },
   setLanguage: (lang: string) => ipcRenderer.send('app:set-language', lang),
+  startup: {
+    get: (): Promise<unknown> => ipcRenderer.invoke('startup:get'),
+    set: (openAtLogin: boolean, minimized: boolean): Promise<unknown> =>
+      ipcRenderer.invoke('startup:set', { openAtLogin, minimized }),
+  },
   whatsNew: {
     get: (lang: string): Promise<unknown> => ipcRenderer.invoke('whatsnew:get', lang),
     dismiss: () => ipcRenderer.send('whatsnew:dismiss'),

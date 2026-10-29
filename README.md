@@ -79,7 +79,9 @@ Then open http://127.0.0.1:7000/ . Success looks like
    a "Saved" message; the keys are never shown again.
 3. The window has its own title bar. The **X** asks "Close the Translator?": **Minimize to System
    Tray** hides the app (bottom-right, near the clock) and translations keep running; **Quit
-   Program** stops the add-on. Right-click the tray icon for **Open UI** or **Quit**.
+   Program** stops the add-on. Right-click the tray icon for **Open the translator**, **Pause
+   translation** / **Resume translation**, the **time until fully translated** (sound sync
+   included), **Start with Windows**, and **Quit**.
 4. Continue with **Install in Stremio** below, using http://127.0.0.1:7000/manifest.json.
 
 Keys, `settings.json`, `data/` and `logs/` live in your user profile folder
@@ -276,6 +278,9 @@ When several subtitles are found, the one whose release name is closest to the p
 
 ### Developer settings (Settings > About)
 
+Hidden for everyone by default. The author shows them by starting the app with the environment
+variable `SHOW_DEV_SETTINGS=1` (for example in `.env`).
+
 Everything here is saved at once and is meant for trying things:
 
 - **Sound check:** _translate at once, check in the background_ (recommended and the default: the
@@ -345,6 +350,22 @@ OpenSubtitles and no AI are used (no quota is spent): a random subtitle is picke
 prefix `HE:`. Besides the built-in samples, it picks from any `.srt` files you put in the `test-subtitles`
 folder inside the app's data folder (`data\test-subtitles` when run from the project). Test subtitles are
 not added to the library. While test mode is on, real translations are paused, so turn it off when done.
+
+### Start with Windows, and pausing
+
+Desktop app only. **Settings &rarr; General** has two switches: **Start the app with Windows** and
+**Start minimized** (only the tray icon, no window). The second is greyed out until the first is on.
+The last step of the first-run wizard asks the same two questions, and the tray menu has the first
+switch too. The choice is kept in the Windows login item plus `startup.json` in the app data folder.
+It does nothing when the app is run from source (`npm run desktop`); only the installed app can
+start with Windows.
+
+The tray menu's **Pause translation** stops sending new parts to the AI until you press **Resume
+translation**. Parts already sent finish; the sound check is not paused. The main screen shows the
+time left for the translation and a total that includes the sound check, as estimates from the
+speed so far.
+
+The SubDL and Jimaku checks (wizard and main screen) appear only once a key for them is saved.
 
 ### The Continue button
 

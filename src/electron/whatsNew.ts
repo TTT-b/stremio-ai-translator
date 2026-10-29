@@ -12,6 +12,36 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '1.9.0': {
+    en: [
+      {
+        title: 'Start with Windows',
+        text: 'Settings, General (and the last step of the setup) can start the app with Windows, optionally minimized to the icon near the clock. The tray menu has the same switch.',
+      },
+      {
+        title: 'Pause translation, and time left',
+        text: 'The tray menu can pause and resume translating and shows the time until the subtitle is complete, sound check included. The main screen shows the time left too.',
+      },
+      {
+        title: 'Calmer progress bar, cleaner checks',
+        text: 'The progress bar no longer wobbles. SubDL and Jimaku checks appear only when you saved a key for them. Subtitles closest to the playing release are preferred, and signs/songs tracks are skipped.',
+      },
+    ],
+    he: [
+      {
+        title: 'הפעלה עם Windows',
+        text: 'בהגדרות (כללי) ובשלב האחרון של האשף אפשר להפעיל את התוכנה עם Windows, אם רוצים גם ממוזערת לסמל ליד השעון. אותו מתג יש גם בתפריט הסמל.',
+      },
+      {
+        title: 'השהיית תרגום וזמן משוער',
+        text: 'בתפריט הסמל אפשר להשהות ולהמשיך תרגום, ורואים את הזמן עד כתובית מלאה, כולל סנכרון הקול. גם במסך הראשי מופיע הזמן שנשאר.',
+      },
+      {
+        title: 'פס התקדמות רגוע ובדיקות נקיות',
+        text: 'הפס כבר לא רועד. בדיקות SubDL ו-Jimaku מופיעות רק אם שמרת להן מפתח. נבחרת הכתובית הקרובה ביותר לגרסה שמתנגנת, ומסלולי שלטים ושירים מדולגים.',
+      },
+    ],
+  },
   '1.8.0': {
     en: [
       {

@@ -54,6 +54,8 @@ export interface StatusPageData {
   rtlFix: boolean;
   /** True inside the Electron desktop window: renders the custom title bar. */
   desktop?: boolean;
+  /** Show Settings > About > Developer settings (off for everyone but the author: SHOW_DEV_SETTINGS=1). */
+  devSettings?: boolean;
   /** Language of the screens. Hebrew (right-to-left) unless set to English. */
   uiLang?: UiLang;
 }
@@ -225,7 +227,7 @@ export function renderStatusPage(d: StatusPageData): string {
   };
 
   /** Wizard steps: short label (progress bar), title and one-line explanation. */
-  const STEPS = [1, 2, 3, 4, 5].map((n) => [
+  const STEPS = Array.from({ length: d.desktop ? 6 : 5 }, (_, i) => i + 1).map((n) => [
     t(lang, `step${n}Label` as StrKey),
     t(lang, `step${n}Title` as StrKey),
     t(lang, `step${n}Sub` as StrKey),
@@ -245,6 +247,7 @@ export function renderStatusPage(d: StatusPageData): string {
   const GROUP_ICON: Partial<Record<StrKey, string>> = {
     secKeys: '&#128273;',
     secTranslate: '&#127760;',
+    secGeneral: '&#9881;',
     secMaintenance: '&#129529;',
     secDev: '&#128295;',
     menuAbout: '&#8505;',
@@ -284,16 +287,16 @@ export function renderStatusPage(d: StatusPageData): string {
 <div class="flex gap-2"><input id="manifest-d" readonly dir="ltr" class="${field} min-w-0 flex-1 font-mono text-[13px]" value="${escapeHtml(d.manifestUrl)}" aria-label="${tt('manifestAria')}"><button type="button" id="copy-d" class="${btn}">${tt('copy')}</button></div></section>`
     : '';
 
-  const testRow = (label: string, button: string, resultId: string, extra = '') =>
-    `<div class="${extra}flex items-center justify-between gap-3 rounded-2xl border border-warm-ln px-3.5 py-2.5"><div class="min-w-0"><div class="text-sm font-semibold text-warm-tx">${label}</div><span class="${result} mt-0.5 !text-xs text-warm-mu" id="${resultId}"></span></div>${button}</div>`;
+  const testRow = (label: string, button: string, resultId: string, extra = '', rowName = '') =>
+    `<div${rowName ? ` data-check-row="${rowName}"` : ''} class="${extra}flex items-center justify-between gap-3 rounded-2xl border border-warm-ln px-3.5 py-2.5"><div class="min-w-0"><div class="text-sm font-semibold text-warm-tx">${label}</div><span class="${result} mt-0.5 !text-xs text-warm-mu" id="${resultId}"></span></div>${button}</div>`;
   const testBtn = (attr: string) =>
     `<button type="button" class="${btn} shrink-0 !py-2 !text-[13px]" ${attr}>${tt('testBtn')}</button>`;
   /** The three checks, used in the last wizard step and on the main screen (ids differ by prefix). */
   const checks = (rp: string, sampleId: string, outId: string) =>
     `<div class="grid grid-cols-2 gap-2.5">${testRow(tt('testAi'), testBtn(`data-test="ai" data-rp="${rp}"`), `${rp}ai`)}
 ${testRow(tt('testOs'), testBtn(`data-test="opensubtitles" data-rp="${rp}"`), `${rp}opensubtitles`)}
-${testRow(tt('testSubdl'), testBtn(`data-test="subdl" data-rp="${rp}"`), `${rp}subdl`)}
-${testRow(tt('testJimaku'), testBtn(`data-test="jimaku" data-rp="${rp}"`), `${rp}jimaku`)}
+${testRow(tt('testSubdl'), testBtn(`data-test="subdl" data-rp="${rp}"`), `${rp}subdl`, d.subdlKeyConfigured ? '' : 'hidden ', 'subdl')}
+${testRow(tt('testJimaku'), testBtn(`data-test="jimaku" data-rp="${rp}"`), `${rp}jimaku`, d.jimakuKeyConfigured ? '' : 'hidden ', 'jimaku')}
 ${testRow(tt('testSample'), testBtn(`id="${sampleId}" data-sample data-res="${rp}sample" data-out="${outId}"`), `${rp}sample`, 'col-span-2 ')}
 <pre id="${outId}" hidden dir="auto" class="col-span-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-2xl border border-warm-ln bg-warm-bg p-3 text-xs"></pre></div>`;
 
@@ -378,7 +381,7 @@ ${d.desktop ? titleBar : ''}
       `<li class="h-[5px] flex-1 rounded-full bg-warm-ln transition-colors" data-bar="${i + 1}" title="${escapeHtml(s[0])}"><span class="sr-only">${escapeHtml(s[0])}</span></li>`,
   ).join('')}</ol>
 <section class="flex min-h-[540px] w-full flex-col gap-5 rounded-[22px] border border-warm-ln bg-warm-sf p-8" aria-live="polite">
-<div><div id="w-stepof" class="mb-2 text-xs font-semibold tracking-wide text-warm-ac">${tt('stepOf', { n: 1 })}</div><h2 id="w-title" class="text-[26px] font-bold leading-tight text-warm-tx">${escapeHtml(STEPS[0]?.[1] ?? '')}</h2><p id="w-sub" class="mt-2 text-sm leading-relaxed text-warm-mu">${escapeHtml(STEPS[0]?.[2] ?? '')}</p></div>
+<div><div id="w-stepof" class="mb-2 text-xs font-semibold tracking-wide text-warm-ac">${tt('stepOf', { n: 1, total: STEPS.length })}</div><h2 id="w-title" class="text-[26px] font-bold leading-tight text-warm-tx">${escapeHtml(STEPS[0]?.[1] ?? '')}</h2><p id="w-sub" class="mt-2 text-sm leading-relaxed text-warm-mu">${escapeHtml(STEPS[0]?.[2] ?? '')}</p></div>
 
 <div data-pane="1" class="flex flex-col gap-2">
 <label class="${labelCls}" for="k-ai">${tt('keyAiLabel')}</label>
@@ -414,6 +417,8 @@ ${checks('r-', 'sample', 'sample-out')}
 
 <div data-pane="5" class="hidden flex-col gap-3.5">${install}</div>
 
+${d.desktop ? `<div data-pane="6" class="hidden flex-col gap-3">${toggle('w-startup', true, 'startupLabel', 'startupHint')}${toggle('w-minimized', true, 'minimizedLabelWizard', 'minimizedHint')}</div>` : ''}
+
 <div class="mt-auto"><span class="${result} mb-2 text-center" id="w-result"></span>
 <div class="flex items-center justify-between gap-3"><button type="button" id="w-back" class="invisible rounded-lg py-2.5 text-sm font-semibold text-warm-mu transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${tt('back')}</button><button type="button" id="w-next" class="${btnPrimary} min-w-[150px] text-center">${tt('next')} ${arrow}</button></div></div>
 </section>
@@ -427,9 +432,10 @@ ${checks('r-', 'sample', 'sample-out')}
 <section class="flex flex-col gap-3.5 rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-xl shadow-black/20">
 <div class="flex flex-wrap items-center justify-between gap-3"><div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div><div class="flex flex-wrap items-center gap-2"><button type="button" id="st-cancel-btn" class="${btn} hidden whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('qCancel')}</button><button type="button" id="st-skip-btn" class="${btn} hidden whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('qSkip')}</button><button type="button" id="sync-now-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('syncNowHint')}">${tt('syncNowBtn')}</button><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('resumeHint')}">${tt('resumeBtn')}</button></div></div>
 <div id="st-progress-text" class="text-[26px] font-extrabold leading-tight text-warm-tx">${tt('noSub')}</div>
-<div class="h-2.5 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('progressAria')}" aria-valuemin="0" aria-valuemax="100"><div id="st-progress" class="h-full w-0 rounded-full bg-warm-ac transition-[width] duration-500"></div></div>
+<div class="h-2.5 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('progressAria')}" aria-valuemin="0" aria-valuemax="100"><div id="st-progress" class="h-full w-0 rounded-full bg-warm-ac"></div></div>
+<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-warm-mu"><span id="st-progress-eta"></span><span id="st-total-eta" class="hidden font-semibold text-warm-tx"></span></div>
 <div id="st-delivered" class="hidden text-xs text-warm-ok" role="status"></div>
-<div id="st-sync" class="hidden flex-col gap-1.5 rounded-xl border border-warm-ln bg-warm-bg px-3 py-2" role="status"><div id="st-sync-text" class="text-[13px] text-warm-tx"></div><div id="st-sync-bar" class="flex items-center gap-3"><div class="h-3 flex-1 overflow-hidden rounded-full bg-warm-ln" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="st-sync-fill" class="h-full w-0 rounded-full bg-warm-ok transition-[width] duration-500"></div></div><div class="flex flex-col items-end"><div id="st-sync-pct" dir="ltr" class="min-w-[3.5rem] text-end text-xl font-extrabold text-warm-ok">0%</div><div id="st-sync-eta" class="whitespace-nowrap text-[11px] text-warm-mu"></div></div><button type="button" id="st-sync-stop" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('syncStopBtn')}</button></div><div id="st-sync-ok-row" dir="ltr" class="flex justify-start"><button type="button" id="st-sync-ok" class="${btn} !px-4 !py-1.5 !text-[13px]">${tt('toastOk')}</button></div></div>
+<div id="st-sync" class="hidden flex-col gap-1.5 rounded-xl border border-warm-ln bg-warm-bg px-3 py-2" role="status"><div id="st-sync-text" class="text-[13px] text-warm-tx"></div><div id="st-sync-bar" class="flex items-center gap-3"><div class="h-3 flex-1 overflow-hidden rounded-full bg-warm-ln" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="st-sync-fill" class="h-full w-0 rounded-full bg-warm-ok"></div></div><div class="flex flex-col items-end"><div id="st-sync-pct" dir="ltr" class="min-w-[3.5rem] text-end text-xl font-extrabold text-warm-ok">0%</div><div id="st-sync-eta" class="whitespace-nowrap text-[11px] text-warm-mu"></div></div><button type="button" id="st-sync-stop" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('syncStopBtn')}</button></div><div id="st-sync-ok-row" dir="ltr" class="flex justify-start"><button type="button" id="st-sync-ok" class="${btn} !px-4 !py-1.5 !text-[13px]">${tt('toastOk')}</button></div></div>
 </section>
 <section id="st-queue" class="${tile} hidden flex-col gap-2.5"><h2 class="text-sm font-bold text-warm-tx">${tt('qTitle')}</h2><ul id="st-queue-list" class="flex flex-col gap-2"></ul></section>
 <div class="grid gap-3.5">
@@ -472,6 +478,16 @@ ${installCompact}
 <button type="button" id="del-no" class="px-4 py-2 text-sm text-warm-mu transition hover:text-warm-tx focus:outline-none">${tt('cancel')}</button>
 </div></div></div>
 
+<div id="unsaved-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="unsaved-title">
+<div class="w-full max-w-sm rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
+<h2 id="unsaved-title" class="text-lg font-bold text-warm-tx">${tt('unsavedTitle')}</h2>
+<p class="mt-1 text-sm text-warm-mu">${tt('unsavedBody')}</p>
+<div class="mt-5 grid gap-2">
+<button type="button" id="unsaved-save" class="${btnPrimary}">${tt('unsavedSave')}</button>
+<button type="button" id="unsaved-discard" class="${btnDanger}">${tt('unsavedDiscard')}</button>
+<button type="button" id="unsaved-stay" class="px-4 py-2 text-sm text-warm-mu transition hover:text-warm-tx focus:outline-none">${tt('unsavedStay')}</button>
+</div></div></div>
+
 <div id="news-panel" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="news-panel-title">
 <div class="flex max-h-[85vh] w-full max-w-lg flex-col gap-3 rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
 <div class="flex items-center justify-between"><h2 id="news-panel-title" class="text-lg font-bold text-warm-tx">${tt('newsBell')}</h2><button type="button" id="news-panel-close" class="rounded-lg px-2 text-lg text-warm-mu transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac" aria-label="${tt('newsClose')}">&#10005;</button></div>
@@ -506,6 +522,16 @@ ${toggle('d-clean', d.cleanSubtitles ?? true, 'cleanLabel', 'cleanHint', true)}
 ${toggle('d-ask', d.translationMode === 'ask', 'askLabel', 'askHint', true)}</div>
 <div><label class="${labelCls}" for="d-src">${tt('srcLabel')}</label>${selectField('d-src', `<option value="opensubtitles"${d.subtitleSource === 'subdl' ? '' : ' selected'}>${tt('srcOs')}</option><option value="subdl"${d.subtitleSource === 'subdl' ? ' selected' : ''}>${tt('srcSubdl')}</option>`)}<p class="mt-1 text-xs text-warm-mu">${tt('srcHint')}</p></div>`,
 )}
+${
+  d.desktop
+    ? group(
+        'secGeneral',
+        `<div class="flex flex-col divide-y divide-warm-ln overflow-hidden rounded-2xl border border-warm-ln">${toggle('d-startup', false, 'startupLabel', 'startupHint', true)}
+${toggle('d-minimized', false, 'minimizedLabel', 'minimizedHint', true)}</div>
+<p id="startup-note" class="hidden text-xs text-warm-mu">${tt('startupUnavailable')}</p>`,
+      )
+    : ''
+}
 ${group(
   'secMaintenance',
   `<p class="text-xs text-warm-mu">${tt('clearNote')}</p>
@@ -513,7 +539,7 @@ ${group(
 <span class="${result} text-center" id="clear-result"></span>
 <div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><p class="text-xs text-warm-mu">${tt('diagNote')}</p><button type="button" id="copy-diag" class="${btn}">${tt('diagBtn')}</button></div>`,
 )}
-${group('menuAbout', `<p class="text-xs text-warm-mu">${tt('aboutDesc')}</p>${d.desktop ? updatesRow : ''}${devSection}`)}
+${group('menuAbout', `<p class="text-xs text-warm-mu">${tt('aboutDesc')}</p>${d.desktop ? updatesRow : ''}${d.devSettings ? devSection : devSection.replace('<details', '<details hidden')}`)}
 </div>
 <div class="sticky -bottom-[26px] z-10 -mx-[26px] -mb-[26px] mt-auto grid gap-2 border-t border-warm-ln bg-warm-sf/95 px-[26px] pb-[26px] pt-4 backdrop-blur"><span class="${result} text-center" id="save-result"></span><button type="button" id="save" class="${btnPrimary} w-full !py-3">${tt('save')}</button></div>
 </div></div>
@@ -616,6 +642,7 @@ const saveKeys = async (body, resultId) => {
       $('st-subdl-text').classList.remove('text-warm-mu'); $('st-subdl-text').textContent = f(T.stSubdlCount, {n: 0});
     }
     if (r.ok && body.jimakuApiKey) jimakuOn = true;
+    for (const name of ['subdl', 'jimaku']) if (r.ok && body[name + 'ApiKey']) document.querySelectorAll('[data-check-row="' + name + '"]').forEach((row) => row.classList.remove('hidden'));
     return r.ok;
   } catch { show(resultId, false, FAILED); toast(false, FAILED); return false; }
 };
@@ -643,7 +670,7 @@ let step = ${startStep || 1};
 let fromDash = ${startStep ? 'false' : 'true'};
 const next = $('w-next'), back = $('w-back');
 const render = () => {
-  $('w-stepof').textContent = f(T.stepOf, {n: step});
+  $('w-stepof').textContent = f(T.stepOf, {n: step, total: STEPS.length});
   $('w-title').textContent = STEPS[step - 1][1];
   $('w-sub').textContent = STEPS[step - 1][2];
   document.querySelectorAll('[data-pane]').forEach(p => { const on = Number(p.dataset.pane) === step; p.classList.toggle('hidden', !on); p.classList.toggle('flex', on); });
@@ -651,10 +678,11 @@ const render = () => {
   // Step 1 has nothing to go back to, unless the wizard was opened from the main screen: then it cancels.
   back.classList.toggle('invisible', step === 1 && !fromDash);
   back.textContent = step === 1 ? T.leaveWizard : T.back;
-  next.textContent = step === 5 ? T.finish : T.next + ' ' + ARROW;
+  next.textContent = step === LAST ? T.finish : T.next + ' ' + ARROW;
   show('w-result', null, '');
 };
-const go = (n) => { step = Math.max(1, Math.min(5, n)); render(); };
+const LAST = STEPS.length;
+const go = (n) => { step = Math.max(1, Math.min(LAST, n)); render(); };
 back.addEventListener('click', () => { if (step === 1) setView('dash'); else go(step - 1); });
 document.querySelectorAll('.js-lang-wrap').forEach((wrap) => {
   const btn = wrap.querySelector('.js-lang-btn'), menu = wrap.querySelector('.js-lang-menu');
@@ -680,7 +708,8 @@ next.addEventListener('click', async () => {
     } else if (step === 3) {
       const r = await saveSettings($('lang').value, $('dual').checked);
       if (!r.ok) { show('w-result', false, r.message); return; }
-    } else if (step === 5) {
+    } else if (step === LAST) {
+      if (startupApi && $('w-startup')) { try { await startupApi.set($('w-startup').checked, $('w-minimized').checked); } catch { show('w-result', false, FAILED); return; } }
       location.reload(); // the main screen is rendered with the freshly saved settings
       return;
     }
@@ -690,15 +719,80 @@ next.addEventListener('click', async () => {
 });
 render();
 
+// Start with Windows (desktop app only). The second switch only works while the first is on.
+const startupApi = window.desktop && window.desktop.startup;
+const startupRefresh = {};
+const wireStartup = (onId, minId, autosave) => {
+  const on = $(onId), min = $(minId);
+  if (!on || !min || !startupApi) return;
+  const label = min.closest('label');
+  const hint = label.querySelector('.text-xs');
+  const hintOn = hint ? hint.textContent : '';
+  const refresh = () => {
+    min.disabled = !on.checked;
+    label.classList.toggle('opacity-40', !on.checked);
+    label.classList.toggle('pointer-events-none', !on.checked);
+    if (hint) hint.textContent = on.checked ? hintOn : T.minimizedHintOff;
+  };
+  const save = async () => {
+    try { await startupApi.set(on.checked, min.checked); toast(true, T.settingsSaved); }
+    catch { toast(false, FAILED); }
+  };
+  on.addEventListener('change', () => { refresh(); if (autosave) save(); });
+  if (autosave) min.addEventListener('change', save);
+  startupRefresh[onId] = refresh;
+  refresh();
+};
+const loadStartup = async (onId, minId, firstRun) => {
+  if (!startupApi || !startupRefresh[onId]) return;
+  try {
+    const st = await startupApi.get();
+    $(onId).checked = firstRun ? true : st.openAtLogin;
+    $(minId).checked = st.minimized;
+    startupRefresh[onId]();
+    if (!st.available) {
+      $(onId).disabled = true; $(minId).disabled = true;
+      const note = $('startup-note'); if (note) note.classList.remove('hidden');
+    }
+  } catch { /* the switches stay as they are */ }
+};
+wireStartup('w-startup', 'w-minimized', false);
+wireStartup('d-startup', 'd-minimized', false);
+loadStartup('w-startup', 'w-minimized', !fromDash);
+
 // Settings drawer.
 const drawer = $('drawer');
 document.querySelectorAll('#groups > details').forEach((g) => g.addEventListener('toggle', () => {
   if (g.open) document.querySelectorAll('#groups > details').forEach((o) => { if (o !== g) o.open = false; });
 }));
-const setDrawer = (open) => { drawer.classList.toggle('hidden', !open); drawer.classList.toggle('flex', open); };
+// Changes in the drawer are only kept with Save; closing with changes asks first.
+const devGroupEl = $('dev-sound').closest('details');
+const drawerEls = () => [...drawer.querySelectorAll('input, select')].filter((el) => !devGroupEl.contains(el) && el.id !== 'd-src');
+const elValue = (el) => el.type === 'checkbox' ? el.checked : el.value;
+let drawerSnap = new Map();
+const takeSnap = () => { drawerSnap = new Map(drawerEls().map((el) => [el, elValue(el)])); };
+const drawerDirty = () => drawerEls().some((el) => drawerSnap.get(el) !== elValue(el));
+const setDrawer = (open) => {
+  drawer.classList.toggle('hidden', !open); drawer.classList.toggle('flex', open);
+  if (open) loadStartup('d-startup', 'd-minimized', false).then(takeSnap);
+};
+const unsaved = $('unsaved-modal');
+const showUnsaved = (on) => { unsaved.classList.toggle('hidden', !on); unsaved.classList.toggle('flex', on); if (on) $('unsaved-save').focus(); };
+const requestCloseDrawer = () => { if (drawerDirty()) showUnsaved(true); else setDrawer(false); };
 $('open-settings').addEventListener('click', () => setDrawer(true));
-$('close-settings').addEventListener('click', () => setDrawer(false));
-drawer.addEventListener('click', (e) => { if (e.target === drawer) setDrawer(false); });
+$('close-settings').addEventListener('click', requestCloseDrawer);
+drawer.addEventListener('click', (e) => { if (e.target === drawer) requestCloseDrawer(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || drawer.classList.contains('hidden')) return;
+  if (unsaved.classList.contains('hidden')) requestCloseDrawer(); else showUnsaved(false);
+});
+$('unsaved-stay').addEventListener('click', () => showUnsaved(false));
+$('unsaved-save').addEventListener('click', () => { showUnsaved(false); $('save').click(); });
+$('unsaved-discard').addEventListener('click', () => {
+  for (const el of drawerEls()) { const v = drawerSnap.get(el); if (el.type === 'checkbox') el.checked = v; else el.value = v; }
+  if (startupRefresh['d-startup']) startupRefresh['d-startup']();
+  showUnsaved(false); setDrawer(false);
+});
 const quickSave = async () => {
   const lang = $('q-lang').value, dual = $('q-dual').checked;
   try {
@@ -752,6 +846,11 @@ $('save').addEventListener('click', async () => {
   try {
     const body = readKeys('d-');
     if (Object.keys(body).length && !(await saveKeys(body, 'save-result'))) return;
+    const startupChanged = startupApi && $('d-startup') && (drawerSnap.get($('d-startup')) !== $('d-startup').checked || drawerSnap.get($('d-minimized')) !== $('d-minimized').checked);
+    if (startupChanged) {
+      try { await startupApi.set($('d-startup').checked, $('d-minimized').checked); }
+      catch { show('save-result', false, FAILED); toast(false, FAILED); return; }
+    }
     const r = await saveSettings($('d-lang').value, $('d-dual').checked, undefined, $('d-emb').checked, undefined, $('d-ask').checked, $('d-clean').checked);
     show('save-result', r.ok, r.message);
     toast(r.ok, r.message);
@@ -986,15 +1085,19 @@ const refreshStatus = async () => {
     const r = await (await fetch('/api/status')).json();
     const st = STATES[r.state] || STATES.waiting;
     // After a failure, say why (quota, key, rate limit...) instead of the general advice.
-    $('st-state').textContent = (r.state === 'error' && r.lastError && ERRORS[r.lastError]) || st[0];
+    $('st-state').textContent = (r.paused && r.running > 0 && T.stPaused) || (r.state === 'error' && r.lastError && ERRORS[r.lastError]) || st[0];
     $('st-dot').className = 'h-2.5 w-2.5 rounded-full ' + st[1] + (r.running > 0 ? ' animate-pulse' : '');
     $('st-lines').textContent = String(r.linesTranslated);
     const kb = r.bytesTranslated / 1024;
     $('st-size').textContent = kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : Math.round(kb) + ' KB';
     const p = r.progress;
+    const fmtEta = (s) => s < 60 ? s + (UI === 'he' ? ' שנ׳' : ' s') : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + (UI === 'he' ? ' דק׳' : ' min');
     const stageText = { queued: T.stageQueued, local: T.stageLocal, search: T.stageSearch, translate: T.stageTranslate, sync: f(T.stageSync, {p: r.syncPercent || 0}) }[r.stage];
     $('st-progress-text').textContent = p ? (p.percent >= 100 && r.running === 0 ? f(T.progressDone, {t: p.total}) : f(T.progressText, {d: p.done, t: p.total, p: p.percent})) : (r.running > 0 && stageText) || T.noSub;
     $('st-progress').style.width = (p ? p.percent : 0) + '%'; // CSSOM, allowed by the nonce-only CSP
+    $('st-progress-eta').textContent = p && r.running > 0 && !r.paused && p.etaSec ? f(T.syncEta, {t: fmtEta(p.etaSec)}) : '';
+    $('st-total-eta').classList.toggle('hidden', !(r.totalEtaSec && !r.paused));
+    if (r.totalEtaSec && !r.paused) $('st-total-eta').textContent = f(T.etaTotal, {t: fmtEta(r.totalEtaSec)});
     // The sound check that goes on beside (or after) the translation, and how it ended.
     const nameOf = (x) => '⁨' + x.title + '⁩' + (x.season !== undefined && x.episode !== undefined ? (UI === 'he' ? ' עונה ' + x.season + ' פרק ' + x.episode : ' S' + x.season + 'E' + x.episode) : '');
     const bs = r.backgroundSync, ls = r.lastSync;
@@ -1015,7 +1118,7 @@ const refreshStatus = async () => {
       $('st-sync-fill').style.width = bs.percent + '%';
       $('st-sync-pct').textContent = bs.percent + '%';
       const eta = bs.waiting ? null : bs.etaSec;
-      $('st-sync-eta').textContent = bs.waiting ? '' : eta === null || eta === undefined ? T.syncEtaWait : f(T.syncEta, {t: eta < 60 ? eta + (UI === 'he' ? ' שנ׳' : ' s') : Math.round(eta / 6) / 10 + (UI === 'he' ? ' דק׳' : ' min')});
+      $('st-sync-eta').textContent = bs.waiting ? '' : eta === null || eta === undefined ? T.syncEtaWait : f(T.syncEta, {t: fmtEta(eta)});
     } else if (r.exactComing) {
       $('st-sync-text').textContent = f(T.syncWaitExact, {name: nameOf(r.exactComing)});
     } else if (syncShown) {

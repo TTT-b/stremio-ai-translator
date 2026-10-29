@@ -72,7 +72,7 @@ const S = {
     en: 'One click adds the add-on. The app keeps working in the background even when the window is closed.',
   },
   setupProgress: { he: 'התקדמות ההגדרה', en: 'Setup progress' },
-  stepOf: { he: 'שלב {n} מתוך 5', en: 'Step {n} of 5' },
+  stepOf: { he: 'שלב {n} מתוך {total}', en: 'Step {n} of {total}' },
 
   dualLabel: {
     he: 'כתוביות כפולות (אנגלית + שפת היעד)',
@@ -416,6 +416,42 @@ const S = {
   secKeys: { he: 'חשבונות ומפתחות', en: 'Accounts and keys' },
   secTranslate: { he: 'תרגום', en: 'Translation' },
   secMaintenance: { he: 'תחזוקה', en: 'Maintenance' },
+  secGeneral: { he: 'כללי', en: 'General' },
+  unsavedTitle: { he: 'יש שינויים שלא נשמרו', en: 'You have unsaved changes' },
+  unsavedBody: {
+    he: 'לשמור אותם לפני שסוגרים את ההגדרות?',
+    en: 'Save them before closing the settings?',
+  },
+  unsavedSave: { he: 'שמור', en: 'Save' },
+  unsavedDiscard: { he: 'התעלם מהשינויים', en: 'Discard changes' },
+  unsavedStay: { he: 'המשך לערוך', en: 'Keep editing' },
+  startupLabel: { he: 'הפעל את התוכנה עם Windows', en: 'Start the app with Windows' },
+  startupHint: {
+    he: 'נפתחת לבד כשהמחשב נדלק ויושבת ליד השעון.',
+    en: 'Opens by itself when the computer starts and stays near the clock.',
+  },
+  minimizedLabel: { he: 'התחל ממוזער', en: 'Start minimized' },
+  minimizedLabelWizard: { he: 'להתחיל ממוזער (מומלץ)', en: 'Start minimized (recommended)' },
+  minimizedHint: {
+    he: 'רק הסמל ליד השעון, בלי לפתוח את החלון.',
+    en: 'Only the icon near the clock, without opening the window.',
+  },
+  minimizedHintOff: {
+    he: 'אפשר לשנות רק כשההפעלה עם Windows דולקת.',
+    en: 'Can only be changed while starting with Windows is on.',
+  },
+  startupUnavailable: {
+    he: 'זמין רק בתוכנה המותקנת.',
+    en: 'Only available in the installed app.',
+  },
+  step6Label: { he: 'הפעלה', en: 'Startup' },
+  step6Title: { he: 'איך להפעיל את התוכנה?', en: 'How should the app start?' },
+  step6Sub: {
+    he: 'כדי שהתרגום יהיה מוכן בכל פעם שפותחים את Stremio. אפשר לשנות אחר כך בהגדרות.',
+    en: 'So translation is ready every time you open Stremio. You can change this later in Settings.',
+  },
+  stPaused: { he: 'התרגום מושהה', en: 'Translation paused' },
+  etaTotal: { he: 'סה״כ עד כתובית מלאה: {t}', en: 'Total until the full subtitle: {t}' },
   diagNote: {
     he: 'אם משהו לא עובד, העתק ושלח ליוצר. אין בזה מפתחות או טקסט כתוביות.',
     en: 'If something does not work, copy this and send it to the author. It has no keys and no subtitle text.',

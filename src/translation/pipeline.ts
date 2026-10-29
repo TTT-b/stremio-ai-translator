@@ -48,6 +48,8 @@ export interface PipelineOptions {
    * function to call when the request ends.
    */
   registerKick?: (kick: () => void) => () => void;
+  /** Resolves when it is fine to send another part to the AI (the user may have paused). */
+  waitWhilePaused?: () => Promise<void>;
   /** Called with +1 when a chunk starts waiting on a rate limit and -1 when it stops. */
   onRateLimitWait?: (delta: 1 | -1) => void;
   /** Called after each chunk with cues finished so far and the file's total. */
@@ -414,6 +416,7 @@ export async function translateSubtitle(
     opts.onPartial(assembleCues(source.cues.slice(0, runCues), byId, opts));
   };
   const results = await runPool(chunks, opts.concurrency, async (chunk) => {
+    await opts.waitWhilePaused?.();
     const r = await translateOneChunk(chunk, chunks.length, provider, opts, throttle);
     doneCues += chunk.cues.length;
     opts.onProgress?.(doneCues, source.cues.length);

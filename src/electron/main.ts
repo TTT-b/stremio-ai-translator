@@ -24,6 +24,15 @@ import { startAddon, type RunningAddon } from '../startup';
 import { zoomFor } from './zoom';
 import { ICON_PNG_BASE64 } from './iconData';
 import { isStremioInstallUrl } from './links';
+import {
+  launchedHidden,
+  LOGIN_ITEM_ARG_VARIANTS,
+  loginItemArgs,
+  parseStartupRequest,
+  readStartupPrefs,
+  writeStartupPrefs,
+} from './loginItem';
+import { etaValue, TRAY_LABELS, type TrayStatus } from './trayMenu';
 import { pickWhatsNew } from './whatsNew';
 
 const TITLE = 'Stremio AI Subtitle Translator';
@@ -33,6 +42,9 @@ let running: RunningAddon | undefined;
 let win: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let quitting = false;
+
+/** Started by Windows with "start minimized": only the tray icon, no window. */
+const startHidden = launchedHidden(process.argv);
 
 const icon = nativeImage.createFromDataURL(`data:image/png;base64,${ICON_PNG_BASE64}`);
 
@@ -53,6 +65,7 @@ function createWindow(port: number): void {
     title: TITLE,
     icon,
     frame: false,
+    show: !startHidden,
     backgroundColor: '#15120e',
     autoHideMenuBar: true,
     webPreferences: {
@@ -118,10 +131,64 @@ function createWindow(port: number): void {
 }
 
 let uiLang: 'he' | 'en' = 'en';
-const TRAY_LABELS = {
-  he: { open: 'פתח את המתרגם', quit: 'כבה את האפליקציה' },
-  en: { open: 'Open the translator', quit: 'Turn off the app' },
-};
+
+const startupPrefsFile = () => join(app.getPath('userData'), 'startup.json');
+
+/** The Windows login item only exists for the installed app, not for `npm run desktop`. */
+function startupState(): { available: boolean; openAtLogin: boolean; minimized: boolean } {
+  const { minimized } = readStartupPrefs(startupPrefsFile());
+  return {
+    available: app.isPackaged,
+    openAtLogin:
+      app.isPackaged &&
+      LOGIN_ITEM_ARG_VARIANTS.some(
+        (args) => app.getLoginItemSettings({ args: [...args] }).openAtLogin,
+      ),
+    minimized,
+  };
+}
+
+function applyStartup(openAtLogin: boolean, minimized: boolean): void {
+  try {
+    writeStartupPrefs(startupPrefsFile(), { minimized });
+  } catch {
+    /* not critical: the choice just is not remembered */
+  }
+  if (!app.isPackaged) return;
+  app.setLoginItemSettings({ openAtLogin, args: loginItemArgs(minimized) });
+}
+
+/** Live numbers for the tray menu, from the local server this app runs. Null if it does not answer. */
+async function fetchTrayStatus(): Promise<TrayStatus | null> {
+  if (!running) return null;
+  try {
+    const res = await fetch(`http://127.0.0.1:${running.port}/api/status`, {
+      signal: AbortSignal.timeout(1000),
+    });
+    const body = (await res.json()) as Partial<TrayStatus>;
+    return {
+      running: typeof body.running === 'number' ? body.running : 0,
+      paused: body.paused === true,
+      totalEtaSec: typeof body.totalEtaSec === 'number' ? body.totalEtaSec : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function setPausedFromTray(paused: boolean): Promise<void> {
+  if (!running) return;
+  try {
+    await fetch(`http://127.0.0.1:${running.port}/api/pause`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paused }),
+      signal: AbortSignal.timeout(2000),
+    });
+  } catch {
+    /* the menu is rebuilt from the real state the next time it opens */
+  }
+}
 
 /** Ask mode: tell the user a request arrived and wait for their OK in the app. */
 function notifyPending(item: { title: string; season?: number; episode?: number }): void {
@@ -159,22 +226,47 @@ function notifyUpgraded(item: { title: string; season?: number; episode?: number
   note.show();
 }
 
-function updateTrayMenu(): void {
+/** Built fresh every time it opens, so the pause state and the time left are current. */
+function buildTrayMenu(status: TrayStatus | null): Menu {
   const labels = TRAY_LABELS[uiLang];
-  tray?.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: labels.open, click: showWindow },
+  const eta = etaValue(status, uiLang);
+  const startup = startupState();
+  const items: Electron.MenuItemConstructorOptions[] = [
+    { label: labels.open, click: showWindow },
+    { type: 'separator' },
+    {
+      label: status?.paused ? labels.resume : labels.pause,
+      click: () => void setPausedFromTray(!status?.paused),
+    },
+  ];
+  if (eta !== null) {
+    items.push(
+      { label: `${labels.eta}: ${eta}`, enabled: false },
+      { label: labels.etaNote, enabled: false },
+    );
+  }
+  if (startup.available) {
+    items.push(
       { type: 'separator' },
-      { label: labels.quit, click: () => app.quit() },
-    ]),
-  );
+      {
+        label: labels.startup,
+        type: 'checkbox',
+        checked: startup.openAtLogin,
+        click: (item) => applyStartup(item.checked, startup.minimized),
+      },
+    );
+  }
+  items.push({ type: 'separator' }, { label: labels.quit, click: () => app.quit() });
+  return Menu.buildFromTemplate(items);
 }
 
 function createTray(): void {
   tray = new Tray(icon.resize({ width: 32, height: 32 }));
   tray.setToolTip(TITLE);
-  updateTrayMenu();
   tray.on('click', showWindow);
+  tray.on('right-click', () => {
+    void fetchTrayStatus().then((status) => tray?.popUpContextMenu(buildTrayMenu(status)));
+  });
 }
 
 type UpdateState =
@@ -276,7 +368,13 @@ if (!app.requestSingleInstanceLock()) {
   // The page tells us its language so the tray menu matches it.
   ipcMain.on('app:set-language', (_e, lang: unknown) => {
     uiLang = lang === 'he' ? 'he' : 'en';
-    updateTrayMenu();
+  });
+  // "Start with Windows" and "start minimized": the page reads and sets them through these two.
+  ipcMain.handle('startup:get', () => startupState());
+  ipcMain.handle('startup:set', (_e, request: unknown) => {
+    const parsed = parseStartupRequest(request);
+    if (parsed) applyStartup(parsed.openAtLogin, parsed.minimized);
+    return startupState();
   });
   ipcMain.on('whatsnew:dismiss', () => writeLastSeen(app.getVersion()));
   // Only our own add-on link may be handed to the operating system (opens Stremio desktop).
