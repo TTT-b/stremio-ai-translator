@@ -9,7 +9,7 @@ import { parseVideoId } from '../sources/types';
 
 export const MANIFEST: Manifest = {
   id: 'community.ai-subtitle-translator.local',
-  version: '1.9.1',
+  version: '1.8.0',
   name: 'TTT Sub · כתוביות AI',
   description:
     'מתרגם כתוביות AI ל-Stremio. Local add-on: serves an existing subtitle in your language, or translates an English one with AI.',

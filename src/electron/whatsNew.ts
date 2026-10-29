@@ -12,23 +12,35 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
-  '1.9.1': {
+  '1.8.0': {
     en: [
       {
         title: 'New name: TTT Sub',
         text: 'The app and the add-on in Stremio are now called TTT Sub. In Stremio the add-on shows as TTT Sub · כתוביות AI. If the old name still shows there, remove the add-on and install it again.',
       },
       {
+        title: 'More sources, in the order you choose',
+        text: 'SubDL (with season packs) and Jimaku (Japanese, for anime) join OpenSubtitles. Every subtitle in My subtitles shows where it came from, and Developer settings (Settings, About) lets you order the sources and ask again from one source.',
+      },
+      {
+        title: 'Start with Windows, pause, and time left',
+        text: 'Settings, General (and the last step of the setup) can start the app with Windows, optionally minimized to the icon near the clock. The tray menu can pause and resume translating and shows the time until the subtitle is complete, sound check included.',
+      },
+      {
+        title: 'Save a video with progress',
+        text: 'Each subtitle in My subtitles has two buttons: Subtitles (SRT file) and Video, with a small menu for MKV or MP4 and its approximate size. Saving shows a progress bar with the time left, a cancel button, and a done row with Show in folder. Videos are saved to Downloads by default.',
+      },
+      {
         title: 'Cleaner subtitles',
-        text: 'After translating, the app quietly checks each line. A line that came back with a stray English word is translated once more on its own. Nothing to do on your side.',
+        text: 'After translating, the app quietly checks each line, and a line that came back with a stray English word is translated once more on its own. Position tags such as {\\an8} are removed, and signs/songs tracks are skipped.',
       },
       {
-        title: 'Tidier library',
-        text: 'Each subtitle in My subtitles now has two buttons: Subtitles (SRT file) and Video, with a small menu for MKV or MP4.',
+        title: 'Translation starts at once; the sound check goes on in the background',
+        text: 'The main screen shows how far the sound check is and whether it moved the subtitle. The progress bar no longer wobbles, and SubDL and Jimaku checks appear only when you saved a key for them.',
       },
       {
-        title: 'Saving a video, and clearer labels',
-        text: 'Saving a video shows a progress bar with the time left, a cancel button, and a done row with Show in folder. Timing labels now have different colors and icons, and a set key can be removed with a small x.',
+        title: 'Clearer screens',
+        text: 'Timing labels have different colors and icons, a set key can be removed with a small x (it asks first), the password eye appears only when you type, and clickable things show a hand cursor.',
       },
     ],
     he: [
@@ -37,76 +49,28 @@ export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
         text: 'האפליקציה והתוסף ב-Stremio נקראים עכשיו TTT Sub. ב-Stremio התוסף מופיע כ-TTT Sub · כתוביות AI. אם עדיין מופיע השם הישן, הסר את התוסף והתקן אותו מחדש.',
       },
       {
-        title: 'כתוביות נקיות יותר',
-        text: 'אחרי התרגום התוכנה בודקת בשקט כל שורה. שורה שחזרה עם מילה באנגלית שלא שייכת אליה מתורגמת שוב פעם אחת בנפרד. אין מה לעשות מצדך.',
-      },
-      {
-        title: 'ספרייה מסודרת יותר',
-        text: 'לכל כתובית ב"הכתוביות שלי" יש עכשיו שני כפתורים: כתוביות (קובץ SRT) וסרטון, עם תפריט קטן ל-MKV או ל-MP4.',
-      },
-      {
-        title: 'שמירת סרטון ותגיות ברורות',
-        text: 'שמירת סרטון מציגה פס התקדמות עם הזמן שנשאר, כפתור ביטול, ובסיום שורה עם הצג בתיקייה. לתגיות התזמון יש צבעים ואייקונים שונים, ואפשר להסיר מפתח שהוגדר עם איקס קטן.',
-      },
-    ],
-  },
-  '1.9.0': {
-    en: [
-      {
-        title: 'Start with Windows',
-        text: 'Settings, General (and the last step of the setup) can start the app with Windows, optionally minimized to the icon near the clock. The tray menu has the same switch.',
-      },
-      {
-        title: 'Pause translation, and time left',
-        text: 'The tray menu can pause and resume translating and shows the time until the subtitle is complete, sound check included. The main screen shows the time left too.',
-      },
-      {
-        title: 'Calmer progress bar, cleaner checks',
-        text: 'The progress bar no longer wobbles. SubDL and Jimaku checks appear only when you saved a key for them. Subtitles closest to the playing release are preferred, and signs/songs tracks are skipped.',
-      },
-    ],
-    he: [
-      {
-        title: 'הפעלה עם Windows',
-        text: 'בהגדרות (כללי) ובשלב האחרון של האשף אפשר להפעיל את התוכנה עם Windows, אם רוצים גם ממוזערת לסמל ליד השעון. אותו מתג יש גם בתפריט הסמל.',
-      },
-      {
-        title: 'השהיית תרגום וזמן משוער',
-        text: 'בתפריט הסמל אפשר להשהות ולהמשיך תרגום, ורואים את הזמן עד כתובית מלאה, כולל סנכרון הקול. גם במסך הראשי מופיע הזמן שנשאר.',
-      },
-      {
-        title: 'פס התקדמות רגוע ובדיקות נקיות',
-        text: 'הפס כבר לא רועד. בדיקות SubDL ו-Jimaku מופיעות רק אם שמרת להן מפתח. נבחרת הכתובית הקרובה ביותר לגרסה שמתנגנת, ומסלולי שלטים ושירים מדולגים.',
-      },
-    ],
-  },
-  '1.8.0': {
-    en: [
-      {
-        title: 'More sources, in the order you choose',
-        text: 'SubDL (with season packs) and Jimaku (Japanese, for anime) join OpenSubtitles. Every subtitle in My subtitles shows where it came from, and Developer settings (Settings, About) lets you order the sources and ask again from one source.',
-      },
-      {
-        title: 'Translation starts at once; the sound check goes on in the background',
-        text: 'The main screen shows how far the sound check is and whether it moved the subtitle. Videos too big to read for their own subtitle are skipped quickly.',
-      },
-      {
-        title: 'Cleaner screens',
-        text: 'One line per episode in My subtitles, a Jimaku connection test, the queue only when 2 or more wait, OK buttons on the sync notices, and a question before Stremio is opened.',
-      },
-    ],
-    he: [
-      {
         title: 'עוד מקורות, בסדר שאתה בוחר',
         text: 'SubDL (כולל חבילות עונה) ו-Jimaku (יפנית, לאנימה) מצטרפים ל-OpenSubtitles. כל כתובית ב"הכתוביות שלי" מראה מאיפה הגיעה, וב"הגדרות מפתח" (הגדרות, אודות) אפשר לסדר את המקורות ולבקש שוב ממקור אחד.',
       },
       {
-        title: 'התרגום מתחיל מיד, בדיקת הקול ממשיכה ברקע',
-        text: 'המסך הראשי מראה כמה בדיקת הקול התקדמה והאם הכתובית הוזזה. סרטונים גדולים מדי לקריאת הכתובית שבתוכם מדולגים מהר.',
+        title: 'הפעלה עם Windows, השהיה וזמן משוער',
+        text: 'בהגדרות (כללי) ובשלב האחרון של האשף אפשר להפעיל את התוכנה עם Windows, אם רוצים גם ממוזערת לסמל ליד השעון. בתפריט הסמל אפשר להשהות ולהמשיך תרגום, ורואים את הזמן עד כתובית מלאה, כולל סנכרון הקול.',
       },
       {
-        title: 'מסכים נקיים יותר',
-        text: 'שורה אחת לכל פרק ב"הכתוביות שלי", בדיקת חיבור ל-Jimaku, תור התרגומים מופיע רק כשממתינים 2 ומעלה, כפתורי אישור בהודעות הסנכרון, ושאלה לפני פתיחת Stremio.',
+        title: 'שמירת סרטון עם התקדמות',
+        text: 'לכל כתובית ב"הכתוביות שלי" יש שני כפתורים: כתוביות (קובץ SRT) וסרטון, עם תפריט קטן ל-MKV או ל-MP4 וגודל משוער. השמירה מציגה פס התקדמות עם הזמן שנשאר, כפתור ביטול, ובסיום שורה עם הצג בתיקייה. סרטונים נשמרים כברירת מחדל בהורדות.',
+      },
+      {
+        title: 'כתוביות נקיות יותר',
+        text: 'אחרי התרגום התוכנה בודקת בשקט כל שורה, ושורה שחזרה עם מילה באנגלית שלא שייכת אליה מתורגמת שוב פעם אחת בנפרד. תגי מיקום כמו {\\an8} מוסרים, ומסלולי שלטים ושירים מדולגים.',
+      },
+      {
+        title: 'התרגום מתחיל מיד, בדיקת הקול ממשיכה ברקע',
+        text: 'המסך הראשי מראה כמה בדיקת הקול התקדמה והאם הכתובית הוזזה. פס ההתקדמות כבר לא רועד, ובדיקות SubDL ו-Jimaku מופיעות רק אם שמרת להן מפתח.',
+      },
+      {
+        title: 'מסכים ברורים יותר',
+        text: 'לתגיות התזמון יש צבעים ואייקונים שונים, אפשר להסיר מפתח שהוגדר עם איקס קטן (שואל קודם), העין בסיסמה מופיעה רק כשמקלידים, ולכל מה שלוחצים עליו יש סמן יד.',
       },
     ],
   },
