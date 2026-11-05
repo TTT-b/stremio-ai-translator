@@ -268,6 +268,37 @@ describe('translateSubtitle', () => {
     expect(provider.calls).toBe(9); // first try + 8 waits, no second layer of retries
   });
 
+  it('drops to one request at a time after an overload answer, and widens again once calm', async () => {
+    const srt = Array.from(
+      { length: 12 },
+      (_, i) =>
+        `${i + 1}\n00:00:${String(i * 2).padStart(2, '0')},000 --> 00:00:${String(i * 2 + 1).padStart(2, '0')},000\nLine ${i + 1}\n`,
+    ).join('\n');
+    const twelve = parseSubtitle(srt);
+    let inFlight = 0;
+    const seen: { call: number; parallel: number }[] = [];
+    const provider = new FakeProvider(async (req, n) => {
+      inFlight++;
+      seen.push({ call: n, parallel: inFlight });
+      await Promise.resolve();
+      await Promise.resolve();
+      inFlight--;
+      if (n === 2) throw new AppError('PROVIDER_TIMEOUT', 'HTTP 503');
+      return { translations: req.cues.map((c) => ({ id: c.id, text: `T:${c.text}` })) };
+    });
+    const r = await translateSubtitle(
+      twelve,
+      provider,
+      opts({ chunkSize: 1, concurrency: 3, sleep: clockSleep([]) }),
+    );
+    expect(r.file.cues).toHaveLength(12);
+    // while the provider pushes back, calls 4 and on (until 3 successes in a row) run alone
+    const afterPressure = seen.filter((s) => s.call >= 5 && s.call <= 6);
+    expect(afterPressure.every((s) => s.parallel === 1)).toBe(true);
+    // once calm again, the lanes run in parallel once more
+    expect(seen.some((s) => s.call > 8 && s.parallel > 1)).toBe(true);
+  });
+
   it('adds no delay at all while the provider answers normally', async () => {
     const sleeps: number[] = [];
     await translateSubtitle(

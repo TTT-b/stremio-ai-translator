@@ -89,6 +89,10 @@ const OVERLOAD_MAX_WAITS = 8;
 /** The extra gap between requests never grows beyond this while the provider is pushing back. */
 const THROTTLE_MAX_EXTRA_MS = 8000;
 const THROTTLE_FIRST_EXTRA_MS = 1000;
+/** After a push-back the parallel lanes shrink to one until this many requests in a row succeed. */
+const CALM_SUCCESSES = 3;
+/** How often a waiting lane looks again whether it may start. */
+const LANE_RECHECK_MS = 1000;
 
 /** A request cut by the user is asked again after this short pause. */
 const KICK_RETRY_MS = 500;
@@ -110,6 +114,8 @@ interface Throttle {
   pace(): Promise<void>;
   onSuccess(): void;
   onPressure(pauseMs: number): void;
+  /** While the provider pushes back only the first lane keeps going; the others wait. */
+  canStart(lane: number): boolean;
 }
 
 function createThrottle(opts: PipelineOptions): Throttle {
@@ -118,6 +124,8 @@ function createThrottle(opts: PipelineOptions): Throttle {
   let extra = 0;
   let nextSlot = 0;
   let cooldownUntil = 0;
+  let pressured = false;
+  let calmStreak = 0;
   return {
     async pace() {
       const now = Date.now();
@@ -127,8 +135,15 @@ function createThrottle(opts: PipelineOptions): Throttle {
     },
     onSuccess() {
       extra = extra < 500 ? 0 : Math.floor(extra / 2);
+      calmStreak++;
+      if (calmStreak >= CALM_SUCCESSES) pressured = false;
+    },
+    canStart(lane) {
+      return !pressured || lane === 0;
     },
     onPressure(pauseMs) {
+      pressured = true;
+      calmStreak = 0;
       cooldownUntil = Math.max(cooldownUntil, Date.now() + pauseMs);
       extra = Math.min(THROTTLE_MAX_EXTRA_MS, Math.max(extra * 2, THROTTLE_FIRST_EXTRA_MS));
     },
@@ -426,13 +441,17 @@ async function runPool<T, R>(
   items: T[],
   limit: number,
   worker: (item: T) => Promise<R>,
+  /** Resolves when the given lane may take its next item; may keep it waiting. */
+  gate?: (lane: number, stopped: () => boolean) => Promise<void>,
 ): Promise<R[]> {
   const results = new Array<R>(items.length);
   let next = 0;
   let failed: unknown;
   let hasFailed = false;
-  const lanes = Array.from({ length: Math.min(limit, items.length) }, async () => {
+  const lanes = Array.from({ length: Math.min(limit, items.length) }, async (_, lane) => {
     while (!hasFailed) {
+      await gate?.(lane, () => hasFailed);
+      if (hasFailed) return;
       const i = next++;
       if (i >= items.length) return;
       try {
@@ -513,15 +532,24 @@ export async function translateSubtitle(
     }
     opts.onPartial(assembleCues(source.cues.slice(0, runCues), byId, opts));
   };
-  const results = await runPool(chunks, opts.concurrency, async (chunk) => {
-    await opts.waitWhilePaused?.();
-    const r = await translateOneChunk(chunk, chunks.length, provider, opts, throttle);
-    doneCues += chunk.cues.length;
-    opts.onProgress?.(doneCues, source.cues.length);
-    finished.set(chunk.number, r);
-    reportPartial();
-    return r;
-  });
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const waitForLane = async (lane: number, stopped: () => boolean): Promise<void> => {
+    while (!throttle.canStart(lane) && !stopped()) await sleep(LANE_RECHECK_MS);
+  };
+  const results = await runPool(
+    chunks,
+    opts.concurrency,
+    async (chunk) => {
+      await opts.waitWhilePaused?.();
+      const r = await translateOneChunk(chunk, chunks.length, provider, opts, throttle);
+      doneCues += chunk.cues.length;
+      opts.onProgress?.(doneCues, source.cues.length);
+      finished.set(chunk.number, r);
+      reportPartial();
+      return r;
+    },
+    waitForLane,
+  );
 
   const byId = new Map<string, string>();
   const usage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
