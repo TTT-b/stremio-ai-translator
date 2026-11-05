@@ -328,35 +328,6 @@ export function decodeSubtitleBytes(bytes: Uint8Array): string {
   const text = utf8.charCodeAt(0) === 0xfeff ? utf8.slice(1) : utf8;
   return text.includes('\uFFFD') ? new TextDecoder('windows-1252').decode(bytes) : text;
 }
-/**
- * Like findStream, but looks again every second for up to `waitMs`: Stremio asks for subtitles the
- * moment the stream is opened, before its server has loaded the torrent.
- */
-export async function findStreamWaiting(
-  serverUrl: string,
-  filename: string,
-  opts: {
-    fetchImpl?: typeof fetch | undefined;
-    waitMs?: number;
-    sleep?: (ms: number) => Promise<void>;
-    /** Stop early when this says there is no time left. */
-    hasTime?: () => boolean;
-  } = {},
-): Promise<LocalStream | undefined> {
-  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const waitMs = opts.waitMs ?? STREAM_WAIT_MS;
-  let stream = await findStream(serverUrl, filename, opts.fetchImpl);
-  for (
-    let waited = 0;
-    !stream && waited < waitMs && (opts.hasTime?.() ?? true);
-    waited += STREAM_POLL_MS
-  ) {
-    await sleep(STREAM_POLL_MS);
-    stream = await findStream(serverUrl, filename, opts.fetchImpl);
-  }
-  return stream;
-}
-
 const probeSchema = z.object({
   streams: z
     .array(

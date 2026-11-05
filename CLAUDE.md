@@ -17,6 +17,14 @@
 - Skills in `.claude/skills/`: follow `model-routing` (Sonnet by default, Opus only for big plans,
   save tokens) and `git-workflow` (safe pull/commit/push) on every task.
 
+## Working rules
+
+- One small task at a time. Do not add features that were not asked for; ask first.
+- Finish a task, then end the conversation: update HANDOFF.md and suggest a fresh session.
+- For any UI change, first describe the screen and the user's click path in plain words
+  and wait for the user's OK before coding.
+- Keep state in the branch and HANDOFF.md, not in the chat.
+
 ## Conventions
 
 - TypeScript strict, ESM, Zod for external input, Vitest. No new dependencies without need.

@@ -5,8 +5,6 @@ export type UiLang = 'he' | 'en';
 
 export const UI_LANGS: readonly UiLang[] = ['he', 'en'];
 
-export const isUiLang = (v: unknown): v is UiLang => v === 'he' || v === 'en';
-
 interface Pair {
   he: string;
   en: string;

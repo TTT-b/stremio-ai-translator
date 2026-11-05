@@ -1988,7 +1988,7 @@ ${tag}
     videoPath: 'Movie.2020.1080p.mkv',
     files: [],
   });
-  const episodePath = (h: Harness, season: number, episode: number, file?: string) =>
+  const episodePath = (season: number, episode: number, file?: string) =>
     `/subtitles/series/${encodeURIComponent(`tt0944947:${season}:${episode}`)}${file ? `/filename=${file}` : ''}.json`;
   const subUrl = async (h: Harness, path: string) =>
     new URL(((await (await h.get(path)).json()) as SubsResponse).subtitles[0]!.url).pathname;
@@ -2083,11 +2083,11 @@ ${tag}
           });
         }),
     });
-    const first = await subUrl(current, episodePath(current, 1, 3, 'Show.S01E03.mkv'));
+    const first = await subUrl(current, episodePath(1, 3, 'Show.S01E03.mkv'));
     await current.get(first);
     expect(await waitFor(async () => (await status()).backgroundSync?.percent === 30)).toBe(true);
 
-    await current.get(episodePath(current, 1, 4, 'Show.S01E04.mkv'));
+    await current.get(episodePath(1, 4, 'Show.S01E04.mkv'));
     await new Promise((r) => setTimeout(r, 300));
     expect(stopped).toBe(false);
     expect((await status()).backgroundSync?.percent).toBe(30);
@@ -2139,7 +2139,7 @@ ${tag}
     type Status = { lastDelivered: { title: string; via: string } | null };
     const status = async () => (await (await current!.get('/api/status')).json()) as Status;
     current = await start({ subWaitMs: 50, settings: { prefetchNext: false } });
-    const path = await subUrl(current, episodePath(current, 1, 3));
+    const path = await subUrl(current, episodePath(1, 3));
     expect((await status()).lastDelivered).toBeNull();
     const ready = await waitFor(async () =>
       (await (await current!.get(path)).text()).includes('HE:'),
@@ -2240,14 +2240,14 @@ ${tag}
       candidatesFor: (q) => [cand({ fileId: 500 + (q.video.episode ?? 0) })],
       contentFor: (c) => tagged(`Ep${c.fileId}`),
     });
-    const three = await subUrl(current, episodePath(current, 1, 3, 'Show.S01E03.mkv'));
+    const three = await subUrl(current, episodePath(1, 3, 'Show.S01E03.mkv'));
     await current.get(three);
     expect(await waitFor(() => asked.includes(4))).toBe(true);
     await waitFor(async () => (await library(current!)).items.some((e) => e.episode === 4));
     expect(asked).not.toContain(5); // one episode ahead, no chain
     const aiBefore = current.translator.calls;
     const downloadsBefore = current.downloads;
-    const four = await subUrl(current, episodePath(current, 1, 4, 'Show.S01E04.mkv'));
+    const four = await subUrl(current, episodePath(1, 4, 'Show.S01E04.mkv'));
     const text = await waitFor(async () =>
       (await (await current!.get(four)).text()).includes('HE:'),
     );
@@ -2263,7 +2263,7 @@ ${tag}
       settings: { prefetchNext: false },
       onSearch: (q) => void asked.push(q.video.episode ?? 0),
     });
-    await current.get(await subUrl(current, episodePath(current, 1, 3)));
+    await current.get(await subUrl(current, episodePath(1, 3)));
     await new Promise((r) => setTimeout(r, 300));
     expect(asked).toEqual([3]);
     await current.close();
@@ -2288,7 +2288,7 @@ ${tag}
         if (q.video.episode === 4) throw new AppError('SOURCE_SUBTITLE_NOT_FOUND');
       },
     });
-    const three = await subUrl(current, episodePath(current, 1, 3));
+    const three = await subUrl(current, episodePath(1, 3));
     await current.get(three);
     await waitFor(() => asked.includes(4));
     await new Promise((r) => setTimeout(r, 200));
@@ -2311,8 +2311,8 @@ ${tag}
       ],
       contentFor: (c) => tagged(`Episode${c.episode}`),
     });
-    const three = await subUrl(current, episodePath(current, 1, 3));
-    const four = await subUrl(current, episodePath(current, 1, 4));
+    const three = await subUrl(current, episodePath(1, 3));
+    const four = await subUrl(current, episodePath(1, 4));
     const t3 = await waitFor(async () =>
       (await (await current!.get(three)).text()).includes('HE:'),
     );
@@ -2334,7 +2334,7 @@ ${tag}
         c.fileId === 1 ? new AppError('SOURCE_SUBTITLE_NOT_FOUND') : undefined,
       contentFor: (c) => tagged(`From${c.fileId}`),
     });
-    const path = await subUrl(current, episodePath(current, 1, 3));
+    const path = await subUrl(current, episodePath(1, 3));
     const done = await waitFor(async () =>
       (await (await current!.get(path)).text()).includes('HE:'),
     );
