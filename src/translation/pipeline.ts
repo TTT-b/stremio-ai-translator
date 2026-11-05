@@ -171,7 +171,16 @@ async function waitOutRateLimits<T>(
           opts.onRateLimitWait?.(1);
         }
         log.warn(
-          { stage: 'API', attempt: n, delayMs: delay, errorCode: err.code },
+          {
+            stage: 'API',
+            attempt: n,
+            delayMs: delay,
+            errorCode: err.code,
+            // Why the provider pushed back (HTTP status, error name): codes only, no text from the video.
+            httpStatus: err.details['status'],
+            errorName: err.details['errorName'],
+            reason: err.message.slice(0, 120),
+          },
           'provider pushed back, waiting to retry',
         );
         waited += delay;
