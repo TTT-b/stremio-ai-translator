@@ -1,6 +1,13 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { combineEta, estimateTranslateSec } from './eta';
+import {
+  backgroundSync,
+  buildQueue,
+  exactComing,
+  totalEtaSec,
+  translateEtaSec,
+  type JobStats,
+} from './jobStatus';
 import { cacheKey, sha256 } from '../cache/fileCache';
 import type { Config } from '../config/env';
 import { findLanguage } from '../config/languages';
@@ -43,9 +50,6 @@ import {
   CONSENSUS_MIN_LEFT,
   QUOTA_REFRESH_MS,
   CANCEL_COOLDOWN_MS,
-  SYNC_ETA_MIN_PERCENT,
-  SYNC_ETA_MIN_MS,
-  SYNC_ETA_STALE_MS,
   type ChosenSource,
   type Job,
   type JobManagerDeps,
@@ -416,106 +420,11 @@ export class JobManager {
 
   /** What the user can still act on, one line per episode: waiting for approval, queued or running. */
   queue(): QueueItem[] {
-    const groups = new Map<string, Job[]>();
-    for (const j of this.jobs.values()) {
-      if (j.status !== 'pending' && j.status !== 'running') continue;
-      const key = videoKey(j.spec);
-      groups.set(key, [...(groups.get(key) ?? []), j]);
-    }
-    // Once one request for an episode has produced its subtitle, the requests that were already
-    // waiting at that moment are not shown any more: they are the same episode asked for again
-    // (another file). A request made after that is a new wait and is shown.
-    for (const [key, active] of groups) {
-      const startedFirst = Math.min(...active.map((j) => j.startedAt));
-      const served = [...this.jobs.values()].some(
-        (j) =>
-          j.status === 'done' && videoKey(j.spec) === key && (j.finishedAt ?? 0) >= startedFirst,
-      );
-      if (served) groups.delete(key);
-    }
-    const items: QueueItem[] = [];
-    for (const jobs of groups.values()) {
-      const first = jobs[0] as Job;
-      const running = jobs.filter((j) => j.status === 'running' && j.stage !== 'queued');
-      const state: QueueItem['state'] = running.length
-        ? 'running'
-        : jobs.some((j) => j.status === 'running')
-          ? 'queued'
-          : 'pending';
-      const percents = jobs.flatMap((j) =>
-        j.progress && j.progress.total > 0
-          ? [Math.min(100, Math.floor((j.progress.done / j.progress.total) * 100))]
-          : [],
-      );
-      const v = first.spec.video;
-      const skippable = this.skippableStep(running);
-      items.push({
-        id: first.id,
-        title: jobs.find((j) => j.title)?.title ?? v.externalId,
-        ...(v.season !== undefined ? { season: v.season } : {}),
-        ...(v.episode !== undefined ? { episode: v.episode } : {}),
-        state,
-        percent: percents.length ? Math.max(...percents) : null,
-        ...(skippable ? { skippable } : {}),
-      });
-    }
-    return items;
+    return buildQueue([...this.jobs.values()], (running) => this.skippableStep(running));
   }
 
   /** Live numbers for the status card. Counts this app session only. */
-  stats(): {
-    state: 'waiting' | 'translating' | 'ratelimited' | 'idle' | 'error';
-    running: number;
-    linesTranslated: number;
-    bytesTranslated: number;
-    progress: { done: number; total: number; percent: number; etaSec: number | null } | null;
-    /** The user paused translating. */
-    paused: boolean;
-    /** Rough seconds until the subtitle is complete, sound check included; null when not known. */
-    totalEtaSec: number | null;
-    stage: Job['stage'] | null;
-    /** While a video is being listened to: how far it is, 0..100. */
-    syncPercent: number | null;
-    /** Code of the latest failure while the state is 'error' (never text from the video). */
-    lastError: string | null;
-    /** OpenSubtitles daily downloads: allowed and left, or null when not known (yet). */
-    quota: { limit: number; left: number } | null;
-    /** The sound check that goes on beside the translation (or after it): how far it is, 0..100. */
-    /** A subtitle with the video's own (exact) timing is on its way to replace the shown one. */
-    exactComing: { title: string; season?: number; episode?: number } | null;
-    backgroundSync: {
-      percent: number;
-      waiting: boolean;
-      etaSec: number | null;
-      title: string;
-      season?: number;
-      episode?: number;
-    } | null;
-    /** The subtitle Stremio took last, for half an hour. */
-    lastDelivered: {
-      title: string;
-      season?: number;
-      episode?: number;
-      via: string;
-      at: number;
-    } | null;
-    /** How the latest background sound check ended, for half an hour. */
-    lastSync: {
-      title: string;
-      season?: number;
-      episode?: number;
-      outcome: 'moved' | 'kept' | 'inSync' | 'unavailable';
-      offsetMs?: number;
-      at: number;
-    } | null;
-    /** Downloads from SubDL this session. */
-    subdlDownloads: number;
-    /** A better subtitle replaced the shown one in the last half hour (Stremio needs a new selection). */
-    upgrade: { title: string; season?: number; episode?: number; at: number } | null;
-    /** The Continue button has something to do: a stuck translation, or a cancelled/failed request. */
-    resumable: boolean;
-    queue: QueueItem[];
-  } {
+  stats(): JobStats {
     const running = [...this.jobs.values()].filter((j) => j.status === 'running').length;
     const state =
       running > 0
@@ -540,7 +449,7 @@ export class JobManager {
       candidates.find((j) => j.id === this.shownJobId) ?? candidates[candidates.length - 1];
     this.shownJobId = current?.id;
     const p = current?.progress;
-    const etaSec = current && p ? this.translateEtaSec(current, p) : null;
+    const etaSec = current && p ? translateEtaSec(current, p, this.paused, this.now()) : null;
     const progress =
       p && p.total > 0
         ? {
@@ -552,7 +461,7 @@ export class JobManager {
         : null;
     const latest = [...this.jobs.values()].filter((j) => j.status === 'running').pop();
     const stage = latest?.stage ?? null;
-    const backgroundSync = this.backgroundSync();
+    const backgroundSyncView = backgroundSync([...this.jobs.values()], this.now());
     return {
       state,
       running,
@@ -560,7 +469,7 @@ export class JobManager {
       bytesTranslated: this.bytesTranslated,
       progress,
       paused: this.paused,
-      totalEtaSec: this.totalEtaSec(current, progress, backgroundSync),
+      totalEtaSec: totalEtaSec(current, progress, backgroundSyncView, this.now()),
       stage,
       syncPercent: stage === 'sync' ? (latest?.syncPercent ?? 0) : null,
       lastError: state === 'error' ? this.lastErrorCode : null,
@@ -571,8 +480,8 @@ export class JobManager {
           ? { ...this.lastUpgrade }
           : null,
       subdlDownloads: this.subdlDownloads,
-      exactComing: this.exactComing(),
-      backgroundSync,
+      exactComing: exactComing([...this.jobs.values()], (j) => this.canUpgrade(j)),
+      backgroundSync: backgroundSyncView,
       lastDelivered:
         this.lastDelivered && this.now() - this.lastDelivered.at < UPGRADE_NOTICE_MS
           ? { ...this.lastDelivered }
@@ -582,83 +491,6 @@ export class JobManager {
           ? { ...this.lastSync }
           : null,
       queue: this.queue(),
-    };
-  }
-
-  /** Rough time left of the translation, from how fast it went so far; null while too early to tell. */
-  private translateEtaSec(job: Job, p: { done: number; total: number }): number | null {
-    if (this.paused || job.status !== 'running' || job.stage !== 'translate') return null;
-    if (job.translateStartedAt === undefined || p.done <= 0 || p.done >= p.total) return null;
-    return estimateTranslateSec(this.now() - job.translateStartedAt, p.done, p.total);
-  }
-
-  /**
-   * Time until the subtitle is complete: what is left of the translation plus what is left of the
-   * sound check. Null when nothing is running or one of the parts cannot be estimated yet.
-   */
-  private totalEtaSec(
-    current: Job | undefined,
-    progress: { etaSec: number | null } | null,
-    sync: ReturnType<JobManager['backgroundSync']>,
-  ): number | null {
-    const translating = current?.status === 'running' && current.stage === 'translate';
-    const translateEta = translating ? (progress?.etaSec ?? null) : 0;
-    const syncing = current?.status === 'running' && current.stage === 'sync';
-    const syncEta = sync
-      ? sync.waiting
-        ? null
-        : sync.etaSec
-      : current && syncing
-        ? this.syncEtaSec(current)
-        : 0;
-    return combineEta(translateEta, syncEta);
-  }
-
-  /**
-   * Rough time left of the sound check, from how fast it went so far. Null while it is too early to
-   * tell, or when no data has arrived for a while (the video is not being sent).
-   */
-  private syncEtaSec(job: Job): number | null {
-    const percent = job.syncPercent ?? 0;
-    if (job.syncStartedAt === undefined || percent < SYNC_ETA_MIN_PERCENT || percent >= 100) {
-      return null;
-    }
-    const now = this.now();
-    if (now - (job.syncProgressAt ?? now) > SYNC_ETA_STALE_MS) return null;
-    const elapsedMs = now - job.syncStartedAt;
-    if (elapsedMs < SYNC_ETA_MIN_MS) return null;
-    const left = (elapsedMs * (100 - percent)) / percent / 1000;
-    return Math.max(30, Math.round(left / 30) * 30); // to half a minute
-  }
-
-  private exactComing(): ReturnType<JobManager['stats']>['exactComing'] {
-    const job = [...this.jobs.values()].find((j) => j.exactPending && this.canUpgrade(j));
-    if (!job) return null;
-    const v = job.spec.video;
-    return {
-      title: job.title ?? '',
-      ...(v.season !== undefined ? { season: v.season } : {}),
-      ...(v.episode !== undefined ? { episode: v.episode } : {}),
-    };
-  }
-
-  /** A sound check that is listening while the job is already translating (or done). */
-  private backgroundSync(): ReturnType<JobManager['stats']>['backgroundSync'] {
-    const job = [...this.jobs.values()].find(
-      (j) =>
-        (j.syncPercent !== undefined || j.syncWaiting) &&
-        j.stage !== 'sync' &&
-        j.lateFit !== undefined,
-    );
-    if (!job) return null;
-    const v = job.spec.video;
-    return {
-      percent: Math.max(0, Math.min(100, Math.round(job.syncPercent ?? 0))),
-      waiting: job.syncWaiting === true,
-      etaSec: this.syncEtaSec(job),
-      title: job.title ?? '',
-      ...(v.season !== undefined ? { season: v.season } : {}),
-      ...(v.episode !== undefined ? { episode: v.episode } : {}),
     };
   }
 

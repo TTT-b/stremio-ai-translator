@@ -1,20 +1,21 @@
-# HANDOFF - where the work stands (2026-10-22 night, branch feat/mp4-save)
+# HANDOFF - where the work stands (2026-11-05, branch refactor/split-manager-html)
 
 Read `CLAUDE.md` and `PLAN.md` first. The user is not a developer: give exact PowerShell steps, answer in Hebrew.
-`main` is still 1.7.0 and untouched. All work is on `feat/mp4-save` (version 1.8.0). Never push to `main`
-or make a release without the user's OK. First: `git pull`, `npm install`, `npm run check`
-(on a slow machine: `npx vitest run --testTimeout=90000`). 504 tests were green on the laptop.
+`main` is 1.8.0 and is already merged INTO this branch. Never push to `main` or make a release without the
+user's OK. First: `git pull`, `npm install`, `npm run check` (560 tests green).
+Electron was updated to 44.10.2 (npm audit fix); the app was started with `npx electron .` and the server
+answered (not tested with a real translation yet).
 
 ## REFACTOR IN PROGRESS (branch refactor/split-manager-html, cut from feat/mp4-save)
 
 Pure move-code split of src/jobs/manager.ts (was 2173 lines) and src/web/html.ts (was 1414), no behavior change.
-Not pushed; main untouched. Commits so far: chore dead-code cleanup, H1, M1.
+Pushed to origin. Commits so far: dead-code cleanup, H1, M1, merge of main 1.8.0, M2 (see below).
 
 - **Done**: H1 shared UI pieces -> src/web/ui/components.ts (html.ts 1390 lines);
   M1 types/constants/helpers -> src/jobs/jobTypes.ts (manager.ts 1898 lines). Each: worker moved verbatim,
   independent QA = PASS, `npm run check` green (512 tests), HTML render byte-identical to baseline.
-- **Next, Stage 2**: M2 read-only status views (queue(), stats(), syncEtaSec, exactComing, backgroundSync)
-  -> src/jobs/jobStatus.ts, and H2 server-side markup per screen -> src/web/ui/*.ts. Then Stage 3: H3 (browser
+- **M2 done**: read-only status views -> src/jobs/jobStatus.ts (pure functions; stats() still assembles).
+- **Next, Stage 2**: H2 server-side markup per screen -> src/web/ui/*.ts. Then Stage 3: H3 (browser
   script, stays inline with same nonce) + M3 (sync/upgrade, shared state, HIGH risk). Stage 4: M4 runJob
   pipeline (HIGHEST risk, last). Stage 5: final QA + manual Stremio checklist. Lines in the original plan
   shifted by about -275 in manager.ts: re-find the areas by name.
