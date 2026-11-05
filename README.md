@@ -1,4 +1,4 @@
-# AI Subtitle Translator for Stremio
+# TTT Sub: AI Subtitle Translator for Stremio
 
 A real-time AI subtitle translator for [Stremio](https://www.stremio.com/). When you play a movie
 or episode it offers a subtitle in your language (Hebrew by default). If OpenSubtitles already has
@@ -79,7 +79,9 @@ Then open http://127.0.0.1:7000/ . Success looks like
    a "Saved" message; the keys are never shown again.
 3. The window has its own title bar. The **X** asks "Close the Translator?": **Minimize to System
    Tray** hides the app (bottom-right, near the clock) and translations keep running; **Quit
-   Program** stops the add-on. Right-click the tray icon for **Open UI** or **Quit**.
+   Program** stops the add-on. Right-click the tray icon for **Open the translator**, **Pause
+   translation** / **Resume translation**, the **time until fully translated** (sound sync
+   included), **Start with Windows**, and **Quit**.
 4. Continue with **Install in Stremio** below, using http://127.0.0.1:7000/manifest.json.
 
 Keys, `settings.json`, `data/` and `logs/` live in your user profile folder
@@ -276,6 +278,9 @@ When several subtitles are found, the one whose release name is closest to the p
 
 ### Developer settings (Settings > About)
 
+Hidden for everyone by default. The author shows them by starting the app with the environment
+variable `SHOW_DEV_SETTINGS=1` (for example in `.env`).
+
 Everything here is saved at once and is meant for trying things:
 
 - **Sound check:** _translate at once, check in the background_ (recommended and the default: the
@@ -345,6 +350,22 @@ OpenSubtitles and no AI are used (no quota is spent): a random subtitle is picke
 prefix `HE:`. Besides the built-in samples, it picks from any `.srt` files you put in the `test-subtitles`
 folder inside the app's data folder (`data\test-subtitles` when run from the project). Test subtitles are
 not added to the library. While test mode is on, real translations are paused, so turn it off when done.
+
+### Start with Windows, and pausing
+
+Desktop app only. **Settings &rarr; General** has two switches: **Start the app with Windows** and
+**Start minimized** (only the tray icon, no window). The second is greyed out until the first is on.
+The last step of the first-run wizard asks the same two questions, and the tray menu has the first
+switch too. The choice is kept in the Windows login item plus `startup.json` in the app data folder.
+It does nothing when the app is run from source (`npm run desktop`); only the installed app can
+start with Windows.
+
+The tray menu's **Pause translation** stops sending new parts to the AI until you press **Resume
+translation**. Parts already sent finish; the sound check is not paused. The main screen shows the
+time left for the translation and a total that includes the sound check, as estimates from the
+speed so far.
+
+The SubDL and Jimaku checks (wizard and main screen) appear only once a key for them is saved.
 
 ### The Continue button
 
@@ -487,7 +508,7 @@ config ID in the manifest URL, authentication, rate limiting, SSRF hardening and
 
 ### Save a video with the subtitle inside
 
-In **My subtitles**, the **Save as MKV (computer)** button (desktop app) saves the video with the subtitle inside. When
+In **My subtitles**, each subtitle has two buttons: **Subtitles** (downloads the SRT file) and, in the desktop app, **Video** with a small menu. **MKV** (computer and TV) saves the video with the subtitle inside. When
 the video is not available in Stremio right now it asks you to choose the
 video file you have on this computer (the window says so), then saves a copy next to it (`Name.heb.mkv`) with the
 translated subtitle as an extra, switchable track. Picture and sound are copied as they are (no
@@ -495,7 +516,7 @@ re-encoding, so it takes seconds and loses no quality) and the original file is 
 overwritten. It uses the ffmpeg that comes with Stremio. The subtitle is the first track and is set
 as the default one.
 
-The **Save as MP4 (phone)** button next to it makes the same copy as an MP4
+The **MP4** choice in the same menu makes the same copy as an MP4
 (`Name.heb.mp4`). iPad, iPhone and many phones play MKV only in an app such as VLC, but they open an
 MP4 in the built-in player, where the subtitle shows under the subtitles button (choose Hebrew; it is
 not switched on by itself). The MP4 keeps only the translated subtitle (not the other subtitle
@@ -503,6 +524,24 @@ tracks), copies the picture (HEVC is tagged `hvc1`, which Apple players need), a
 when it is AAC, AC3, E-AC3, MP3 or ALAC, otherwise it converts the sound to AAC. Videos in other
 picture formats (such as VP9 or AV1) may not play on an iPad even as MP4. Not every player shows
 Hebrew punctuation in the right place; VLC is the fallback.
+
+While a video is being saved, a thin bar under the episode row shows the progress, the time left
+(an estimate), and how much has been written. **Cancel** stops it and removes the half-written file.
+When it is done the row shows "The video is ready" with the file size, a **Show in folder** button
+and a close button. The video menu shows the approximate size next to MKV and MP4 when Stremio's
+server knows the file size.
+
+### Timing labels in My subtitles
+
+Each saved subtitle can carry a timing label: **Exact timing** (green, a check mark: the video's own
+subtitle or an exact match), **Timing by speech** (blue, a sound wave: fitted to the voices) and
+**Estimated timing** (orange, a wave: a guess, worth checking).
+
+### Removing a key
+
+In Settings, Accounts and keys, every set key (AI, OpenSubtitles key, OpenSubtitles login, SubDL,
+Jimaku) has a small x inside its "Set" label. It asks "Remove the key?" before clearing it from the
+local `.env` file. Password fields show the eye button only after you type something.
 
 ### Trying changes without installing the app
 

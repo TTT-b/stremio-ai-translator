@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { stripOverrideTags } from '../subtitles/parse';
 import { basename, dirname, extname, isAbsolute, join } from 'node:path';
 
 /**
@@ -220,7 +221,26 @@ export function mp4Args(
   ];
 }
 
-export type RunFfmpeg = (ffmpeg: string, args: string[], signal: AbortSignal) => Promise<void>;
+/** How far ffmpeg has got: seconds of video written, the video's length when known, bytes written. */
+export interface MuxProgress {
+  doneSec: number;
+  totalSec: number | undefined;
+  bytes: number;
+}
+
+export type RunFfmpeg = (
+  ffmpeg: string,
+  args: string[],
+  signal: AbortSignal,
+  onProgress?: (p: MuxProgress) => void,
+) => Promise<void>;
+
+/** Parses 'Duration: 00:23:40.12' from ffmpeg's header text into seconds. */
+export function parseDurationSec(text: string): number | undefined {
+  const m = /Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/.exec(text);
+  if (!m) return undefined;
+  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+}
 
 /** Looks at a video's streams (replaced in tests). */
 export type ProbeCodecs = (
@@ -253,11 +273,40 @@ const realProbe: ProbeCodecs = (ffmpeg, input, signal) =>
     child.once('close', finish);
   });
 
-const realRun: RunFfmpeg = (ffmpeg, args, signal) =>
+const realRun: RunFfmpeg = (ffmpeg, args, signal, onProgress) =>
   new Promise((resolve, reject) => {
-    const child = spawn(ffmpeg, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'ignore'] });
+    const withProgress = onProgress ? ['-progress', 'pipe:1', '-nostats', ...args] : args;
+    const child = spawn(ffmpeg, withProgress, {
+      windowsHide: true,
+      stdio: ['ignore', onProgress ? 'pipe' : 'ignore', onProgress ? 'pipe' : 'ignore'],
+    });
     const stop = () => child.kill();
     signal.addEventListener('abort', stop, { once: true });
+    let totalSec: number | undefined;
+    let header = '';
+    let doneSec = 0;
+    let bytes = 0;
+    let pending = '';
+    if (onProgress) {
+      child.stderr?.on('data', (d: Buffer) => {
+        if (totalSec === undefined && header.length < 20_000) {
+          header += d.toString('utf8');
+          totalSec = parseDurationSec(header);
+        }
+      });
+      child.stdout?.on('data', (d: Buffer) => {
+        pending += d.toString('utf8');
+        const lines = pending.split(/\r?\n/);
+        pending = lines.pop() ?? '';
+        for (const line of lines) {
+          const [key, value] = line.split('=');
+          if (key === 'out_time_us' || key === 'out_time_ms')
+            doneSec = Math.max(0, Number(value)) / 1e6;
+          else if (key === 'total_size') bytes = Math.max(0, Number(value)) || 0;
+          else if (key === 'progress') onProgress({ doneSec, totalSec, bytes });
+        }
+      });
+    }
     child.once('error', reject);
     child.once('close', (code) => {
       signal.removeEventListener('abort', stop);
@@ -281,6 +330,7 @@ export interface MuxRequest {
   signal?: AbortSignal;
   run?: RunFfmpeg;
   probe?: ProbeCodecs;
+  onProgress?: (p: MuxProgress) => void;
 }
 
 /** Writes the copy and returns its path. A half-written file is removed when something fails. */
@@ -296,7 +346,8 @@ export async function muxSubtitle(req: MuxRequest): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), 'ai-sub-mux-'));
   const srtFile = join(dir, 'subtitle.srt');
   try {
-    writeFileSync(srtFile, req.srt, 'utf8');
+    const srt = stripOverrideTags(req.srt);
+    writeFileSync(srtFile, srt, 'utf8');
     const signal = req.signal ?? new AbortController().signal;
     const args =
       format === 'mp4'
@@ -308,10 +359,10 @@ export async function muxSubtitle(req: MuxRequest): Promise<string> {
             await (req.probe ?? realProbe)(req.ffmpeg, video, signal),
           )
         : muxArgs(video, srtFile, output, req.language);
-    await (req.run ?? realRun)(req.ffmpeg, args, signal);
+    await (req.run ?? realRun)(req.ffmpeg, args, signal, req.onProgress);
     // The SRT goes next to it with the same name, so any player can use it too.
     const srtOut = output.replace(/\.(mkv|mp4)$/i, '.srt');
-    if (!existsSync(srtOut)) writeFileSync(srtOut, req.srt, 'utf8');
+    if (!existsSync(srtOut)) writeFileSync(srtOut, srt, 'utf8');
     return output;
   } catch (err) {
     rmSync(output, { force: true });

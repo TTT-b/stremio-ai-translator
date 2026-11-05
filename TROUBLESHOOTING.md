@@ -75,6 +75,19 @@ subtitle's sync. In order of effect:
    compares 3 downloaded subtitles and uses the one most agree with (`timing consensus` in the
    log). With a small daily quota it downloads a single file to save the quota.
 
+## The app does not start with Windows
+
+- It only works in the installed app, not with `npm run desktop`.
+- Open **Settings → General** and check that **Start the app with Windows** is on. Windows can also
+  turn it off: **Settings → Apps → Startup**.
+- If no window opens at start, that is **Start minimized**: look for the icon near the clock, or
+  turn that switch off.
+
+## Translation is paused
+
+The tray menu has **Resume translation**. While paused, the main screen says so and shows no time
+estimate.
+
 ## Hebrew punctuation looks wrong
 
 Symptoms: periods or question marks at the wrong end of a line. Since v1.4.2 the fix is always on

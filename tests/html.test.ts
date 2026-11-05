@@ -1,3 +1,4 @@
+import { Script } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import { ERROR_META } from '../src/errors';
 import { ERROR_MESSAGES_HE, renderStatusPage, prettyModel, providerLine } from '../src/web/html';
@@ -321,3 +322,152 @@ function base() {
     rtlFix: false,
   };
 }
+
+describe('start with Windows, key-gated checks and the progress bar', () => {
+  const base = {
+    nonce: 'abc',
+    aiConfigured: true,
+    aiProviderLabel: 'Google Gemini',
+    aiModel: 'm',
+    dualSubtitles: false,
+    openSubtitlesKeyConfigured: true,
+    openSubtitlesLoginConfigured: true,
+    openSubtitlesUsername: 'u',
+    languages: [{ code: 'he', name: 'Hebrew' }],
+    targetLanguage: 'he',
+    manifestUrl: 'http://127.0.0.1:7000/manifest.json',
+    installUrl: 'https://web.stremio.com/#/addons',
+    stremioReady: true,
+    rtlFix: false,
+  };
+
+  it('offers the two startup switches in settings and a sixth wizard step only in the desktop app', () => {
+    const desktop = renderStatusPage({ ...base, desktop: true });
+    expect(desktop).toContain('id="d-startup"');
+    expect(desktop).toContain('id="d-minimized"');
+    expect(desktop).toContain('id="w-startup"');
+    expect(desktop).toContain('data-pane="6"');
+    expect(desktop.match(/data-bar="\d"/g)).toHaveLength(6);
+    const browser = renderStatusPage(base);
+    expect(browser).not.toContain('id="d-startup"');
+    expect(browser).not.toContain('data-pane="6"');
+    expect(browser.match(/data-bar="\d"/g)).toHaveLength(5);
+  });
+
+  it('hides the SubDL and Jimaku checks until their key is set', () => {
+    const none = renderStatusPage(base);
+    expect(none.match(/data-check-row="subdl" class="hidden /g)).toHaveLength(2);
+    expect(none.match(/data-check-row="jimaku" class="hidden /g)).toHaveLength(2);
+    const keyed = renderStatusPage({
+      ...base,
+      subdlKeyConfigured: true,
+      jimakuKeyConfigured: true,
+    });
+    expect(keyed).not.toMatch(/data-check-row="(subdl|jimaku)" class="hidden /);
+    expect(keyed.match(/data-check-row="subdl"/g)).toHaveLength(2);
+  });
+
+  it('moves the progress bars without a width animation, so they do not wobble', () => {
+    const bar = /id="st-progress" class="([^"]*)"/.exec(page)?.[1] ?? '';
+    const sync = /id="st-sync-fill" class="([^"]*)"/.exec(page)?.[1] ?? '';
+    expect(bar).not.toContain('transition');
+    expect(sync).not.toContain('transition');
+    expect(page).toContain('id="st-progress-eta"');
+    expect(page).toContain('id="st-total-eta"');
+  });
+});
+
+describe('unsaved changes in the settings drawer', () => {
+  const html = renderStatusPage({
+    nonce: 'abc',
+    aiConfigured: true,
+    aiProviderLabel: 'Google Gemini',
+    aiModel: 'm',
+    dualSubtitles: false,
+    openSubtitlesKeyConfigured: true,
+    openSubtitlesLoginConfigured: true,
+    openSubtitlesUsername: 'u',
+    languages: [{ code: 'he', name: 'Hebrew' }],
+    targetLanguage: 'he',
+    manifestUrl: 'http://127.0.0.1:7000/manifest.json',
+    installUrl: 'https://web.stremio.com/#/addons',
+    stremioReady: true,
+    rtlFix: false,
+    desktop: true,
+  });
+
+  it('offers the library download as two icon buttons: subtitles, and a video menu with MKV and MP4', () => {
+    expect(html).toContain('libSubsBtn');
+    expect(html).toContain("muxOption('MKV'");
+    expect(html).toContain("muxOption('MP4'");
+    expect(html).not.toContain('libMuxMp4)');
+  });
+
+  it('shows the eye button of a password field only once something is typed', () => {
+    expect(html).toContain('top-1/2 hidden h-8 w-8');
+    expect(html).toContain("b.classList.toggle('hidden', !has)");
+  });
+
+  it('gives clickable controls the hand cursor', () => {
+    expect(html).toContain('select,button,summary');
+    expect(html).toContain('cursor:pointer');
+  });
+
+  it('has a page script that is valid JavaScript', () => {
+    const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1] ?? '');
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const code of scripts) expect(() => new Script(code)).not.toThrow();
+  });
+
+  it('shows the three timing kinds in different colors, each with its own icon', () => {
+    for (const hex of ['#4cc38a', '#5aa9f0', '#f08a4b']) expect(html).toContain(hex);
+    expect(html).not.toContain('border-amber-400 text-amber-400');
+  });
+
+  it('follows a video save with a thin bar, a cancel button, and a done row with folder and close', () => {
+    for (const part of ["'/api/mux/'", "'/cancel'", 'libReady', 'revealVideo', 'libCancel']) {
+      expect(html).toContain(part);
+    }
+  });
+
+  it('asks to save, discard or keep editing before closing with changes', () => {
+    for (const id of ['unsaved-modal', 'unsaved-save', 'unsaved-discard', 'unsaved-stay']) {
+      expect(html).toContain(`id="${id}"`);
+    }
+  });
+
+  it('does not save the startup switches by itself: only the Save button applies them', () => {
+    expect(html).toContain("wireStartup('d-startup', 'd-minimized', false);");
+    expect(html).toContain("startupApi.set($('d-startup').checked, $('d-minimized').checked)");
+  });
+});
+
+describe('developer settings', () => {
+  const base = {
+    nonce: 'abc',
+    aiConfigured: true,
+    aiProviderLabel: 'Google Gemini',
+    aiModel: 'm',
+    dualSubtitles: false,
+    openSubtitlesKeyConfigured: true,
+    openSubtitlesLoginConfigured: true,
+    openSubtitlesUsername: 'u',
+    languages: [{ code: 'he', name: 'Hebrew' }],
+    targetLanguage: 'he',
+    manifestUrl: 'http://127.0.0.1:7000/manifest.json',
+    installUrl: 'https://web.stremio.com/#/addons',
+    stremioReady: true,
+    rtlFix: false,
+  };
+
+  it('are hidden from users, but the page still works', () => {
+    const html = renderStatusPage(base);
+    expect(html).toMatch(/<details hidden[^>]*>[\s\S]*?id="dev-sound"/);
+  });
+
+  it('are shown when the author turns them on', () => {
+    const html = renderStatusPage({ ...base, devSettings: true });
+    expect(html).not.toMatch(/<details hidden[^>]*>[\s\S]*?id="dev-sound"/);
+    expect(html).toContain('id="dev-sound"');
+  });
+});

@@ -2,12 +2,13 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../src/errors';
 import { chunkCues } from '../src/subtitles/chunk';
-import { parseSubtitle } from '../src/subtitles/parse';
+import { parseSubtitle, stripOverrideTags } from '../src/subtitles/parse';
 import { applyRtlFix } from '../src/subtitles/rtl';
 import { serializeSubtitle } from '../src/subtitles/serialize';
 import {
   assertSameStructure,
   findChunkProblems,
+  findSuspiciousLines,
   stripForeignScripts,
 } from '../src/subtitles/validate';
 
@@ -91,6 +92,24 @@ describe('chunkCues', () => {
     expect(chunks[0]?.upcoming.map((c) => c.id)).toEqual(['5', '6', '7']);
     expect(chunks[1]?.upcoming.map((c) => c.id)).toEqual(['9', '10']);
     expect(chunks[2]?.upcoming).toEqual([]);
+  });
+});
+
+describe('suspicious Latin leftovers', () => {
+  const src = [{ index: 1, startMs: 0, endMs: 1, text: 'No way, Bob! OK' }];
+  const HE = 'שלום';
+  const check = (text: string, code = 'he') => findSuspiciousLines(src, [{ id: '1', text }], code);
+
+  it('flags a Latin word that is not in the source line', () => {
+    expect(check(HE + ' lad')).toEqual(['1']);
+  });
+  it('accepts names from the source, abbreviations and single letters', () => {
+    expect(check(HE + ' Bob')).toEqual([]);
+    expect(check(HE + ' DNA ok kg')).toEqual([]);
+    expect(check(HE + ' T:')).toEqual([]);
+  });
+  it('does not check languages written in Latin', () => {
+    expect(check('hola lad', 'es')).toEqual([]);
   });
 });
 
@@ -213,5 +232,18 @@ describe('rtl fix', () => {
 
   it('leaves empty lines alone', () => {
     expect(applyRtlFix('א\n\nב')).toBe(`${RLM}א${RLM}\n\n${RLM}ב${RLM}`);
+  });
+});
+
+describe('style blocks inside subtitle text', () => {
+  it('removes position and style blocks such as an8, keeps the words, and leaves other braces alone', () => {
+    const srt =
+      '1\n00:00:01,000 --> 00:00:02,000\n{\\an8}The police said {\\i1}no{\\i0}.\nA {set} of keys\n';
+    const cue = parseSubtitle(srt).cues[0];
+    expect(cue?.text).toBe('The police said no.\nA {set} of keys');
+  });
+  it('strips them from text that is already translated', () => {
+    expect(stripOverrideTags('{\\an8}המשטרה קבעה')).toBe('המשטרה קבעה');
+    expect(stripOverrideTags('בלי תגים')).toBe('בלי תגים');
   });
 });

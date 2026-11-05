@@ -64,6 +64,8 @@ export interface Job {
   stage?: 'queued' | 'local' | 'sync' | 'search' | 'translate';
   /** When the translation last moved (a step started or a part finished); a long silence is a stall. */
   progressAt?: number;
+  /** When the translation of the file began, for the time estimate (pauses are subtracted). */
+  translateStartedAt?: number;
   /** The search inside the video, still running after the job went on without it (see upgradeLater). */
   lateEmbedded?: Promise<ChosenSource | undefined>;
   /** The video's own subtitle is still being read (or translated) to replace the shown one. */

@@ -62,6 +62,8 @@ export interface StatusPageData {
   rtlFix: boolean;
   /** True inside the Electron desktop window: renders the custom title bar. */
   desktop?: boolean;
+  /** Show Settings > About > Developer settings (off for everyone but the author: SHOW_DEV_SETTINGS=1). */
+  devSettings?: boolean;
   /** Language of the screens. Hebrew (right-to-left) unless set to English. */
   uiLang?: UiLang;
 }
@@ -72,6 +74,10 @@ const CSS = (
     ? __TAILWIND_CSS__ // embedded by scripts/build-electron.mjs
     : readFileSync(new URL('./tailwind.generated.css', import.meta.url), 'utf8')
 ).replace(/<\/style/gi, '<\\/style');
+
+/** Everything that can be clicked shows the hand cursor (a disabled control shows the arrow). */
+const POINTER_CSS =
+  'select,button,summary,[role=button],[role=option],label[for],input[type=checkbox],input[type=range]{cursor:pointer}button:disabled,input:disabled,select:disabled{cursor:default}';
 
 /** Hebrew text for the API error codes (kept for callers and tests; see i18n.ts for both languages). */
 export const ERROR_MESSAGES_HE = ERROR_MESSAGES.he;
@@ -146,12 +152,20 @@ export function renderStatusPage(d: StatusPageData): string {
     escapeHtml(t(lang, key, vars));
   /** A password input with an eye button that shows or hides what was typed. */
   const passwordField = (id: string, placeholder: string): string =>
-    `<div class="relative"><input class="${field} !pe-11" id="${id}" type="password" autocomplete="off" placeholder="${placeholder}"><button type="button" data-reveal="${id}" aria-pressed="false" aria-label="${tt('showPassword')}" title="${tt('showPassword')}" class="absolute end-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-warm-mu transition hover:text-warm-tx focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac/40"><svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path data-slash class="hidden" d="M4 4l16 16"/></svg></button></div>`;
+    `<div class="relative"><input class="${field} !pe-11" id="${id}" type="password" autocomplete="off" placeholder="${placeholder}"><button type="button" data-reveal="${id}" aria-pressed="false" aria-label="${tt('showPassword')}" title="${tt('showPassword')}" class="absolute end-2 top-1/2 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-warm-mu transition hover:text-warm-tx focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac/40"><svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path data-slash class="hidden" d="M4 4l16 16"/></svg></button></div>`;
   /** "Forward" arrow: points left in right-to-left screens. */
   const arrow = lang === 'he' ? '&larr;' : '&rarr;';
   const nudge =
     'transition-transform duration-200 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1';
 
+  const askBtn = (extra: string) =>
+    `rounded-lg border px-2 py-0.5 font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac ${extra}`;
+  const keyRow = (field: string, label: string, ok: boolean, yes = tt('configured')) =>
+    `<li data-key-row class="flex items-center justify-between gap-3"><span>${label}</span>${
+      ok
+        ? `<span data-rm-normal class="inline-flex items-center"><span class="inline-flex items-center gap-1.5 rounded-full border border-warm-ok/40 bg-warm-ok/10 py-0.5 ps-2.5 pe-1.5 text-xs font-semibold text-warm-ok"><span class="h-1.5 w-1.5 rounded-full bg-warm-ok"></span>${yes}<button type="button" data-rm title="${tt('removeKeyAria')}" aria-label="${tt('removeKeyAria')}" class="ms-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] leading-none transition hover:bg-rose-400/20 hover:text-rose-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">&#10005;</button></span></span><span data-rm-ask class="hidden items-center gap-2 text-xs"><span class="text-warm-mu">${tt('removeKeyAsk')}</span><button type="button" data-rm-yes="${field}" class="${askBtn('border-rose-400/50 text-rose-300 hover:bg-rose-400/10')}">${tt('removeKeyYes')}</button><button type="button" data-rm-no class="${askBtn('border-warm-ln text-warm-mu hover:text-warm-tx')}">${tt('removeKeyNo')}</button></span>`
+        : badge(false)
+    }</li>`;
   const badge = (ok: boolean, yes = tt('configured'), no = tt('missing')) =>
     `<span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
       ok
@@ -169,7 +183,7 @@ export function renderStatusPage(d: StatusPageData): string {
 
   /** Custom title bar for the frameless desktop window (drag area + minimize / close-to-tray). */
   const titleBar = `<div dir="ltr" class="drag fixed inset-x-0 top-0 z-50 flex h-9 items-center justify-between border-b border-warm-ln bg-warm-sf">
-<div class="flex items-center gap-2 pl-3 text-xs font-medium text-warm-mu">${logo}<span dir="${dir}">${tt('appTitle')}</span></div>
+<div class="flex items-center gap-2 pl-3 text-xs font-medium text-warm-mu">${logo}<span dir="${dir}" class="font-bold text-warm-tx">${tt('appTitle')}</span><span dir="${dir}">${tt('appTagline')}</span></div>
 <div class="flex items-center"><button type="button" id="update-btn" class="hidden no-drag mr-2 h-6 items-center gap-1.5 rounded-lg bg-warm-ac px-2.5 text-xs font-bold text-warm-on transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac/60" title="${tt('updateTitle')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v8m0 0L4.5 6.5M8 10l3.5-3.5M3 13h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>${tt('update')}</span></button>
 <button type="button" id="win-min" class="${winBtn}" aria-label="${tt('minimize')}"><svg width="14" height="14" viewBox="0 0 10 10" stroke-width="1.1"><path d="M0 5h10" stroke="currentColor"/></svg></button>
 <button type="button" id="win-max" class="${winBtn}" aria-label="${tt('maximize')}"><svg width="14" height="14" viewBox="0 0 10 10" stroke-width="1.1" fill="none"><rect id="win-max-icon" x=".5" y=".5" width="9" height="9" stroke="currentColor"/></svg></button>
@@ -202,7 +216,7 @@ export function renderStatusPage(d: StatusPageData): string {
   };
 
   /** Wizard steps: short label (progress bar), title and one-line explanation. */
-  const STEPS = [1, 2, 3, 4, 5].map((n) => [
+  const STEPS = Array.from({ length: d.desktop ? 6 : 5 }, (_, i) => i + 1).map((n) => [
     t(lang, `step${n}Label` as StrKey),
     t(lang, `step${n}Title` as StrKey),
     t(lang, `step${n}Sub` as StrKey),
@@ -222,6 +236,7 @@ export function renderStatusPage(d: StatusPageData): string {
   const GROUP_ICON: Partial<Record<StrKey, string>> = {
     secKeys: '&#128273;',
     secTranslate: '&#127760;',
+    secGeneral: '&#9881;',
     secMaintenance: '&#129529;',
     secDev: '&#128295;',
     menuAbout: '&#8505;',
@@ -261,16 +276,16 @@ export function renderStatusPage(d: StatusPageData): string {
 <div class="flex gap-2"><input id="manifest-d" readonly dir="ltr" class="${field} min-w-0 flex-1 font-mono text-[13px]" value="${escapeHtml(d.manifestUrl)}" aria-label="${tt('manifestAria')}"><button type="button" id="copy-d" class="${btn}">${tt('copy')}</button></div></section>`
     : '';
 
-  const testRow = (label: string, button: string, resultId: string, extra = '') =>
-    `<div class="${extra}flex items-center justify-between gap-3 rounded-2xl border border-warm-ln px-3.5 py-2.5"><div class="min-w-0"><div class="text-sm font-semibold text-warm-tx">${label}</div><span class="${result} mt-0.5 !text-xs text-warm-mu" id="${resultId}"></span></div>${button}</div>`;
+  const testRow = (label: string, button: string, resultId: string, extra = '', rowName = '') =>
+    `<div${rowName ? ` data-check-row="${rowName}"` : ''} class="${extra}flex items-center justify-between gap-3 rounded-2xl border border-warm-ln px-3.5 py-2.5"><div class="min-w-0"><div class="text-sm font-semibold text-warm-tx">${label}</div><span class="${result} mt-0.5 !text-xs text-warm-mu" id="${resultId}"></span></div>${button}</div>`;
   const testBtn = (attr: string) =>
     `<button type="button" class="${btn} shrink-0 !py-2 !text-[13px]" ${attr}>${tt('testBtn')}</button>`;
   /** The three checks, used in the last wizard step and on the main screen (ids differ by prefix). */
   const checks = (rp: string, sampleId: string, outId: string) =>
     `<div class="grid grid-cols-2 gap-2.5">${testRow(tt('testAi'), testBtn(`data-test="ai" data-rp="${rp}"`), `${rp}ai`)}
 ${testRow(tt('testOs'), testBtn(`data-test="opensubtitles" data-rp="${rp}"`), `${rp}opensubtitles`)}
-${testRow(tt('testSubdl'), testBtn(`data-test="subdl" data-rp="${rp}"`), `${rp}subdl`)}
-${testRow(tt('testJimaku'), testBtn(`data-test="jimaku" data-rp="${rp}"`), `${rp}jimaku`)}
+${testRow(tt('testSubdl'), testBtn(`data-test="subdl" data-rp="${rp}"`), `${rp}subdl`, d.subdlKeyConfigured ? '' : 'hidden ', 'subdl')}
+${testRow(tt('testJimaku'), testBtn(`data-test="jimaku" data-rp="${rp}"`), `${rp}jimaku`, d.jimakuKeyConfigured ? '' : 'hidden ', 'jimaku')}
 ${testRow(tt('testSample'), testBtn(`id="${sampleId}" data-sample data-res="${rp}sample" data-out="${outId}"`), `${rp}sample`, 'col-span-2 ')}
 <pre id="${outId}" hidden dir="auto" class="col-span-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-2xl border border-warm-ln bg-warm-bg p-3 text-xs"></pre></div>`;
 
@@ -343,7 +358,7 @@ ${toggle('d-test', d.testMode === true, 'testOn')}
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>${tt('appTitle')}</title>
-<style nonce="${escapeHtml(d.nonce)}">${CSS}</style></head>
+<style nonce="${escapeHtml(d.nonce)}">${CSS}${POINTER_CSS}</style></head>
 <body class="min-h-screen bg-warm-bg font-sans text-warm-tx antialiased">
 ${d.desktop ? titleBar : ''}
 <main class="mx-auto flex min-h-screen w-full flex-col items-center px-4 pb-10 sm:px-10 ${d.desktop ? 'pt-[76px]' : 'pt-10'}">
@@ -355,7 +370,7 @@ ${d.desktop ? titleBar : ''}
       `<li class="h-[5px] flex-1 rounded-full bg-warm-ln transition-colors" data-bar="${i + 1}" title="${escapeHtml(s[0])}"><span class="sr-only">${escapeHtml(s[0])}</span></li>`,
   ).join('')}</ol>
 <section class="flex min-h-[540px] w-full flex-col gap-5 rounded-[22px] border border-warm-ln bg-warm-sf p-8" aria-live="polite">
-<div><div id="w-stepof" class="mb-2 text-xs font-semibold tracking-wide text-warm-ac">${tt('stepOf', { n: 1 })}</div><h2 id="w-title" class="text-[26px] font-bold leading-tight text-warm-tx">${escapeHtml(STEPS[0]?.[1] ?? '')}</h2><p id="w-sub" class="mt-2 text-sm leading-relaxed text-warm-mu">${escapeHtml(STEPS[0]?.[2] ?? '')}</p></div>
+<div><div id="w-stepof" class="mb-2 text-xs font-semibold tracking-wide text-warm-ac">${tt('stepOf', { n: 1, total: STEPS.length })}</div><h2 id="w-title" class="text-[26px] font-bold leading-tight text-warm-tx">${escapeHtml(STEPS[0]?.[1] ?? '')}</h2><p id="w-sub" class="mt-2 text-sm leading-relaxed text-warm-mu">${escapeHtml(STEPS[0]?.[2] ?? '')}</p></div>
 
 <div data-pane="1" class="flex flex-col gap-2">
 <label class="${labelCls}" for="k-ai">${tt('keyAiLabel')}</label>
@@ -391,6 +406,8 @@ ${checks('r-', 'sample', 'sample-out')}
 
 <div data-pane="5" class="hidden flex-col gap-3.5">${install}</div>
 
+${d.desktop ? `<div data-pane="6" class="hidden flex-col gap-3">${toggle('w-startup', true, 'startupLabel', 'startupHint')}${toggle('w-minimized', true, 'minimizedLabelWizard', 'minimizedHint')}</div>` : ''}
+
 <div class="mt-auto"><span class="${result} mb-2 text-center" id="w-result"></span>
 <div class="flex items-center justify-between gap-3"><button type="button" id="w-back" class="invisible rounded-lg py-2.5 text-sm font-semibold text-warm-mu transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${tt('back')}</button><button type="button" id="w-next" class="${btnPrimary} min-w-[150px] text-center">${tt('next')} ${arrow}</button></div></div>
 </section>
@@ -404,9 +421,10 @@ ${checks('r-', 'sample', 'sample-out')}
 <section class="flex flex-col gap-3.5 rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-xl shadow-black/20">
 <div class="flex flex-wrap items-center justify-between gap-3"><div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div><div class="flex flex-wrap items-center gap-2"><button type="button" id="st-cancel-btn" class="${btn} hidden whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('qCancel')}</button><button type="button" id="st-skip-btn" class="${btn} hidden whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('qSkip')}</button><button type="button" id="sync-now-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('syncNowHint')}">${tt('syncNowBtn')}</button><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('resumeHint')}">${tt('resumeBtn')}</button></div></div>
 <div id="st-progress-text" class="text-[26px] font-extrabold leading-tight text-warm-tx">${tt('noSub')}</div>
-<div class="h-2.5 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('progressAria')}" aria-valuemin="0" aria-valuemax="100"><div id="st-progress" class="h-full w-0 rounded-full bg-warm-ac transition-[width] duration-500"></div></div>
+<div class="h-2.5 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('progressAria')}" aria-valuemin="0" aria-valuemax="100"><div id="st-progress" class="h-full w-0 rounded-full bg-warm-ac"></div></div>
+<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-warm-mu"><span id="st-progress-eta"></span><span id="st-total-eta" class="hidden font-semibold text-warm-tx"></span></div>
 <div id="st-delivered" class="hidden text-xs text-warm-ok" role="status"></div>
-<div id="st-sync" class="hidden flex-col gap-1.5 rounded-xl border border-warm-ln bg-warm-bg px-3 py-2" role="status"><div id="st-sync-text" class="text-[13px] text-warm-tx"></div><div id="st-sync-bar" class="flex items-center gap-3"><div class="h-3 flex-1 overflow-hidden rounded-full bg-warm-ln" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="st-sync-fill" class="h-full w-0 rounded-full bg-warm-ok transition-[width] duration-500"></div></div><div class="flex flex-col items-end"><div id="st-sync-pct" dir="ltr" class="min-w-[3.5rem] text-end text-xl font-extrabold text-warm-ok">0%</div><div id="st-sync-eta" class="whitespace-nowrap text-[11px] text-warm-mu"></div></div><button type="button" id="st-sync-stop" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('syncStopBtn')}</button></div><div id="st-sync-ok-row" dir="ltr" class="flex justify-start"><button type="button" id="st-sync-ok" class="${btn} !px-4 !py-1.5 !text-[13px]">${tt('toastOk')}</button></div></div>
+<div id="st-sync" class="hidden flex-col gap-1.5 rounded-xl border border-warm-ln bg-warm-bg px-3 py-2" role="status"><div id="st-sync-text" class="text-[13px] text-warm-tx"></div><div id="st-sync-bar" class="flex items-center gap-3"><div class="h-3 flex-1 overflow-hidden rounded-full bg-warm-ln" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="st-sync-fill" class="h-full w-0 rounded-full bg-warm-ok"></div></div><div class="flex flex-col items-end"><div id="st-sync-pct" dir="ltr" class="min-w-[3.5rem] text-end text-xl font-extrabold text-warm-ok">0%</div><div id="st-sync-eta" class="whitespace-nowrap text-[11px] text-warm-mu"></div></div><button type="button" id="st-sync-stop" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('syncStopBtn')}</button></div><div id="st-sync-ok-row" dir="ltr" class="flex justify-start"><button type="button" id="st-sync-ok" class="${btn} !px-4 !py-1.5 !text-[13px]">${tt('toastOk')}</button></div></div>
 </section>
 <section id="st-queue" class="${tile} hidden flex-col gap-2.5"><h2 class="text-sm font-bold text-warm-tx">${tt('qTitle')}</h2><ul id="st-queue-list" class="flex flex-col gap-2"></ul></section>
 <div class="grid gap-3.5">
@@ -449,6 +467,16 @@ ${installCompact}
 <button type="button" id="del-no" class="px-4 py-2 text-sm text-warm-mu transition hover:text-warm-tx focus:outline-none">${tt('cancel')}</button>
 </div></div></div>
 
+<div id="unsaved-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="unsaved-title">
+<div class="w-full max-w-sm rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
+<h2 id="unsaved-title" class="text-lg font-bold text-warm-tx">${tt('unsavedTitle')}</h2>
+<p class="mt-1 text-sm text-warm-mu">${tt('unsavedBody')}</p>
+<div class="mt-5 grid gap-2">
+<button type="button" id="unsaved-save" class="${btnPrimary}">${tt('unsavedSave')}</button>
+<button type="button" id="unsaved-discard" class="${btnDanger}">${tt('unsavedDiscard')}</button>
+<button type="button" id="unsaved-stay" class="px-4 py-2 text-sm text-warm-mu transition hover:text-warm-tx focus:outline-none">${tt('unsavedStay')}</button>
+</div></div></div>
+
 <div id="news-panel" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="news-panel-title">
 <div class="flex max-h-[85vh] w-full max-w-lg flex-col gap-3 rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
 <div class="flex items-center justify-between"><h2 id="news-panel-title" class="text-lg font-bold text-warm-tx">${tt('newsBell')}</h2><button type="button" id="news-panel-close" class="rounded-lg px-2 text-lg text-warm-mu transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac" aria-label="${tt('newsClose')}">&#10005;</button></div>
@@ -462,11 +490,11 @@ ${installCompact}
 ${group(
   'secKeys',
   `<ul class="grid gap-2 text-sm">
-<li class="flex items-center justify-between gap-3"><span>${tt('rowAi')}</span>${badge(d.aiConfigured, escapeHtml(d.aiProviderLabel) || tt('configured'))}</li>
-<li class="flex items-center justify-between gap-3"><span>${tt('rowOsKey')}</span>${badge(d.openSubtitlesKeyConfigured)}</li>
-<li class="flex items-center justify-between gap-3"><span>${tt('rowSubdl')}</span>${badge(d.subdlKeyConfigured ?? false)}</li>
-<li class="flex items-center justify-between gap-3"><span>${tt('rowJimaku')}</span>${badge(d.jimakuKeyConfigured ?? false)}</li>
-<li class="flex items-center justify-between gap-3"><span>${tt('rowOsLogin')}${d.openSubtitlesUsername ? ` (<span class="font-mono" dir="ltr">${escapeHtml(d.openSubtitlesUsername)}</span>)` : ''}</span>${badge(d.openSubtitlesLoginConfigured)}</li>
+${keyRow('aiApiKey', tt('rowAi'), d.aiConfigured, escapeHtml(d.aiProviderLabel) || tt('configured'))}
+${keyRow('openSubtitlesApiKey', tt('rowOsKey'), d.openSubtitlesKeyConfigured)}
+${keyRow('subdlApiKey', tt('rowSubdl'), d.subdlKeyConfigured ?? false)}
+${keyRow('jimakuApiKey', tt('rowJimaku'), d.jimakuKeyConfigured ?? false)}
+${keyRow('openSubtitlesLogin', `${tt('rowOsLogin')}${d.openSubtitlesUsername ? ` (<span class="font-mono" dir="ltr">${escapeHtml(d.openSubtitlesUsername)}</span>)` : ''}`, d.openSubtitlesLoginConfigured)}
 </ul>
 <div><label class="${labelCls}" for="d-ai">${tt('aiKeyLabel')}</label><input class="${field}" id="d-ai" type="password" autocomplete="off" placeholder="${keyPh(d.aiConfigured)}"></div>
 <div><label class="${labelCls}" for="d-os">${tt('osKeyLabel')}</label><input class="${field}" id="d-os" type="password" autocomplete="off" placeholder="${keyPh(d.openSubtitlesKeyConfigured)}"></div>
@@ -483,6 +511,16 @@ ${toggle('d-clean', d.cleanSubtitles ?? true, 'cleanLabel', 'cleanHint', true)}
 ${toggle('d-ask', d.translationMode === 'ask', 'askLabel', 'askHint', true)}</div>
 <div><label class="${labelCls}" for="d-src">${tt('srcLabel')}</label>${selectField('d-src', `<option value="opensubtitles"${d.subtitleSource === 'subdl' ? '' : ' selected'}>${tt('srcOs')}</option><option value="subdl"${d.subtitleSource === 'subdl' ? ' selected' : ''}>${tt('srcSubdl')}</option>`)}<p class="mt-1 text-xs text-warm-mu">${tt('srcHint')}</p></div>`,
 )}
+${
+  d.desktop
+    ? group(
+        'secGeneral',
+        `<div class="flex flex-col divide-y divide-warm-ln overflow-hidden rounded-2xl border border-warm-ln">${toggle('d-startup', false, 'startupLabel', 'startupHint', true)}
+${toggle('d-minimized', false, 'minimizedLabel', 'minimizedHint', true)}</div>
+<p id="startup-note" class="hidden text-xs text-warm-mu">${tt('startupUnavailable')}</p>`,
+      )
+    : ''
+}
 ${group(
   'secMaintenance',
   `<p class="text-xs text-warm-mu">${tt('clearNote')}</p>
@@ -490,7 +528,7 @@ ${group(
 <span class="${result} text-center" id="clear-result"></span>
 <div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><p class="text-xs text-warm-mu">${tt('diagNote')}</p><button type="button" id="copy-diag" class="${btn}">${tt('diagBtn')}</button></div>`,
 )}
-${group('menuAbout', `<p class="text-xs text-warm-mu">${tt('aboutDesc')}</p>${d.desktop ? updatesRow : ''}${devSection}`)}
+${group('menuAbout', `<p class="text-xs text-warm-mu">${tt('aboutDesc')}</p>${d.desktop ? updatesRow : ''}${d.devSettings ? devSection : devSection.replace('<details', '<details hidden')}`)}
 </div>
 <div class="sticky -bottom-[26px] z-10 -mx-[26px] -mb-[26px] mt-auto grid gap-2 border-t border-warm-ln bg-warm-sf/95 px-[26px] pb-[26px] pt-4 backdrop-blur"><span class="${result} text-center" id="save-result"></span><button type="button" id="save" class="${btnPrimary} w-full !py-3">${tt('save')}</button></div>
 </div></div>
@@ -593,6 +631,7 @@ const saveKeys = async (body, resultId) => {
       $('st-subdl-text').classList.remove('text-warm-mu'); $('st-subdl-text').textContent = f(T.stSubdlCount, {n: 0});
     }
     if (r.ok && body.jimakuApiKey) jimakuOn = true;
+    for (const name of ['subdl', 'jimaku']) if (r.ok && body[name + 'ApiKey']) document.querySelectorAll('[data-check-row="' + name + '"]').forEach((row) => row.classList.remove('hidden'));
     return r.ok;
   } catch { show(resultId, false, FAILED); toast(false, FAILED); return false; }
 };
@@ -620,7 +659,7 @@ let step = ${startStep || 1};
 let fromDash = ${startStep ? 'false' : 'true'};
 const next = $('w-next'), back = $('w-back');
 const render = () => {
-  $('w-stepof').textContent = f(T.stepOf, {n: step});
+  $('w-stepof').textContent = f(T.stepOf, {n: step, total: STEPS.length});
   $('w-title').textContent = STEPS[step - 1][1];
   $('w-sub').textContent = STEPS[step - 1][2];
   document.querySelectorAll('[data-pane]').forEach(p => { const on = Number(p.dataset.pane) === step; p.classList.toggle('hidden', !on); p.classList.toggle('flex', on); });
@@ -628,10 +667,11 @@ const render = () => {
   // Step 1 has nothing to go back to, unless the wizard was opened from the main screen: then it cancels.
   back.classList.toggle('invisible', step === 1 && !fromDash);
   back.textContent = step === 1 ? T.leaveWizard : T.back;
-  next.textContent = step === 5 ? T.finish : T.next + ' ' + ARROW;
+  next.textContent = step === LAST ? T.finish : T.next + ' ' + ARROW;
   show('w-result', null, '');
 };
-const go = (n) => { step = Math.max(1, Math.min(5, n)); render(); };
+const LAST = STEPS.length;
+const go = (n) => { step = Math.max(1, Math.min(LAST, n)); render(); };
 back.addEventListener('click', () => { if (step === 1) setView('dash'); else go(step - 1); });
 document.querySelectorAll('.js-lang-wrap').forEach((wrap) => {
   const btn = wrap.querySelector('.js-lang-btn'), menu = wrap.querySelector('.js-lang-menu');
@@ -657,7 +697,8 @@ next.addEventListener('click', async () => {
     } else if (step === 3) {
       const r = await saveSettings($('lang').value, $('dual').checked);
       if (!r.ok) { show('w-result', false, r.message); return; }
-    } else if (step === 5) {
+    } else if (step === LAST) {
+      if (startupApi && $('w-startup')) { try { await startupApi.set($('w-startup').checked, $('w-minimized').checked); } catch { show('w-result', false, FAILED); return; } }
       location.reload(); // the main screen is rendered with the freshly saved settings
       return;
     }
@@ -667,15 +708,103 @@ next.addEventListener('click', async () => {
 });
 render();
 
+// Start with Windows (desktop app only). The second switch only works while the first is on.
+const startupApi = window.desktop && window.desktop.startup;
+const startupRefresh = {};
+const wireStartup = (onId, minId, autosave) => {
+  const on = $(onId), min = $(minId);
+  if (!on || !min || !startupApi) return;
+  const label = min.closest('label');
+  const hint = label.querySelector('.text-xs');
+  const hintOn = hint ? hint.textContent : '';
+  const refresh = () => {
+    min.disabled = !on.checked;
+    label.classList.toggle('opacity-40', !on.checked);
+    label.classList.toggle('pointer-events-none', !on.checked);
+    if (hint) hint.textContent = on.checked ? hintOn : T.minimizedHintOff;
+  };
+  const save = async () => {
+    try { await startupApi.set(on.checked, min.checked); toast(true, T.settingsSaved); }
+    catch { toast(false, FAILED); }
+  };
+  on.addEventListener('change', () => { refresh(); if (autosave) save(); });
+  if (autosave) min.addEventListener('change', save);
+  startupRefresh[onId] = refresh;
+  refresh();
+};
+const loadStartup = async (onId, minId, firstRun) => {
+  if (!startupApi || !startupRefresh[onId]) return;
+  try {
+    const st = await startupApi.get();
+    $(onId).checked = firstRun ? true : st.openAtLogin;
+    $(minId).checked = st.minimized;
+    startupRefresh[onId]();
+    if (!st.available) {
+      $(onId).disabled = true; $(minId).disabled = true;
+      const note = $('startup-note'); if (note) note.classList.remove('hidden');
+    }
+  } catch { /* the switches stay as they are */ }
+};
+wireStartup('w-startup', 'w-minimized', false);
+wireStartup('d-startup', 'd-minimized', false);
+loadStartup('w-startup', 'w-minimized', !fromDash);
+
 // Settings drawer.
 const drawer = $('drawer');
 document.querySelectorAll('#groups > details').forEach((g) => g.addEventListener('toggle', () => {
   if (g.open) document.querySelectorAll('#groups > details').forEach((o) => { if (o !== g) o.open = false; });
 }));
-const setDrawer = (open) => { drawer.classList.toggle('hidden', !open); drawer.classList.toggle('flex', open); };
+// Changes in the drawer are only kept with Save; closing with changes asks first.
+const devGroupEl = $('dev-sound').closest('details');
+// A set key can be removed: the small x asks first, then the key is cleared and the page reloads.
+const swap = (row, asking) => {
+  for (const [sel, on] of [['[data-rm-normal]', !asking], ['[data-rm-ask]', asking]]) {
+    const part = row.querySelector(sel);
+    part.classList.toggle('hidden', !on);
+    part.classList.toggle('inline-flex', on);
+  }
+};
+document.addEventListener('click', async (ev) => {
+  const t = ev.target.closest ? ev.target.closest('[data-rm], [data-rm-no], [data-rm-yes]') : null;
+  if (!t) return;
+  const row = t.closest('[data-key-row]');
+  if (t.hasAttribute('data-rm')) swap(row, true);
+  else if (t.hasAttribute('data-rm-no')) swap(row, false);
+  else {
+    t.disabled = true;
+    try {
+      const r = await fetch('/api/keys/remove', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({field: t.getAttribute('data-rm-yes')})});
+      if (!r.ok) throw new Error('failed');
+      location.reload();
+    } catch { t.disabled = false; toast(false, T.removeKeyFail); }
+  }
+});
+const drawerEls = () => [...drawer.querySelectorAll('input, select')].filter((el) => !devGroupEl.contains(el) && el.id !== 'd-src');
+const elValue = (el) => el.type === 'checkbox' ? el.checked : el.value;
+let drawerSnap = new Map();
+const takeSnap = () => { drawerSnap = new Map(drawerEls().map((el) => [el, elValue(el)])); };
+const drawerDirty = () => drawerEls().some((el) => drawerSnap.get(el) !== elValue(el));
+const setDrawer = (open) => {
+  drawer.classList.toggle('hidden', !open); drawer.classList.toggle('flex', open);
+  if (open) loadStartup('d-startup', 'd-minimized', false).then(takeSnap);
+};
+const unsaved = $('unsaved-modal');
+const showUnsaved = (on) => { unsaved.classList.toggle('hidden', !on); unsaved.classList.toggle('flex', on); if (on) $('unsaved-save').focus(); };
+const requestCloseDrawer = () => { if (drawerDirty()) showUnsaved(true); else setDrawer(false); };
 $('open-settings').addEventListener('click', () => setDrawer(true));
-$('close-settings').addEventListener('click', () => setDrawer(false));
-drawer.addEventListener('click', (e) => { if (e.target === drawer) setDrawer(false); });
+$('close-settings').addEventListener('click', requestCloseDrawer);
+drawer.addEventListener('click', (e) => { if (e.target === drawer) requestCloseDrawer(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || drawer.classList.contains('hidden')) return;
+  if (unsaved.classList.contains('hidden')) requestCloseDrawer(); else showUnsaved(false);
+});
+$('unsaved-stay').addEventListener('click', () => showUnsaved(false));
+$('unsaved-save').addEventListener('click', () => { showUnsaved(false); $('save').click(); });
+$('unsaved-discard').addEventListener('click', () => {
+  for (const el of drawerEls()) { const v = drawerSnap.get(el); if (el.type === 'checkbox') el.checked = v; else el.value = v; }
+  if (startupRefresh['d-startup']) startupRefresh['d-startup']();
+  showUnsaved(false); setDrawer(false);
+});
 const quickSave = async () => {
   const lang = $('q-lang').value, dual = $('q-dual').checked;
   try {
@@ -729,6 +858,11 @@ $('save').addEventListener('click', async () => {
   try {
     const body = readKeys('d-');
     if (Object.keys(body).length && !(await saveKeys(body, 'save-result'))) return;
+    const startupChanged = startupApi && $('d-startup') && (drawerSnap.get($('d-startup')) !== $('d-startup').checked || drawerSnap.get($('d-minimized')) !== $('d-minimized').checked);
+    if (startupChanged) {
+      try { await startupApi.set($('d-startup').checked, $('d-minimized').checked); }
+      catch { show('save-result', false, FAILED); toast(false, FAILED); return; }
+    }
     const r = await saveSettings($('d-lang').value, $('d-dual').checked, undefined, $('d-emb').checked, undefined, $('d-ask').checked, $('d-clean').checked);
     show('save-result', r.ok, r.message);
     toast(r.ok, r.message);
@@ -748,6 +882,17 @@ document.querySelectorAll('[data-test]').forEach(b => b.addEventListener('click'
   catch { show(id, false, FAILED); }
 }));
 // Eye button: shows or hides what was typed in a password field (nothing saved is ever sent here).
+document.querySelectorAll('[data-reveal]').forEach(b => {
+  const input = $(b.dataset.reveal);
+  const sync = () => {
+    const has = input.value !== '';
+    b.classList.toggle('hidden', !has);
+    b.classList.toggle('flex', has);
+    if (!has && input.type === 'text') b.click();
+  };
+  input.addEventListener('input', sync);
+  sync();
+});
 document.querySelectorAll('[data-reveal]').forEach(b => b.addEventListener('click', () => {
   const input = $(b.dataset.reveal);
   const show = input.type === 'password';
@@ -963,15 +1108,19 @@ const refreshStatus = async () => {
     const r = await (await fetch('/api/status')).json();
     const st = STATES[r.state] || STATES.waiting;
     // After a failure, say why (quota, key, rate limit...) instead of the general advice.
-    $('st-state').textContent = (r.state === 'error' && r.lastError && ERRORS[r.lastError]) || st[0];
+    $('st-state').textContent = (r.paused && r.running > 0 && T.stPaused) || (r.state === 'error' && r.lastError && ERRORS[r.lastError]) || st[0];
     $('st-dot').className = 'h-2.5 w-2.5 rounded-full ' + st[1] + (r.running > 0 ? ' animate-pulse' : '');
     $('st-lines').textContent = String(r.linesTranslated);
     const kb = r.bytesTranslated / 1024;
     $('st-size').textContent = kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : Math.round(kb) + ' KB';
     const p = r.progress;
+    const fmtEta = (s) => s < 60 ? s + (UI === 'he' ? ' שנ׳' : ' s') : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + (UI === 'he' ? ' דק׳' : ' min');
     const stageText = { queued: T.stageQueued, local: T.stageLocal, search: T.stageSearch, translate: T.stageTranslate, sync: f(T.stageSync, {p: r.syncPercent || 0}) }[r.stage];
     $('st-progress-text').textContent = p ? (p.percent >= 100 && r.running === 0 ? f(T.progressDone, {t: p.total}) : f(T.progressText, {d: p.done, t: p.total, p: p.percent})) : (r.running > 0 && stageText) || T.noSub;
     $('st-progress').style.width = (p ? p.percent : 0) + '%'; // CSSOM, allowed by the nonce-only CSP
+    $('st-progress-eta').textContent = p && r.running > 0 && !r.paused && p.etaSec ? f(T.syncEta, {t: fmtEta(p.etaSec)}) : '';
+    $('st-total-eta').classList.toggle('hidden', !(r.totalEtaSec && !r.paused));
+    if (r.totalEtaSec && !r.paused) $('st-total-eta').textContent = f(T.etaTotal, {t: fmtEta(r.totalEtaSec)});
     // The sound check that goes on beside (or after) the translation, and how it ended.
     const nameOf = (x) => '⁨' + x.title + '⁩' + (x.season !== undefined && x.episode !== undefined ? (UI === 'he' ? ' עונה ' + x.season + ' פרק ' + x.episode : ' S' + x.season + 'E' + x.episode) : '');
     const bs = r.backgroundSync, ls = r.lastSync;
@@ -992,7 +1141,7 @@ const refreshStatus = async () => {
       $('st-sync-fill').style.width = bs.percent + '%';
       $('st-sync-pct').textContent = bs.percent + '%';
       const eta = bs.waiting ? null : bs.etaSec;
-      $('st-sync-eta').textContent = bs.waiting ? '' : eta === null || eta === undefined ? T.syncEtaWait : f(T.syncEta, {t: eta < 60 ? eta + (UI === 'he' ? ' שנ׳' : ' s') : Math.round(eta / 6) / 10 + (UI === 'he' ? ' דק׳' : ' min')});
+      $('st-sync-eta').textContent = bs.waiting ? '' : eta === null || eta === undefined ? T.syncEtaWait : f(T.syncEta, {t: fmtEta(eta)});
     } else if (r.exactComing) {
       $('st-sync-text').textContent = f(T.syncWaitExact, {name: nameOf(r.exactComing)});
     } else if (syncShown) {
@@ -1030,7 +1179,9 @@ refreshStatus();
 setInterval(refreshStatus, 1500);
 
 // Subtitle library: everything translated so far, grouped by title, with delete.
-const sizeText = (b) => b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
+const sizeText = (b) => b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : b < 1073741824 ? (b / 1048576).toFixed(1) + ' MB' : (b / 1073741824).toFixed(2) + ' GB';
+const muxJobs = new Map();
+const muxPaint = new Map();
 const dateText = (ms) => new Date(ms).toLocaleDateString(UI === 'he' ? 'he-IL' : 'en-GB');
 let libItems = [];
 const picked = new Set();
@@ -1053,8 +1204,17 @@ const episodeRow = (e) => {
   const meta = el('span', 'flex shrink-0 items-center gap-3 text-xs text-warm-mu');
   const ltr = (text) => { const s = el('span', '', text); s.dir = 'ltr'; return s; };
   if (e.timing) {
-    const tone = e.timing === 'exact' ? 'border-warm-ok text-warm-ok' : e.timing === 'speech' ? 'border-warm-ac text-warm-ac' : 'border-amber-400 text-amber-400';
-    const badge = el('span', 'rounded-full border px-2 py-0.5 text-[11px] font-semibold ' + tone, e.timing === 'exact' ? T.libExact : e.timing === 'speech' ? T.libSpeech : T.libEstimated);
+    const TIMING = {
+      exact: {color: '76,195,138', hex: '#4cc38a', paths: '<path d="M5 12l5 5L20 7"/>', text: T.libExact},
+      speech: {color: '90,169,240', hex: '#5aa9f0', paths: '<path d="M5 10v4M9 7v10M13 4v16M17 8v8M21 11v2"/>', text: T.libSpeech},
+      estimated: {color: '240,138,75', hex: '#f08a4b', paths: '<path d="M3 12c3-6 6 6 9 0s6 6 9 0"/>', text: T.libEstimated},
+    };
+    const kind = TIMING[e.timing];
+    const badge = el('span', 'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold');
+    badge.style.cssText = 'color:' + kind.hex + ';border-color:' + kind.hex + ';background:rgba(' + kind.color + ',.1)';
+    const tIcon = el('span', 'inline-flex');
+    tIcon.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + kind.paths + '</svg>';
+    badge.append(tIcon, el('span', '', kind.text));
     badge.title = e.timing === 'exact' ? T.libExactTip : e.timing === 'speech' ? T.libSpeechTip : T.libEstimatedTip;
     meta.append(badge);
   }
@@ -1067,7 +1227,10 @@ const episodeRow = (e) => {
   }
   meta.append(el('span', '', f(T.libLines, {n: e.cues})), ltr(dateText(e.createdAt)), ltr(sizeText(e.bytes)));
   row.append(meta);
-  const dl = el('a', 'shrink-0 rounded-lg border border-warm-ln px-2.5 py-1 text-xs font-semibold text-warm-mu transition hover:border-warm-ac/60 hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac', T.libSrt);
+  const btnCls = 'inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-warm-ln px-2.5 py-1 text-xs font-semibold text-warm-mu transition hover:border-warm-ac/60 hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac';
+  const icon = (paths) => { const s = el('span', 'inline-flex'); s.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>'; return s; };
+  const dl = el('a', btnCls);
+  dl.append(icon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/>'), el('span', '', T.libSubsBtn));
   dl.href = '/api/library/' + e.id + '/srt';
   dl.title = T.libSrtTip;
   dl.addEventListener('click', async (ev) => {
@@ -1086,11 +1249,96 @@ const episodeRow = (e) => {
   actions.append(dl);
   row.append(actions);
   if (window.desktop && window.desktop.pickVideo) {
-    const muxButton = (label, tip, format) => {
-      const mux = el('button', dl.className, label);
-      mux.type = 'button';
-      mux.title = tip;
-      mux.addEventListener('click', async () => {
+    const wrap = el('span', '');
+    wrap.style.position = 'relative';
+    const mux = el('button', btnCls);
+    mux.type = 'button';
+    const muxLabel = el('span', '', T.libVideoBtn);
+    mux.append(icon('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/>'), muxLabel, el('span', '', '▾'));
+    const menu = el('div', 'rounded-2xl border border-warm-ln bg-warm-sf p-1.5 text-sm');
+    menu.hidden = true;
+    menu.style.cssText = 'position:absolute;inset-inline-end:0;top:calc(100% + 6px);z-index:20;min-width:210px;box-shadow:0 8px 24px rgba(0,0,0,.35)';
+    const closeMenu = () => { menu.hidden = true; };
+    const sizeSpans = [];
+    let sizesAsked = false;
+    mux.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      menu.hidden = !menu.hidden;
+      if (menu.hidden || sizesAsked) return;
+      sizesAsked = true;
+      fetch('/api/library/' + e.id + '/stream').then((r) => r.json()).then((s) => {
+        if (s.bytes) for (const sp of sizeSpans) sp.textContent = '~' + sizeText(s.bytes);
+      }).catch(() => {});
+    });
+    document.addEventListener('click', closeMenu);
+    const muxOption = (name, desc, tip, format) => {
+      const item = el('button', 'flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-start text-warm-tx transition hover:bg-warm-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac');
+      item.type = 'button';
+      item.title = tip;
+      const label = el('span', 'flex flex-col');
+      label.append(el('span', 'text-sm font-bold', name), el('span', 'text-xs text-warm-mu', desc));
+      const size = el('span', 'text-xs font-semibold text-warm-ac');
+      size.dir = 'ltr';
+      sizeSpans.push(size);
+      item.append(label, size);
+      item.addEventListener('click', () => { closeMenu(); runMux(format); });
+      return item;
+    };
+    menu.append(muxOption('MKV', T.libMkvDesc, T.libMuxTip, 'mkv'), muxOption('MP4', T.libMp4Desc, T.libMuxMp4Tip, 'mp4'));
+    wrap.append(mux, menu);
+    const panel = el('div', 'hidden w-full items-center gap-3 text-xs');
+    panel.style.flexBasis = '100%';
+    const edge = el('div');
+    edge.style.cssText = 'position:absolute;inset-inline:0;bottom:0;height:3px;background:#352e25;border-radius:0 0 12px 12px;display:none';
+    const edgeFill = el('i');
+    edgeFill.style.cssText = 'display:block;height:100%;background:#e8b25c;width:0%';
+    edge.append(edgeFill);
+    row.style.position = 'relative';
+    row.append(panel, edge);
+    const etaText = (s) => s < 60 ? s + (UI === 'he' ? ' שנ׳' : ' s') : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + (UI === 'he' ? ' דק׳' : ' min');
+    const smallBtn = (cls, label, onClick) => { const b = el('button', btnCls + ' ' + cls, label); b.type = 'button'; b.addEventListener('click', onClick); return b; };
+    const paint = () => {
+      const st = muxJobs.get(e.id);
+      panel.replaceChildren();
+      if (!st) { panel.classList.add('hidden'); panel.classList.remove('flex'); edge.style.display = 'none'; mux.disabled = false; return; }
+      panel.classList.remove('hidden'); panel.classList.add('flex');
+      if (st.phase === 'run') {
+        mux.disabled = true;
+        edge.style.display = 'block';
+        edgeFill.style.width = (st.percent ?? 0) + '%';
+        const text = el('span', 'min-w-0 flex-1 text-warm-mu');
+        text.append(el('b', 'font-semibold text-warm-tx', f(T.libSaving, {f: st.format.toUpperCase()})));
+        if (st.percent !== null) text.append(' · ' + st.percent + '%');
+        if (st.etaSec) text.append(' · ' + f(T.libLeft, {t: etaText(st.etaSec)}));
+        if (st.bytes) text.append(' · ', ltr(sizeText(st.bytes) + (st.totalBytes ? ' / ' + sizeText(st.totalBytes) : '')));
+        const cancel = smallBtn('text-rose-300 border-rose-400/50', T.libCancel, () => { cancel.disabled = true; fetch('/api/mux/' + st.task + '/cancel', {method: 'POST'}).catch(() => {}); });
+        panel.append(text, cancel);
+        return;
+      }
+      mux.disabled = false;
+      edge.style.display = 'none';
+      row.classList.add('bg-warm-ok/10');
+      const ready = el('span', 'inline-flex items-center gap-1.5 font-semibold text-warm-ok');
+      ready.append(icon('<path d="M5 12l5 5L20 7"/>'), el('span', '', T.libReady));
+      const chip = el('span', 'rounded-full border border-warm-ln px-2 py-0.5 text-[11px] font-semibold text-warm-tx');
+      chip.dir = 'ltr'; chip.textContent = sizeText(st.bytes || 0);
+      const spacer = el('span', 'flex-1');
+      panel.append(ready, st.bytes ? chip : '', spacer);
+      if (window.desktop.revealVideo) {
+        const show = smallBtn('', '', () => window.desktop.revealVideo(st.path));
+        show.title = T.libShowFolder; show.setAttribute('aria-label', T.libShowFolder);
+        show.append(icon('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'));
+        panel.append(show);
+      }
+      const close = smallBtn('', '', () => { muxJobs.delete(e.id); row.classList.remove('bg-warm-ok/10'); paint(); });
+      close.title = T.libClose; close.setAttribute('aria-label', T.libClose);
+      close.append(icon('<path d="M6 6l12 12M18 6L6 18"/>'));
+      panel.append(close);
+    };
+    muxPaint.set(e.id, paint);
+    paint();
+    const runMux = (format) => {
+      (async () => {
         let payload = null;
         const name = e.kind === 'series' ? e.title + ' S' + String(e.season ?? 0).padStart(2, '0') + 'E' + String(e.episode ?? 0).padStart(2, '0') : e.title;
         try {
@@ -1103,18 +1351,31 @@ const episodeRow = (e) => {
         } catch { payload = null; }
         const video = payload ? 'stremio' : await window.desktop.pickVideo(name);
         if (!video) return;
-        mux.disabled = true; mux.textContent = T.libMuxBusy;
+        const task = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+        const st = {phase: 'run', format, task, percent: null, etaSec: null, bytes: 0, totalBytes: null};
+        muxJobs.set(e.id, st);
+        (muxPaint.get(e.id) || paint)();
+        const timer = setInterval(async () => {
+          try {
+            const p = await (await fetch('/api/mux/' + task)).json();
+            if (p.ok) { st.percent = p.percent; st.etaSec = p.etaSec; st.bytes = p.bytes; st.totalBytes = p.totalBytes; (muxPaint.get(e.id) || paint)(); }
+          } catch { /* the next tick tries again */ }
+        }, 1000);
         try {
-          const r = await fetch('/api/library/' + e.id + '/mux', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload || {video, format})});
+          const r = await fetch('/api/library/' + e.id + '/mux', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({...(payload || {video, format}), task})});
           const j = await r.json();
-          if (j.ok) toast(true, f(T.libMuxDone, {name: j.name}));
-          else toast(false, j.code === 'NO_FFMPEG' ? T.libMuxNoFfmpeg : (j.code === 'NOT_A_VIDEO' || j.code === 'BAD_PATH') ? T.libMuxBadFile : T.libMuxFail);
-        } catch { toast(false, T.libMuxFail); }
-        mux.disabled = false; mux.textContent = label;
-      });
-      return mux;
+          if (j.ok) muxJobs.set(e.id, {phase: 'done', path: j.path, bytes: j.bytes, name: j.name});
+          else {
+            muxJobs.delete(e.id);
+            if (j.code === 'CANCELLED') toast(true, T.libCancelled);
+            else toast(false, j.code === 'NO_FFMPEG' ? T.libMuxNoFfmpeg : (j.code === 'NOT_A_VIDEO' || j.code === 'BAD_PATH') ? T.libMuxBadFile : T.libMuxFail);
+          }
+        } catch { muxJobs.delete(e.id); toast(false, T.libMuxFail); }
+        clearInterval(timer);
+        (muxPaint.get(e.id) || paint)();
+      })();
     };
-    actions.append(muxButton(T.libMux, T.libMuxTip, 'mkv'), muxButton(T.libMuxMp4, T.libMuxMp4Tip, 'mp4'));
+    actions.append(wrap);
   }
   return row;
 };

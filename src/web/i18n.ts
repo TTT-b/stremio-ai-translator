@@ -12,7 +12,8 @@ interface Pair {
 
 /** `{name}` placeholders are filled by fmt(). Text is plain (no HTML); the page escapes it. */
 const S = {
-  appTitle: { he: 'מתרגם כתוביות AI', en: 'AI Subtitle Translator' },
+  appTitle: { he: 'TTT Sub', en: 'TTT Sub' },
+  appTagline: { he: 'מתרגם כתוביות AI ל-Stremio', en: 'AI subtitle translator for Stremio' },
   update: { he: 'עדכן', en: 'Update' },
   updateTitle: {
     he: 'הפעל מחדש והתקן את העדכון שהורד',
@@ -70,7 +71,7 @@ const S = {
     en: 'One click adds the add-on. The app keeps working in the background even when the window is closed.',
   },
   setupProgress: { he: 'התקדמות ההגדרה', en: 'Setup progress' },
-  stepOf: { he: 'שלב {n} מתוך 5', en: 'Step {n} of 5' },
+  stepOf: { he: 'שלב {n} מתוך {total}', en: 'Step {n} of {total}' },
 
   dualLabel: {
     he: 'כתוביות כפולות (אנגלית + שפת היעד)',
@@ -342,26 +343,34 @@ const S = {
     he: 'הן יתורגמו מחדש בפעם הבאה שתנגן אותן. אי אפשר לבטל.',
     en: 'They will be translated again the next time you play them. This cannot be undone.',
   },
-  libSrt: { he: 'הורד SRT', en: 'Download SRT' },
   libSrtTip: {
     he: 'שמור את הכתובית כקובץ SRT שאפשר לטעון בכל נגן',
     en: 'Save the subtitle as an SRT file you can load in any player',
   },
-  libMux: { he: 'שמור כ-MKV (מחשב)', en: 'Save as MKV (computer)' },
   libMuxTip: {
     he: 'בחר את קובץ הסרטון שבמחשב. התוכנה שומרת לידו עותק (MKV) עם הכתובית בפנים, בלי לפגוע באיכות ובלי לגעת במקור.',
     en: 'Choose the video file on this computer. A copy (MKV) with the subtitle inside is saved next to it, with no loss of quality and the original untouched.',
   },
-  libMuxMp4: { he: 'שמור כ-MP4 (פלאפון)', en: 'Save as MP4 (phone)' },
   libMuxMp4Tip: {
     he: 'עותק MP4 עם הכתובית בפנים, שנפתח בנגן הרגיל של אייפד, אייפון וטלפונים. נשמרת רק הכתובית הזו (בלי שאר הכתוביות), והאיכות לא נפגעת. בנגן יש ללחוץ על כפתור הכתוביות ולבחור עברית.',
     en: 'An MP4 copy with the subtitle inside that opens in the built-in player of iPad, iPhone and phones. Only this subtitle is kept (not the other tracks) and the picture quality is untouched. In the player, press the subtitles button and pick it.',
   },
-  libMuxBusy: { he: 'שומר…', en: 'Saving…' },
-  libMuxDone: {
-    he: 'נשמר: {name} (וגם קובץ SRT לידו)',
-    en: 'Saved: {name} (and an SRT file next to it)',
-  },
+  removeKeyAria: { he: 'הסר מפתח', en: 'Remove key' },
+  removeKeyAsk: { he: 'להסיר את המפתח?', en: 'Remove the key?' },
+  removeKeyYes: { he: 'הסר', en: 'Remove' },
+  removeKeyNo: { he: 'ביטול', en: 'Cancel' },
+  removeKeyFail: { he: 'לא ניתן להסיר את המפתח.', en: 'Could not remove the key.' },
+  libSaving: { he: 'שומר {f}', en: 'Saving {f}' },
+  libLeft: { he: 'נשארו כ-{t}', en: 'About {t} left' },
+  libReady: { he: 'הסרטון מוכן', en: 'The video is ready' },
+  libCancel: { he: 'ביטול', en: 'Cancel' },
+  libCancelled: { he: 'השמירה בוטלה', en: 'Saving cancelled' },
+  libShowFolder: { he: 'הצג בתיקייה', en: 'Show in folder' },
+  libClose: { he: 'סגור', en: 'Close' },
+  libSubsBtn: { he: 'כתוביות', en: 'Subtitles' },
+  libVideoBtn: { he: 'סרטון', en: 'Video' },
+  libMkvDesc: { he: 'למחשב ולטלוויזיה', en: 'For computer and TV' },
+  libMp4Desc: { he: 'לפלאפון ולטאבלט', en: 'For phone and tablet' },
   libMuxNoFfmpeg: {
     he: 'לא נמצא ffmpeg. הוא מגיע עם Stremio.',
     en: 'ffmpeg was not found. It comes with Stremio.',
@@ -414,6 +423,42 @@ const S = {
   secKeys: { he: 'חשבונות ומפתחות', en: 'Accounts and keys' },
   secTranslate: { he: 'תרגום', en: 'Translation' },
   secMaintenance: { he: 'תחזוקה', en: 'Maintenance' },
+  secGeneral: { he: 'כללי', en: 'General' },
+  unsavedTitle: { he: 'יש שינויים שלא נשמרו', en: 'You have unsaved changes' },
+  unsavedBody: {
+    he: 'לשמור אותם לפני שסוגרים את ההגדרות?',
+    en: 'Save them before closing the settings?',
+  },
+  unsavedSave: { he: 'שמור', en: 'Save' },
+  unsavedDiscard: { he: 'התעלם מהשינויים', en: 'Discard changes' },
+  unsavedStay: { he: 'המשך לערוך', en: 'Keep editing' },
+  startupLabel: { he: 'הפעל את התוכנה עם Windows', en: 'Start the app with Windows' },
+  startupHint: {
+    he: 'נפתחת לבד כשהמחשב נדלק ויושבת ליד השעון.',
+    en: 'Opens by itself when the computer starts and stays near the clock.',
+  },
+  minimizedLabel: { he: 'התחל ממוזער', en: 'Start minimized' },
+  minimizedLabelWizard: { he: 'להתחיל ממוזער (מומלץ)', en: 'Start minimized (recommended)' },
+  minimizedHint: {
+    he: 'רק הסמל ליד השעון, בלי לפתוח את החלון.',
+    en: 'Only the icon near the clock, without opening the window.',
+  },
+  minimizedHintOff: {
+    he: 'אפשר לשנות רק כשההפעלה עם Windows דולקת.',
+    en: 'Can only be changed while starting with Windows is on.',
+  },
+  startupUnavailable: {
+    he: 'זמין רק בתוכנה המותקנת.',
+    en: 'Only available in the installed app.',
+  },
+  step6Label: { he: 'הפעלה', en: 'Startup' },
+  step6Title: { he: 'איך להפעיל את התוכנה?', en: 'How should the app start?' },
+  step6Sub: {
+    he: 'כדי שהתרגום יהיה מוכן בכל פעם שפותחים את Stremio. אפשר לשנות אחר כך בהגדרות.',
+    en: 'So translation is ready every time you open Stremio. You can change this later in Settings.',
+  },
+  stPaused: { he: 'התרגום מושהה', en: 'Translation paused' },
+  etaTotal: { he: 'סה״כ עד כתובית מלאה: {t}', en: 'Total until the full subtitle: {t}' },
   diagNote: {
     he: 'אם משהו לא עובד, העתק ושלח ליוצר. אין בזה מפתחות או טקסט כתוביות.',
     en: 'If something does not work, copy this and send it to the author. It has no keys and no subtitle text.',

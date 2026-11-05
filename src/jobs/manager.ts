@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { combineEta, estimateTranslateSec } from './eta';
 import { cacheKey, sha256 } from '../cache/fileCache';
 import type { Config } from '../config/env';
 import { findLanguage } from '../config/languages';
@@ -75,6 +76,12 @@ export class JobManager {
   private lastFailed = false;
   private lastErrorCode: string | null = null;
   private rateLimited = 0;
+  /** The user paused translating: no new part is sent to the AI until they continue. */
+  private paused = false;
+  private pausedAt = 0;
+  private readonly pauseWaiters: { wake: () => void; cancelled: () => boolean }[] = [];
+  /** The job the status card follows, so two jobs running together do not make the bar jump. */
+  private shownJobId: string | undefined;
   /** Downloads OpenSubtitles said are left today, from the latest download. */
   private downloadsLeft: number | undefined;
   /** The account's daily allowance as last reported by OpenSubtitles. */
@@ -241,12 +248,57 @@ export class JobManager {
         done = true;
       }
     }
+    this.releaseCancelledWaiters();
     return done;
+  }
+
+  isPaused(): boolean {
+    return this.paused;
+  }
+
+  /**
+   * Pause or continue translating. Parts already sent to the AI finish; no new part is sent until
+   * the user continues. The time spent paused is not counted in the time estimate.
+   */
+  setPaused(paused: boolean): void {
+    if (paused === this.paused) return;
+    this.paused = paused;
+    if (paused) {
+      this.pausedAt = this.now();
+      return;
+    }
+    const pausedMs = this.now() - this.pausedAt;
+    for (const job of this.jobs.values()) {
+      if (job.status !== 'running') continue;
+      if (job.translateStartedAt !== undefined) job.translateStartedAt += pausedMs;
+      if (job.progressAt !== undefined) job.progressAt = this.now(); // not a stall: it was paused
+    }
+    for (const waiter of this.pauseWaiters.splice(0)) waiter.wake();
+  }
+
+  /**
+   * Resolves at once, or when the user continues if translating is paused. A request that is
+   * cancelled meanwhile is let go too (it stops right after), so Cancel works while paused.
+   */
+  waitWhilePaused(cancelled: () => boolean = () => false): Promise<void> {
+    if (!this.paused) return Promise.resolve();
+    return new Promise((wake) => this.pauseWaiters.push({ wake, cancelled }));
+  }
+
+  private releaseCancelledWaiters(): void {
+    for (let i = this.pauseWaiters.length - 1; i >= 0; i--) {
+      const waiter = this.pauseWaiters[i];
+      if (waiter?.cancelled()) {
+        this.pauseWaiters.splice(i, 1);
+        waiter.wake();
+      }
+    }
   }
 
   /** A translation that has had no news for a while: the AI is probably not answering. */
   private isStalled(job: Job): boolean {
     return (
+      !this.paused &&
       job.status === 'running' &&
       job.stage === 'translate' &&
       job.progressAt !== undefined &&
@@ -416,7 +468,11 @@ export class JobManager {
     running: number;
     linesTranslated: number;
     bytesTranslated: number;
-    progress: { done: number; total: number; percent: number } | null;
+    progress: { done: number; total: number; percent: number; etaSec: number | null } | null;
+    /** The user paused translating. */
+    paused: boolean;
+    /** Rough seconds until the subtitle is complete, sound check included; null when not known. */
+    totalEtaSec: number | null;
     stage: Job['stage'] | null;
     /** While a video is being listened to: how far it is, 0..100. */
     syncPercent: number | null;
@@ -477,24 +533,34 @@ export class JobManager {
     );
     // While something is running, the card describes that, never an earlier finished subtitle.
     const runningWithProgress = withProgress.filter((j) => j.status === 'running');
-    const current = running > 0 ? runningWithProgress.pop() : withProgress.pop();
+    const candidates = running > 0 ? runningWithProgress : withProgress;
+    // Keep following the same job while it is still a candidate: with two jobs running together the
+    // bar would otherwise jump between them.
+    const current =
+      candidates.find((j) => j.id === this.shownJobId) ?? candidates[candidates.length - 1];
+    this.shownJobId = current?.id;
     const p = current?.progress;
+    const etaSec = current && p ? this.translateEtaSec(current, p) : null;
     const progress =
       p && p.total > 0
         ? {
             done: p.done,
             total: p.total,
             percent: Math.min(100, Math.floor((p.done / p.total) * 100)),
+            etaSec,
           }
         : null;
     const latest = [...this.jobs.values()].filter((j) => j.status === 'running').pop();
     const stage = latest?.stage ?? null;
+    const backgroundSync = this.backgroundSync();
     return {
       state,
       running,
       linesTranslated: this.linesTranslated,
       bytesTranslated: this.bytesTranslated,
       progress,
+      paused: this.paused,
+      totalEtaSec: this.totalEtaSec(current, progress, backgroundSync),
       stage,
       syncPercent: stage === 'sync' ? (latest?.syncPercent ?? 0) : null,
       lastError: state === 'error' ? this.lastErrorCode : null,
@@ -506,7 +572,7 @@ export class JobManager {
           : null,
       subdlDownloads: this.subdlDownloads,
       exactComing: this.exactComing(),
-      backgroundSync: this.backgroundSync(),
+      backgroundSync,
       lastDelivered:
         this.lastDelivered && this.now() - this.lastDelivered.at < UPGRADE_NOTICE_MS
           ? { ...this.lastDelivered }
@@ -517,6 +583,35 @@ export class JobManager {
           : null,
       queue: this.queue(),
     };
+  }
+
+  /** Rough time left of the translation, from how fast it went so far; null while too early to tell. */
+  private translateEtaSec(job: Job, p: { done: number; total: number }): number | null {
+    if (this.paused || job.status !== 'running' || job.stage !== 'translate') return null;
+    if (job.translateStartedAt === undefined || p.done <= 0 || p.done >= p.total) return null;
+    return estimateTranslateSec(this.now() - job.translateStartedAt, p.done, p.total);
+  }
+
+  /**
+   * Time until the subtitle is complete: what is left of the translation plus what is left of the
+   * sound check. Null when nothing is running or one of the parts cannot be estimated yet.
+   */
+  private totalEtaSec(
+    current: Job | undefined,
+    progress: { etaSec: number | null } | null,
+    sync: ReturnType<JobManager['backgroundSync']>,
+  ): number | null {
+    const translating = current?.status === 'running' && current.stage === 'translate';
+    const translateEta = translating ? (progress?.etaSec ?? null) : 0;
+    const syncing = current?.status === 'running' && current.stage === 'sync';
+    const syncEta = sync
+      ? sync.waiting
+        ? null
+        : sync.etaSec
+      : current && syncing
+        ? this.syncEtaSec(current)
+        : 0;
+    return combineEta(translateEta, syncEta);
   }
 
   /**
@@ -1323,6 +1418,7 @@ export class JobManager {
     job.progress = { done: 0, total: parsed.cues.length };
     job.stage = 'translate';
     job.progressAt = this.now();
+    job.translateStartedAt = this.now();
 
     // 4a. Already in the target language: serve as SRT, no translation.
     if (chosen.kind === 'direct') {
@@ -1453,6 +1549,7 @@ export class JobManager {
         rtlFix: rtl,
         dualSubtitles: dual,
         isCancelled: () => [...watchers].every((w) => w.cancelled),
+        waitWhilePaused: () => this.waitWhilePaused(() => [...watchers].every((w) => w.cancelled)),
         registerKick: (cut) => {
           kicks.add(cut);
           return () => void kicks.delete(cut);
