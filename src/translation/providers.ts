@@ -15,6 +15,17 @@ export const PROVIDERS: readonly ProviderInfo[] = [
   { id: 'openai', label: 'OpenAI', model: 'gpt-4o-mini', prefix: 'sk-' },
 ];
 
+/**
+ * Models tried, in this order, when the chosen Gemini model is overloaded (auto-switch). A name
+ * the key cannot use is skipped on its own (PROVIDER_MODEL_UNAVAILABLE).
+ */
+export const GEMINI_FALLBACKS: readonly string[] = [
+  'gemini-3.5-flash-lite',
+  'gemini-3.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
+];
+
 export function detectProvider(key: string): ProviderInfo | undefined {
   const k = key.trim();
   return PROVIDERS.find((p) => k.startsWith(p.prefix));

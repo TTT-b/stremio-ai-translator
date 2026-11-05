@@ -6,6 +6,20 @@ user's OK. First: `git pull`, `npm install`, `npm run check` (560 tests green).
 Electron was updated to 44.10.2 (npm audit fix); the app was started with `npx electron .` and the server
 answered (not tested with a real translation yet).
 
+## v1.9.0 (2026-11-05): model choice + adaptive lanes (built on the refactor branch)
+
+- Cause: an end-user got PROVIDER_TIMEOUT because free Gemini (`gemini-3.5-flash-lite`) was overloaded.
+- Adaptive parallelism: lanes shrink to 1 while the provider pushes back (commit 13960cd).
+- Model choice: `src/translation/models.ts` (list per provider, `POST /api/models`),
+  `src/translation/fallback.ts` (`ModelFallbackProvider`, Gemini only, switches on timeout, rate limit,
+  quota, model unavailable; cache identity stays the chosen model), settings `aiModels` (per provider,
+  merged one level deep) and `autoSwitchModel`, UI `src/web/ui/modelPicker.ts`.
+- Unverified against real servers: the Gemini fallback model names (`GEMINI_FALLBACKS`) and the OpenAI
+  model-list shape. Known, not fixed: with no internet one chunk walks the whole fallback chain.
+- `tailwind.config.js` content glob is now `./src/web/**/*.ts` (new files were being purged).
+- To ask the end-user: press "Copy diagnostics" after the update if it still fails.
+- Release is built with `npm run dist` and tested by the user before publishing (see repo-git-workflow).
+
 ## REFACTOR IN PROGRESS (branch refactor/split-manager-html, cut from feat/mp4-save)
 
 Pure move-code split of src/jobs/manager.ts (was 2173 lines) and src/web/html.ts (was 1414), no behavior change.

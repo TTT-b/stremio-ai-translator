@@ -45,6 +45,8 @@ export interface JobStats {
   /** OpenSubtitles daily downloads: allowed and left, or null when not known (yet). */
   quota: { limit: number; left: number } | null;
   exactComing: ExactComingView;
+  /** Set while the AI moved from the chosen model to another one because it was overloaded. */
+  modelSwitch: { from: string; to: string } | null;
   backgroundSync: BackgroundSyncView;
   /** The subtitle Stremio took last, for half an hour. */
   lastDelivered: {

@@ -4,6 +4,9 @@ import { z } from 'zod';
 import type { Config } from './env';
 import { findLanguage } from './languages';
 
+/** A model id as providers write it (letters, digits, dot, dash, underscore, colon). */
+const MODEL_NAME = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/);
+
 /** Non-secret settings editable on the config page. Stored in settings.json (gitignored). */
 const settingsSchema = z.object({
   targetLanguage: z
@@ -32,6 +35,17 @@ const settingsSchema = z.object({
   uiLanguage: z.enum(['he', 'en']).optional(),
   /** Which subtitle source is asked first. subdl needs a SubDL key; OpenSubtitles is the backup. */
   subtitleSource: z.enum(['opensubtitles', 'subdl']).optional(),
+  /** The model the user picked, per provider (a key from the other provider is never reused). */
+  aiModels: z
+    .object({
+      gemini: MODEL_NAME.optional(),
+      anthropic: MODEL_NAME.optional(),
+      openai: MODEL_NAME.optional(),
+    })
+    .strict()
+    .optional(),
+  /** Gemini only: switch to the next model on its own while the chosen one is overloaded. */
+  autoSwitchModel: z.boolean().optional(),
   /** Developer test mode: made-up subtitles and a pretend AI, nothing leaves the computer. */
   testMode: z.boolean().optional(),
 });
@@ -77,5 +91,7 @@ export function effectiveConfig(config: Config, settings: Settings): Config {
     embeddedWaitSec: settings.embeddedWaitSec ?? config.embeddedWaitSec,
     embeddedMaxEtaSec: settings.embeddedMaxEtaSec ?? config.embeddedMaxEtaSec,
     translationMode: settings.translationMode ?? config.translationMode,
+    aiModel: settings.aiModels?.[config.aiProvider] ?? config.aiModel,
+    autoSwitchModel: settings.autoSwitchModel ?? config.autoSwitchModel,
   };
 }

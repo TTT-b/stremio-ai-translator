@@ -82,8 +82,9 @@ export function createUiCtx(d: StatusPageData) {
     secDev: '&#128295;',
     menuAbout: '&#8505;',
   };
-  const group = (title: StrKey, body: string) =>
-    `<details class="rounded-2xl border border-warm-ln"><summary class="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-warm-tx transition hover:bg-warm-bg/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac"><span class="flex items-center gap-2.5"><span aria-hidden="true" class="flex h-7 w-7 items-center justify-center rounded-lg bg-warm-ac/10 text-sm">${GROUP_ICON[title] ?? ''}</span>${tt(title)}</span><span aria-hidden="true" class="text-warm-ac">&#9662;</span></summary><div class="flex flex-col gap-3.5 border-t border-warm-ln p-4">${body}</div></details>`;
+  const groupRaw = (titleHtml: string, iconHtml: string, body: string) =>
+    `<details class="rounded-2xl border border-warm-ln"><summary class="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-warm-tx transition hover:bg-warm-bg/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac"><span class="flex items-center gap-2.5"><span aria-hidden="true" class="flex h-7 w-7 items-center justify-center rounded-lg bg-warm-ac/10 text-sm">${iconHtml}</span>${titleHtml}</span><span aria-hidden="true" class="text-warm-ac">&#9662;</span></summary><div class="flex flex-col gap-3.5 border-t border-warm-ln p-4">${body}</div></details>`;
+  const group = (title: StrKey, body: string) => groupRaw(tt(title), GROUP_ICON[title] ?? '', body);
   const dualSwitch = (id: string, checked: boolean, withHint: boolean) =>
     toggle(id, checked, 'dualLabel', withHint ? 'dualHint' : undefined);
 
@@ -125,6 +126,7 @@ ${testRow(tt('testSample'), testBtn(`id="${sampleId}" data-sample data-res="${rp
     toggle,
     srcBadge,
     group,
+    groupRaw,
     dualSwitch,
     langOptions,
     startStep,

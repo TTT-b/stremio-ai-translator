@@ -125,6 +125,12 @@ quota needs a new day or a billing-enabled key. Finished parts are cached, so re
 subtitle continues where it stopped. If your free key is limited very tightly you can still set a
 fixed pause with `CHUNK_DELAY_MS=4000` in `.env`.
 
+**Still `PROVIDER_TIMEOUT` (the AI is overloaded)?** This is common with the free Gemini tier. Since
+v1.9.0 parallel requests drop to one at a time while the provider is overloaded. Open Settings,
+Translation model, press **Refresh list** and pick another model (a "lite" or older one is often
+less busy). For Gemini, leave "Switch model automatically when it is busy" on. If the refresh says
+the key was refused, check the key in Accounts and keys.
+
 ## "No suitable source subtitle" for anime
 
 1. Open `http://127.0.0.1:7000/dev/source-search?type=series&id=kitsu:<id>:<episode>` (use the id

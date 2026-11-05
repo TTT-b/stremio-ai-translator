@@ -31,6 +31,32 @@ describe('loadConfig', () => {
     expect(secretValues(c)).toContain('jk-abcdef-123456');
   });
 
+  it('the model chosen per provider replaces the default only for the provider in use', () => {
+    const base = loadConfig({ AI_PROVIDER: 'anthropic', AI_API_KEY: 'sk-ant-x' });
+    expect(base.aiModel).toBe('claude-haiku-5-5');
+    const c = effectiveConfig(base, {
+      aiModels: { anthropic: 'claude-sonnet-5-5', gemini: 'gemini-3.5-flash' },
+    });
+    expect(c.aiModel).toBe('claude-sonnet-5-5');
+    expect(effectiveConfig(base, { aiModels: { gemini: 'gemini-3.5-flash' } }).aiModel).toBe(
+      'claude-haiku-5-5',
+    );
+  });
+
+  it('auto-switch of the model defaults to on and can be turned off', () => {
+    const base = loadConfig({});
+    expect(base.autoSwitchModel).toBe(true);
+    expect(effectiveConfig(base, { autoSwitchModel: false }).autoSwitchModel).toBe(false);
+  });
+
+  it('refuses a model name with odd characters', () => {
+    expect(() => parseSettingsUpdate({ aiModels: { gemini: 'bad name; rm' } })).toThrow();
+    expect(() => parseSettingsUpdate({ aiModels: { other: 'x' } })).toThrow();
+    expect(parseSettingsUpdate({ aiModels: { gemini: 'gemini-3.5-flash' } })).toEqual({
+      aiModels: { gemini: 'gemini-3.5-flash' },
+    });
+  });
+
   it('developer settings from settings.json replace the defaults, and bad ones are refused', () => {
     const c = effectiveConfig(loadConfig({}), {
       soundCheck: 'off',

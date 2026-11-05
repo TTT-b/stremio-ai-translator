@@ -29,7 +29,11 @@ export function classifyHttp(status: number, body: string, model: string): AppEr
   if (status === 402) return new AppError('PROVIDER_QUOTA_EXCEEDED', 'credits depleted');
   if (status === 404) return new AppError('PROVIDER_MODEL_UNAVAILABLE', model);
   if (status === 429) {
-    if (/insufficient_quota|billing|credit balance|exceeded your current quota/.test(lower)) {
+    if (
+      /insufficient_quota|billing|credit balance|exceeded your current quota|spend_limit|spend limit/.test(
+        lower,
+      )
+    ) {
       return new AppError('PROVIDER_QUOTA_EXCEEDED');
     }
     const e = new AppError('PROVIDER_RATE_LIMITED');

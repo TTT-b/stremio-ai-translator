@@ -104,6 +104,41 @@ $('sync-now-btn').addEventListener('click', async () => {
 });
 $('q-lang').addEventListener('change', quickSave);
 $('q-dual').addEventListener('change', quickSave);
+// Model chooser (only on the page when an AI key is saved): the list comes from the provider itself.
+const modelSel = $('d-model');
+const modelRes = $('d-model-result');
+const modelAuto = $('d-auto-model');
+const saveModel = async () => {
+  if (!modelSel) return true;
+  const patch = {};
+  if (drawerSnap.get(modelSel) !== modelSel.value) patch.aiModels = {[modelRes.dataset.provider]: modelSel.value};
+  if (modelAuto && drawerSnap.get(modelAuto) !== modelAuto.checked) patch.autoSwitchModel = modelAuto.checked;
+  if (!Object.keys(patch).length) return true;
+  try { return (await post('/api/settings', patch)).ok; } catch { return false; }
+};
+const loadModels = async () => {
+  show('d-model-result', null, T.modelLoading);
+  $('d-model-refresh').disabled = true;
+  try {
+    const r = await post('/api/models', {});
+    if (!r.ok) { show('d-model-result', false, r.code === 'CONFIGURATION_INVALID' ? T.modelNoKey : errText(r, T.modelListFail)); return; }
+    const keep = modelSel.value;
+    const ids = r.models.map((m) => m.id);
+    if (keep && !ids.includes(keep)) ids.unshift(keep);
+    modelSel.textContent = '';
+    for (const id of ids) { const o = document.createElement('option'); o.value = id; o.textContent = id; modelSel.appendChild(o); }
+    modelSel.value = keep;
+    // The refreshed list is not a change the user made.
+    drawerSnap.set(modelSel, keep);
+    show('d-model-result', true, f(r.provider === 'openai' ? T.modelLoadedGuess : T.modelLoaded, {n: r.models.length}));
+  } catch { show('d-model-result', false, T.modelListFail); }
+  finally { $('d-model-refresh').disabled = false; }
+};
+if (modelSel) {
+  $('d-model-refresh').addEventListener('click', loadModels);
+  let modelsLoaded = false;
+  modelSel.closest('details').addEventListener('toggle', (e) => { if (e.target.open && !modelsLoaded) { modelsLoaded = true; loadModels(); } });
+}
 $('rerun').addEventListener('click', () => { setDrawer(false); fromDash = true; go(1); setView('wizard'); });
 $('save').addEventListener('click', async () => {
   const saveBtn = $('save');
@@ -117,6 +152,7 @@ $('save').addEventListener('click', async () => {
       catch { show('save-result', false, FAILED); toast(false, FAILED); return; }
     }
     const r = await saveSettings($('d-lang').value, $('d-dual').checked, undefined, $('d-emb').checked, undefined, $('d-ask').checked, $('d-clean').checked);
+    if (r.ok && !(await saveModel())) { show('save-result', false, FAILED); toast(false, FAILED); return; }
     show('save-result', r.ok, r.message);
     toast(r.ok, r.message);
     if (r.ok) { clearKeys('d-'); setTimeout(() => location.reload(), 1000); }

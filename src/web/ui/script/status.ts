@@ -100,6 +100,10 @@ const refreshStatus = async () => {
     // After a failure, say why (quota, key, rate limit...) instead of the general advice.
     $('st-state').textContent = (r.paused && r.running > 0 && T.stPaused) || (r.state === 'error' && r.lastError && ERRORS[r.lastError]) || st[0];
     $('st-dot').className = 'h-2.5 w-2.5 rounded-full ' + st[1] + (r.running > 0 ? ' animate-pulse' : '');
+    // Gemini auto-switch: say so while a fallback model is doing the work.
+    const ms = r.modelSwitch;
+    $('st-model-switch').classList.toggle('hidden', !ms);
+    if (ms) $('st-model-switch').textContent = f(T.modelSwitched, {from: ms.from, to: ms.to});
     $('st-lines').textContent = String(r.linesTranslated);
     const kb = r.bytesTranslated / 1024;
     $('st-size').textContent = kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : Math.round(kb) + ' KB';

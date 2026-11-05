@@ -22,6 +22,10 @@ export interface StatusPageData {
   /** Provider detected from the saved key, e.g. "Google Gemini"; empty when none. */
   aiProviderLabel: string;
   aiModel: string;
+  /** Provider id ("gemini", "anthropic", "openai"); picks the model section's title and icon. */
+  aiProvider?: string;
+  /** Gemini only: continue on a fallback model when the chosen one is overloaded. */
+  autoSwitchModel?: boolean;
   dualSubtitles: boolean;
   /** Use subtitle tracks stored inside the video file (default on). */
   embeddedSubtitles?: boolean;

@@ -107,8 +107,10 @@ export interface Config {
   aiApiKey: string;
   /** Provider detected from the key prefix (Gemini when the prefix is not recognised). */
   aiProvider: ProviderId;
-  /** Fixed per provider; not user-selectable. */
+  /** The provider's default model; the user's own pick (settings.json) replaces it. */
   aiModel: string;
+  /** Gemini only: move to the next model on its own while the chosen one is overloaded. */
+  autoSwitchModel: boolean;
   openSubtitlesApiKey: string;
   subdlApiKey: string;
   jimakuApiKey: string;
@@ -184,7 +186,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     aiApiKey,
     aiProvider: provider.id,
-    aiModel: provider.model, // fixed on purpose: not user-selectable
+    aiModel: provider.model,
+    autoSwitchModel: true,
     openSubtitlesApiKey: e.OPENSUBTITLES_API_KEY,
     subdlApiKey: e.SUBDL_API_KEY,
     jimakuApiKey: e.JIMAKU_API_KEY,

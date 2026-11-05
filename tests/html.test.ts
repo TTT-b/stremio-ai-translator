@@ -471,3 +471,50 @@ describe('developer settings', () => {
     expect(html).toContain('id="dev-sound"');
   });
 });
+
+describe('model chooser', () => {
+  const data = {
+    nonce: 'abc',
+    aiConfigured: true,
+    aiProviderLabel: 'Google Gemini',
+    aiModel: 'gemini-3.5-flash-lite',
+    aiProvider: 'gemini',
+    dualSubtitles: false,
+    openSubtitlesKeyConfigured: false,
+    openSubtitlesLoginConfigured: false,
+    openSubtitlesUsername: '',
+    languages: [{ code: 'he', name: 'Hebrew' }],
+    targetLanguage: 'he',
+    manifestUrl: 'http://127.0.0.1:7000/manifest.json',
+    installUrl: 'https://web.stremio.com/#/addons?addon=x',
+    stremioReady: true,
+    rtlFix: false,
+  };
+
+  it('names the provider in the title and offers auto-switch for Gemini only', () => {
+    const gem = renderStatusPage({ ...data, uiLang: 'en' });
+    expect(gem).toContain('Translation model (Google Gemini)');
+    expect(gem).toContain('id="d-model"');
+    expect(gem).toContain('id="d-auto-model"');
+    const ant = renderStatusPage({
+      ...data,
+      uiLang: 'en',
+      aiProvider: 'anthropic',
+      aiProviderLabel: 'Anthropic Claude',
+      aiModel: 'claude-haiku-5-5',
+    });
+    expect(ant).toContain('Translation model (Anthropic Claude)');
+    expect(ant).not.toContain('id="d-auto-model"');
+  });
+
+  it('is absent without an AI key', () => {
+    const none = renderStatusPage({ ...data, aiConfigured: false, aiProvider: '' });
+    expect(none).not.toContain('id="d-model"');
+  });
+
+  it('keeps the page script valid', () => {
+    const html = renderStatusPage({ ...data, uiLang: 'en' });
+    const script = /<script nonce="abc">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? '';
+    expect(() => new Script(script)).not.toThrow();
+  });
+});

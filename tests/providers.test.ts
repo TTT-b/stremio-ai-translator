@@ -105,6 +105,13 @@ describe('OpenAiProvider', () => {
     await expect(make(503).translateChunk(req)).rejects.toMatchObject({
       code: 'PROVIDER_TIMEOUT',
     });
+    // Anthropic's "overloaded" is 529: wait and retry. Its spend limit is a 429 that never clears.
+    await expect(make(529).translateChunk(req)).rejects.toMatchObject({
+      code: 'PROVIDER_TIMEOUT',
+    });
+    await expect(
+      make(429, { error: { type: 'enforced_spend_limit_reached' } }).translateChunk(req),
+    ).rejects.toMatchObject({ code: 'PROVIDER_QUOTA_EXCEEDED' });
   });
 
   it('never puts the key in an error message', async () => {

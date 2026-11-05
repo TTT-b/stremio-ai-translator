@@ -82,6 +82,10 @@ describe('local web server', () => {
         const provider = PROVIDERS.find((p) => p.id === id) as (typeof PROVIDERS)[number];
         return { ok: true, provider };
       },
+      listModels: async (provider, key) => {
+        if (key.startsWith('offline')) throw new AppError('PROVIDER_TIMEOUT');
+        return [{ id: `${provider}-model-1`, label: 'Model one' }];
+      },
       createProvider: () =>
         new FakeProvider(async (req) => {
           if (providerFailsWith) throw providerFailsWith;
@@ -341,6 +345,39 @@ describe('local web server', () => {
     const bad = await post('/api/settings', { targetLanguage: '<script>' });
     expect(bad.status).toBe(400);
     await post('/api/settings', { targetLanguage: 'he', dualSubtitles: false });
+  });
+
+  it('lists the models of the key in use, saves the pick per provider, and never echoes the key', async () => {
+    const res = await post('/api/models', {});
+    const body = (await res.json()) as Record<string, unknown>;
+    const provider = body.provider as string; // earlier tests may have changed the saved key
+    expect(body).toMatchObject({
+      ok: true,
+      label: PROVIDERS.find((p) => p.id === provider)?.label,
+      selected: PROVIDERS.find((p) => p.id === provider)?.model,
+      models: [{ id: `${provider}-model-1`, label: 'Model one' }],
+    });
+    expect(JSON.stringify(body)).not.toContain(SECRET_KEY);
+    const saved = await post('/api/settings', {
+      aiModels: { [provider]: 'my-chosen-model' },
+      autoSwitchModel: false,
+    });
+    expect(await saved.json()).toEqual({ ok: true });
+    expect(((await (await post('/api/models', {})).json()) as { selected: string }).selected).toBe(
+      'my-chosen-model',
+    );
+    expect((await post('/api/settings', { aiModels: { gemini: 'x y' } })).status).toBe(400);
+    // A pick for another provider must not wipe this provider's pick.
+    const other = provider === 'openai' ? 'anthropic' : 'openai';
+    await post('/api/settings', { aiModels: { [other]: 'other-pick' } });
+    expect(((await (await post('/api/models', {})).json()) as { selected: string }).selected).toBe(
+      'my-chosen-model',
+    );
+    const defaultModel = PROVIDERS.find((p) => p.id === provider)?.model ?? '';
+    await post('/api/settings', {
+      aiModels: { [provider]: defaultModel, [other]: PROVIDERS.find((p) => p.id === other)?.model },
+      autoSwitchModel: true,
+    });
   });
 
   it('dev route translates a posted SRT and preserves structure', async () => {

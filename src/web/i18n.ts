@@ -526,6 +526,42 @@ const S = {
     he: 'כל המקורות נבדקים יחד, והתוכנה בוחרת את הכתובית שהכי מתאימה לקובץ שמנגן (אותו קובץ בדיוק, אחר כך אותה גרסה). המקור המועדף קובע רק כשכמה כתוביות מתאימות באותה מידה. SubDL דורש מפתח SubDL (בחשבונות ומפתחות), ואין בו הורדות יומיות שנספרות מול OpenSubtitles.',
     en: 'All sources are searched together and the subtitle that best fits the playing file is chosen (the exact file first, then the same release). The preferred source decides only when several subtitles fit equally well. SubDL needs a SubDL key (under Accounts and keys) and does not use up the OpenSubtitles daily downloads.',
   },
+  modelTitle: { he: 'מודל התרגום ({p})', en: 'Translation model ({p})' },
+  modelLabel: { he: 'המודל שמתרגם', en: 'Model used for translation' },
+  modelHint: {
+    he: 'כל מפתח מתאים לרשימת מודלים אחרת. מודל קטן ומהיר זול יותר, ומודל גדול מדויק יותר. השינוי נכנס לתוקף בתרגום הבא.',
+    en: 'Each key allows a different list of models. A small, fast model is cheaper; a larger one is more accurate. The change applies to the next translation.',
+  },
+  modelRefresh: { he: 'רענן רשימה', en: 'Refresh list' },
+  modelLoading: { he: 'טוען את רשימת המודלים...', en: 'Loading the model list...' },
+  modelLoaded: {
+    he: 'נמצאו {n} מודלים שהמפתח שלך מאפשר.',
+    en: '{n} models are available to your key.',
+  },
+  modelLoadedGuess: {
+    he: 'נמצאו {n} מודלים. הסינון של OpenAI הוא הערכה לפי השם, ייתכן שמודל מתאים חסר.',
+    en: '{n} models found. OpenAI filtering is a best guess by name, so a suitable model may be missing.',
+  },
+  modelNoKey: {
+    he: 'הוסף קודם מפתח AI בחשבונות ומפתחות.',
+    en: 'Add an AI key first under Accounts and keys.',
+  },
+  modelListFail: {
+    he: 'לא ניתן לטעון את הרשימה. המודל הנוכחי נשאר כפי שהוא.',
+    en: 'The list could not be loaded. The current model stays as it is.',
+  },
+  modelAutoLabel: {
+    he: 'מעבר אוטומטי כשהמודל עמוס',
+    en: 'Switch automatically when the model is busy',
+  },
+  modelAutoHint: {
+    he: 'כש-Gemini עמוס, התרגום ממשיך במודל חלופי במקום להמתין. הכתובית נשמרת תחת המודל שבחרת.',
+    en: 'When Gemini is overloaded, translation continues on a fallback model instead of waiting. The subtitle is still stored under the model you chose.',
+  },
+  modelSwitched: {
+    he: 'המודל {from} עמוס כרגע, התרגום ממשיך עם {to}.',
+    en: '{from} is busy right now, so translation continues on {to}.',
+  },
   menuAbout: { he: 'אודות התוכנה', en: 'About' },
   aboutDesc: {
     he: 'מתרגם כתוביות ל-Stremio בעזרת AI. כאן אפשר לראות את הגרסה ולבדוק אם יש עדכון.',

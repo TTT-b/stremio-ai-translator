@@ -27,6 +27,7 @@ import type { ChunkCue } from '../subtitles/chunk';
 import { stripForeignScripts } from '../subtitles/validate';
 import { withPartialNotice } from '../stremio/placeholder';
 import type { Cue } from '../subtitles/types';
+import { ModelFallbackProvider } from '../translation/fallback';
 import { CancelledError, translateSubtitle, type ChunkStore } from '../translation/pipeline';
 import { PROMPT_VERSION } from '../translation/prompts/v1';
 
@@ -423,6 +424,18 @@ export class JobManager {
     return buildQueue([...this.jobs.values()], (running) => this.skippableStep(running));
   }
 
+  /** Translations running on a model other than the chosen one (auto-switch while it is overloaded). */
+  private readonly fallbackProviders = new Set<ModelFallbackProvider>();
+
+  private modelSwitch(): { from: string; to: string } | null {
+    for (const p of this.fallbackProviders) {
+      const to = p.activeModel();
+      const from = p.getModelInformation().model;
+      if (to !== from) return { from, to };
+    }
+    return null;
+  }
+
   /** Live numbers for the status card. Counts this app session only. */
   stats(): JobStats {
     const running = [...this.jobs.values()].filter((j) => j.status === 'running').length;
@@ -481,6 +494,7 @@ export class JobManager {
           : null,
       subdlDownloads: this.subdlDownloads,
       exactComing: exactComing([...this.jobs.values()], (j) => this.canUpgrade(j)),
+      modelSwitch: this.modelSwitch(),
       backgroundSync: backgroundSyncView,
       lastDelivered:
         this.lastDelivered && this.now() - this.lastDelivered.at < UPGRADE_NOTICE_MS
@@ -1402,7 +1416,11 @@ export class JobManager {
       });
     if (!sharing) {
       this.translating.set(trKey, { work, watchers, lead: job, kicks });
-      const forget = (): void => void this.translating.delete(trKey);
+      if (provider instanceof ModelFallbackProvider) this.fallbackProviders.add(provider);
+      const forget = (): void => {
+        this.translating.delete(trKey);
+        if (provider instanceof ModelFallbackProvider) this.fallbackProviders.delete(provider);
+      };
       work.then(forget, forget);
     }
     let result: Awaited<typeof work>;

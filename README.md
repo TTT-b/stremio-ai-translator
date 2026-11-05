@@ -543,6 +543,22 @@ In Settings, Accounts and keys, every set key (AI, OpenSubtitles key, OpenSubtit
 Jimaku) has a small x inside its "Set" label. It asks "Remove the key?" before clearing it from the
 local `.env` file. Password fields show the eye button only after you type something.
 
+### Choosing the translation model
+
+Settings, Translation, has a "Translation model" section. Its title and icon follow the AI
+provider detected from your key (Google Gemini, Anthropic Claude or OpenAI). The list of models
+is read from the provider with your own key (button **Refresh list**) and only shows models that
+can translate text; for OpenAI the filter is a best guess by name. The pick is saved per provider
+and used for new translations. It is part of the cache identity, so a subtitle already translated
+with another model is translated again. For Gemini there is also **Switch model automatically
+when it is busy** (on by default): if the chosen model is overloaded, rate limited, out of quota
+or does not exist for your key, the app moves to the next model of a short built-in list for the
+rest of that translation and tells you on the main screen. If every model fails it waits and
+starts again from the chosen one. Anthropic and OpenAI keep the model you picked.
+
+While the provider is overloaded (5xx, 429), parallel requests shrink to one at a time and grow
+back after successful requests.
+
 ### Trying changes without installing the app
 
 For quick tests, run the add-on straight from the project folder instead of building and installing

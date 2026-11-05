@@ -1,5 +1,6 @@
 import { btn, btnPrimary, escapeHtml, field, labelCls, result, selectField } from './components';
 import type { UiCtx } from './context';
+import { renderModelPicker } from './modelPicker';
 
 /** Settings drawer: keys, translation, general, maintenance and about (with developer settings). */
 export function renderDrawer(c: UiCtx): string {
@@ -91,6 +92,7 @@ ${toggle('d-clean', d.cleanSubtitles ?? true, 'cleanLabel', 'cleanHint', true)}
 ${toggle('d-ask', d.translationMode === 'ask', 'askLabel', 'askHint', true)}</div>
 <div><label class="${labelCls}" for="d-src">${tt('srcLabel')}</label>${selectField('d-src', `<option value="opensubtitles"${d.subtitleSource === 'subdl' ? '' : ' selected'}>${tt('srcOs')}</option><option value="subdl"${d.subtitleSource === 'subdl' ? ' selected' : ''}>${tt('srcSubdl')}</option>`)}<p class="mt-1 text-xs text-warm-mu">${tt('srcHint')}</p></div>`,
 )}
+${d.aiConfigured && d.aiProvider ? renderModelPicker(c) : ''}
 ${
   d.desktop
     ? group(

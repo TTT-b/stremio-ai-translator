@@ -49,7 +49,9 @@ import { parseSubtitle, stripOverrideTags } from '../subtitles/parse';
 import { serializeSubtitle } from '../subtitles/serialize';
 import { GeminiProvider } from '../translation/gemini';
 import { AnthropicProvider, OpenAiProvider } from '../translation/httpProviders';
-import { PROVIDERS } from '../translation/providers';
+import { ModelFallbackProvider } from '../translation/fallback';
+import { listModels } from '../translation/models';
+import { GEMINI_FALLBACKS, PROVIDERS } from '../translation/providers';
 import { verifyAiKey, type VerifyResult } from '../translation/verify';
 import type { TranslationProvider } from '../translation/provider';
 import { translateSubtitle } from '../translation/pipeline';
@@ -62,6 +64,8 @@ export interface ServerDeps {
   settingsPath?: string;
   /** Builds the translation provider for the effective config. Injectable for tests. */
   createProvider?: (config: Config) => TranslationProvider;
+  /** Test hook: replaces the real model-list request. */
+  listModels?: typeof listModels;
   /** Builds the subtitle source provider. Injectable for tests. */
   createSourceProvider?: (config: Config, logger: Logger) => SourceSubtitleProvider;
   fetchImpl?: typeof fetch;
@@ -204,7 +208,14 @@ export function createApp(deps: ServerDeps): express.Express {
           ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
         });
       }
-      return new GeminiProvider(opts);
+      if (!c.autoSwitchModel) return new GeminiProvider(opts);
+      const chain = [c.aiModel, ...GEMINI_FALLBACKS.filter((m) => m !== c.aiModel)];
+      return new ModelFallbackProvider(
+        chain,
+        (model) => new GeminiProvider({ ...opts, model }),
+        (from, to) =>
+          logger.warn({ stage: 'API', from, to }, 'AI model overloaded: switched to another model'),
+      );
     });
 
   const verify = deps.verifyAiKey ?? ((key: string) => verifyAiKey(key, deps.fetchImpl));
@@ -335,6 +346,8 @@ export function createApp(deps: ServerDeps): express.Express {
         aiConfigured: c.aiApiKey !== '',
         aiProviderLabel: PROVIDERS.find((p) => p.id === c.aiProvider)?.label ?? '',
         aiModel: c.aiModel,
+        aiProvider: c.aiApiKey === '' ? '' : c.aiProvider,
+        autoSwitchModel: c.autoSwitchModel,
         dualSubtitles: c.dualSubtitles,
         embeddedSubtitles: c.embeddedSubtitles,
         cleanSubtitles: c.cleanSubtitles,
@@ -367,12 +380,42 @@ export function createApp(deps: ServerDeps): express.Express {
   app.post('/api/settings', (req, res) => {
     try {
       const update = parseSettingsUpdate(req.body);
-      const merged: Settings = { ...readSettings(deps.settingsPath), ...update };
+      const current = readSettings(deps.settingsPath);
+      const merged: Settings = {
+        ...current,
+        ...update,
+        // The model pick is stored per provider: keep the other providers' picks.
+        ...(update.aiModels ? { aiModels: { ...current.aiModels, ...update.aiModels } } : {}),
+      };
       writeSettings(merged, deps.settingsPath);
       logger.info({ stage: 'CONFIG', ...merged }, 'settings saved');
       res.json({ ok: true });
     } catch {
       res.status(400).json({ ok: false, message: 'Invalid settings.' });
+    }
+  });
+
+  // The models this key can use, for the model picker. The key never leaves the request headers.
+  app.post('/api/models', async (_req, res) => {
+    const c = current();
+    const info = PROVIDERS.find((p) => p.id === c.aiProvider) ?? PROVIDERS[0];
+    const base = { provider: c.aiProvider, label: info?.label ?? '', selected: c.aiModel };
+    if (!c.aiApiKey) {
+      res.json({ ok: false, ...base, code: 'CONFIGURATION_INVALID' });
+      return;
+    }
+    try {
+      const models = await (deps.listModels ?? listModels)(
+        c.aiProvider,
+        c.aiApiKey,
+        deps.fetchImpl,
+      );
+      logger.info({ stage: 'API', provider: c.aiProvider, count: models.length }, 'model list');
+      res.json({ ok: true, ...base, models });
+    } catch (err) {
+      const code = isAppError(err) ? err.code : 'PROVIDER_RESPONSE_INVALID';
+      logger.warn({ stage: 'API', provider: c.aiProvider, errorCode: code }, 'model list failed');
+      res.json({ ok: false, ...base, code });
     }
   });
 
