@@ -97,7 +97,7 @@ async function listGemini(key: string, fetchImpl: typeof fetch): Promise<ModelOp
 }
 
 interface AnthropicList {
-  data?: { id?: string; display_name?: string }[];
+  data?: { id?: string; display_name?: string; lifecycle?: string }[];
   has_more?: boolean;
   last_id?: string;
 }
@@ -113,6 +113,8 @@ async function listAnthropic(key: string, fetchImpl: typeof fetch): Promise<Mode
       fetchImpl,
     )) as AnthropicList;
     for (const m of data.data ?? []) {
+      // Deprecated and retired models are closed to new users; hide them.
+      if (m.lifecycle === 'deprecated' || m.lifecycle === 'retired') continue;
       if (m.id) out.push({ id: m.id, label: m.display_name || m.id });
     }
     after = data.has_more ? data.last_id : undefined;

@@ -105,6 +105,21 @@ describe('listModels', () => {
     expect(calls[0]?.url).not.toContain('SECRET');
   });
 
+  it('anthropic: hides deprecated and retired models', async () => {
+    const { fetchImpl } = fakeFetch([
+      {
+        data: [
+          { id: 'claude-haiku-5-5', lifecycle: 'active' },
+          { id: 'claude-old-1', lifecycle: 'deprecated' },
+          { id: 'claude-gone-1', lifecycle: 'retired' },
+        ],
+        has_more: false,
+      },
+    ]);
+    const out = await listModels('anthropic', 'sk-ant-x', fetchImpl);
+    expect(out.map((m) => m.id)).toEqual(['claude-haiku-5-5']);
+  });
+
   it('openai: keeps chat models only (heuristic) and sorts them', async () => {
     const { fetchImpl, calls } = fakeFetch([
       {
