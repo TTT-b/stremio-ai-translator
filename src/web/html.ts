@@ -1,25 +1,19 @@
 import { readFileSync } from 'node:fs';
-import { dictFor, ERROR_MESSAGES, t, type StrKey, type UiLang } from './i18n';
-import {
-  btn,
-  btnDanger,
-  btnPrimary,
-  escapeHtml,
-  field,
-  FLAG_EN,
-  FLAG_IL,
-  labelCls,
-  logo,
-  result,
-  selectField,
-  tile,
-  winBtn,
-} from './ui/components';
+import { dictFor, ERROR_MESSAGES, t, type UiLang } from './i18n';
+import { escapeHtml } from './ui/components';
+import { createUiCtx } from './ui/context';
+import { renderDashboard } from './ui/dashboard';
+import { renderDrawer } from './ui/drawer';
+import { renderLibrary } from './ui/library';
+import { renderConfirmModals, renderExtModal } from './ui/modals';
+import { renderTitleBar } from './ui/titleBar';
+import { renderWizard } from './ui/wizard';
 
 /** Replaced at build time by scripts/build-electron.mjs; undefined when running from source. */
 declare const __TAILWIND_CSS__: string | undefined;
 
 export { escapeHtml };
+export { prettyModel, providerLine } from './ui/provider';
 
 export interface StatusPageData {
   nonce: string;
@@ -82,16 +76,6 @@ const POINTER_CSS =
 /** Hebrew text for the API error codes (kept for callers and tests; see i18n.ts for both languages). */
 export const ERROR_MESSAGES_HE = ERROR_MESSAGES.he;
 
-/** Language name in the screen's language ("עברית" / "Hebrew"), falling back to the English name. */
-function languageName(ui: UiLang, code: string, fallback: string): string {
-  try {
-    const name = new Intl.DisplayNames([ui], { type: 'language' }).of(code);
-    return name && name !== code ? name : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 /** Texts used only by the desktop title bar and its dialogs (not sent to the script). */
 const TITLE_BAR_KEYS = new Set<string>([
   'update',
@@ -108,249 +92,12 @@ const TITLE_BAR_KEYS = new Set<string>([
   'newsOk',
 ]);
 
-/** "gemini-3.5-flash-lite" becomes "Gemini 3.5 Flash Lite". */
-export function prettyModel(id: string): string {
-  const words = id
-    .split(/[-_\s]+/)
-    .filter((w) => w !== '')
-    .reduce<string[]>((out, word) => {
-      const last = out[out.length - 1];
-      // "5-5" is version 5.5, not two numbers
-      if (last !== undefined && /^\d+$/.test(last) && /^\d+$/.test(word)) {
-        out[out.length - 1] = last + '.' + word;
-      } else {
-        out.push(word);
-      }
-      return out;
-    }, []);
-  return words
-    .map((w) =>
-      w.toLowerCase() === 'gpt'
-        ? 'GPT'
-        : /^\d/.test(w)
-          ? w
-          : w.charAt(0).toUpperCase() + w.slice(1),
-    )
-    .join(' ');
-}
-
-/** The provider and model for the header line: "Google Gemini 3.5 Flash Lite". */
-export function providerLine(providerLabel: string, model: string): string {
-  const pretty = prettyModel(model);
-  const lastWord = providerLabel.trim().split(/\s+/).pop() ?? '';
-  if (lastWord !== '' && pretty.toLowerCase().startsWith(lastWord.toLowerCase() + ' ')) {
-    return providerLabel + ' ' + pretty.slice(lastWord.length + 1);
-  }
-  return providerLabel === '' ? pretty : providerLabel + ' · ' + pretty;
-}
-
 export function renderStatusPage(d: StatusPageData): string {
-  const lang: UiLang = d.uiLang ?? 'he';
-  const dir = lang === 'he' ? 'rtl' : 'ltr';
-  /** Text for HTML content and attributes. */
-  const tt = (key: StrKey, vars?: Record<string, string | number>) =>
-    escapeHtml(t(lang, key, vars));
-  /** A password input with an eye button that shows or hides what was typed. */
-  const passwordField = (id: string, placeholder: string): string =>
-    `<div class="relative"><input class="${field} !pe-11" id="${id}" type="password" autocomplete="off" placeholder="${placeholder}"><button type="button" data-reveal="${id}" aria-pressed="false" aria-label="${tt('showPassword')}" title="${tt('showPassword')}" class="absolute end-2 top-1/2 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-warm-mu transition hover:text-warm-tx focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac/40"><svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path data-slash class="hidden" d="M4 4l16 16"/></svg></button></div>`;
-  /** "Forward" arrow: points left in right-to-left screens. */
-  const arrow = lang === 'he' ? '&larr;' : '&rarr;';
-  const nudge =
-    'transition-transform duration-200 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1';
-
-  const askBtn = (extra: string) =>
-    `rounded-lg border px-2 py-0.5 font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac ${extra}`;
-  const keyRow = (field: string, label: string, ok: boolean, yes = tt('configured')) =>
-    `<li data-key-row class="flex items-center justify-between gap-3"><span>${label}</span>${
-      ok
-        ? `<span data-rm-normal class="inline-flex items-center"><span class="inline-flex items-center gap-1.5 rounded-full border border-warm-ok/40 bg-warm-ok/10 py-0.5 ps-2.5 pe-1.5 text-xs font-semibold text-warm-ok"><span class="h-1.5 w-1.5 rounded-full bg-warm-ok"></span>${yes}<button type="button" data-rm title="${tt('removeKeyAria')}" aria-label="${tt('removeKeyAria')}" class="ms-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] leading-none transition hover:bg-rose-400/20 hover:text-rose-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">&#10005;</button></span></span><span data-rm-ask class="hidden items-center gap-2 text-xs"><span class="text-warm-mu">${tt('removeKeyAsk')}</span><button type="button" data-rm-yes="${field}" class="${askBtn('border-rose-400/50 text-rose-300 hover:bg-rose-400/10')}">${tt('removeKeyYes')}</button><button type="button" data-rm-no class="${askBtn('border-warm-ln text-warm-mu hover:text-warm-tx')}">${tt('removeKeyNo')}</button></span>`
-        : badge(false)
-    }</li>`;
-  const badge = (ok: boolean, yes = tt('configured'), no = tt('missing')) =>
-    `<span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-      ok
-        ? 'border-warm-ok/40 bg-warm-ok/10 text-warm-ok'
-        : 'border-rose-400/40 bg-rose-400/10 text-rose-300'
-    }"><span class="h-1.5 w-1.5 rounded-full ${ok ? 'bg-warm-ok' : 'bg-rose-400'}"></span>${ok ? yes : no}</span>`;
-
-  /** Pill-style button that opens a provider page in the default browser (handled by the Electron main process). */
-  const keyLink = (href: string, label: string, free = false) =>
-    `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="group inline-flex items-center gap-2 rounded-full border border-warm-ln px-3 py-1 text-xs font-semibold text-warm-mu transition hover:border-warm-ac/60 hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${escapeHtml(label)}${
-      free
-        ? `<span class="rounded-full bg-warm-ok/15 px-2 py-0.5 text-[10px] font-bold text-warm-ok">${tt('free')}</span>`
-        : ''
-    }<span class="${nudge}" aria-hidden="true">${arrow}</span></a>`;
-
-  /** Custom title bar for the frameless desktop window (drag area + minimize / close-to-tray). */
-  const titleBar = `<div dir="ltr" class="drag fixed inset-x-0 top-0 z-50 flex h-9 items-center justify-between border-b border-warm-ln bg-warm-sf">
-<div class="flex items-center gap-2 pl-3 text-xs font-medium text-warm-mu">${logo}<span dir="${dir}" class="font-bold text-warm-tx">${tt('appTitle')}</span><span dir="${dir}">${tt('appTagline')}</span></div>
-<div class="flex items-center"><button type="button" id="update-btn" class="hidden no-drag mr-2 h-6 items-center gap-1.5 rounded-lg bg-warm-ac px-2.5 text-xs font-bold text-warm-on transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac/60" title="${tt('updateTitle')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v8m0 0L4.5 6.5M8 10l3.5-3.5M3 13h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>${tt('update')}</span></button>
-<button type="button" id="win-min" class="${winBtn}" aria-label="${tt('minimize')}"><svg width="14" height="14" viewBox="0 0 10 10" stroke-width="1.1"><path d="M0 5h10" stroke="currentColor"/></svg></button>
-<button type="button" id="win-max" class="${winBtn}" aria-label="${tt('maximize')}"><svg width="14" height="14" viewBox="0 0 10 10" stroke-width="1.1" fill="none"><rect id="win-max-icon" x=".5" y=".5" width="9" height="9" stroke="currentColor"/></svg></button>
-<button type="button" id="win-close" class="${winBtn} hover:!bg-rose-600 hover:!text-white" aria-label="${tt('close')}"><svg width="14" height="14" viewBox="0 0 10 10" stroke-width="1.1"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor"/></svg></button></div></div>
-<div id="exit-modal" class="no-drag fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="exit-title">
-<div class="w-full max-w-sm rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
-<h2 id="exit-title" class="text-lg font-bold text-warm-tx">${tt('exitTitle')}</h2>
-<p class="mt-1 text-sm text-warm-mu">${tt('exitBody')}</p>
-<div class="mt-5 grid gap-2">
-<button type="button" id="exit-tray" class="${btnPrimary}">${tt('exitTray')}</button>
-<button type="button" id="exit-quit" class="${btnDanger}">${tt('exitQuit')}</button>
-<button type="button" id="exit-cancel" class="px-4 py-2 text-sm text-warm-mu transition hover:text-warm-tx focus:outline-none">${tt('cancel')}</button>
-</div></div></div>
-<div id="news-modal" class="no-drag fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="news-title">
-<div class="w-full max-w-md rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
-<span class="inline-flex gap-1 rounded-full border border-warm-ac/40 bg-warm-ac/10 px-2.5 py-0.5 text-xs font-semibold text-warm-ac">${tt('newsUpdated')} <span id="news-version" dir="ltr"></span></span>
-<h2 id="news-title" class="mt-3 text-lg font-bold text-warm-tx">${tt('newsTitle')}</h2>
-<ul id="news-list" class="mt-3 space-y-2 text-sm text-warm-tx/90"></ul>
-<button type="button" id="news-close" class="${btnPrimary} mt-6 w-full">${tt('newsOk')}</button>
-</div></div>`;
-
-  /** Settings drawer footer (desktop only): app version and a manual update check, result on its own line below. */
-  const updatesRow = `<div class="flex flex-col gap-3"><div class="flex items-center justify-between gap-3"><div><div class="text-xs text-warm-mu">${tt('version')}</div><div id="app-version" dir="ltr" class="font-mono text-base font-bold text-warm-tx"></div></div><button type="button" id="check-update" class="${btn} flex items-center gap-2 !px-5"><span aria-hidden="true">&#8635;</span>${tt('checkUpdates')}</button></div><span class="${result}" id="update-result"></span></div>`;
-
-  /** Interface language: a button with the current flag and code, and a small menu. */
-  const langMenu = () => {
-    const option = (code: 'he' | 'en', flag: string, name: string) =>
-      `<button type="button" role="option" data-ui="${code}" aria-selected="${lang === code}" class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-warm-tx transition hover:bg-warm-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${flag}<span>${name}</span></button>`;
-    return `<div class="js-lang-wrap relative"><button type="button" dir="ltr" class="js-lang-btn ${btn} flex items-center gap-1.5 !px-2.5 !py-2 !text-xs" aria-haspopup="listbox" aria-expanded="false" aria-label="${tt('uiLangLabel')}" title="${tt('uiLangLabel')}">${lang === 'he' ? FLAG_IL : FLAG_EN}<span dir="ltr" class="font-bold">${lang === 'he' ? 'HE' : 'EN'}</span><svg class="h-1.5 w-2.5 shrink-0" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="js-lang-menu absolute end-0 top-full z-50 mt-1 hidden min-w-[150px] rounded-xl border border-warm-ln bg-warm-sf p-1 shadow-lg shadow-black/40" role="listbox">${option('he', FLAG_IL, 'עברית')}${option('en', FLAG_EN, 'English')}</div></div>`;
-  };
-
-  /** Wizard steps: short label (progress bar), title and one-line explanation. */
-  const STEPS = Array.from({ length: d.desktop ? 6 : 5 }, (_, i) => i + 1).map((n) => [
-    t(lang, `step${n}Label` as StrKey),
-    t(lang, `step${n}Title` as StrKey),
-    t(lang, `step${n}Sub` as StrKey),
-  ]);
-
-  /** Switch (a styled checkbox, so it works with the keyboard and screen readers). */
-  const toggle = (id: string, checked: boolean, label: StrKey, hint?: StrKey, plain = false) =>
-    `<label class="flex cursor-pointer min-h-14 items-center gap-3.5 ${plain ? 'p-4 transition hover:bg-warm-bg/40' : 'rounded-2xl border border-warm-ln p-4 transition hover:border-warm-ac/50'}"><input type="checkbox" id="${id}" class="peer sr-only"${checked ? ' checked' : ''}><span class="relative h-[23px] w-10 shrink-0 rounded-full bg-warm-ln transition peer-checked:bg-warm-ac peer-focus-visible:ring-2 peer-focus-visible:ring-warm-ac/60 after:absolute after:start-[3px] after:top-[3px] after:h-[17px] after:w-[17px] after:rounded-full after:bg-white after:transition rtl:peer-checked:after:-translate-x-[17px] ltr:peer-checked:after:translate-x-[17px]"></span><span><span class="block text-sm font-semibold text-warm-tx">${tt(label)}</span>${
-      hint ? `<span class="mt-0.5 block text-xs text-warm-mu">${tt(hint)}</span>` : ''
-    }</span></label>`;
-  /** Marks which source is asked first ("in use") and which is the backup. */
-  const srcBadge = (src: 'opensubtitles' | 'subdl') => {
-    const first = (d.subtitleSource === 'subdl' ? 'subdl' : 'opensubtitles') === src;
-    return `<span data-src-badge="${src}" class="rounded-full px-2 py-0.5 text-[11px] font-bold ${first ? 'bg-warm-ac/15 text-warm-ac' : 'bg-warm-ln text-warm-mu'}">${tt(first ? 'srcInUse' : 'srcBackup')}</span>`;
-  };
-  /** A settings category: closed until the user opens it (opening one closes the others). */
-  const GROUP_ICON: Partial<Record<StrKey, string>> = {
-    secKeys: '&#128273;',
-    secTranslate: '&#127760;',
-    secGeneral: '&#9881;',
-    secMaintenance: '&#129529;',
-    secDev: '&#128295;',
-    menuAbout: '&#8505;',
-  };
-  const group = (title: StrKey, body: string) =>
-    `<details class="rounded-2xl border border-warm-ln"><summary class="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-warm-tx transition hover:bg-warm-bg/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac"><span class="flex items-center gap-2.5"><span aria-hidden="true" class="flex h-7 w-7 items-center justify-center rounded-lg bg-warm-ac/10 text-sm">${GROUP_ICON[title] ?? ''}</span>${tt(title)}</span><span aria-hidden="true" class="text-warm-ac">&#9662;</span></summary><div class="flex flex-col gap-3.5 border-t border-warm-ln p-4">${body}</div></details>`;
-  const dualSwitch = (id: string, checked: boolean, withHint: boolean) =>
-    toggle(id, checked, 'dualLabel', withHint ? 'dualHint' : undefined);
-
-  const langOptions = d.languages
-    .map(
-      (l) =>
-        `<option value="${escapeHtml(l.code)}"${l.code === d.targetLanguage ? ' selected' : ''}>${escapeHtml(languageName(lang, l.code, l.name))} (${escapeHtml(l.code)})</option>`,
-    )
-    .join('');
-  const keysDone = d.aiConfigured && d.openSubtitlesKeyConfigured && d.openSubtitlesLoginConfigured;
-  // First visit (or a key is missing): the wizard opens at the first incomplete step.
-  const startStep = keysDone ? 0 : d.aiConfigured ? 2 : 1;
-
-  const install = d.stremioReady
-    ? `<a id="install" class="group inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-warm-ac px-6 py-3.5 text-base font-bold text-warm-on transition hover:brightness-110 active:brightness-95 focus:outline-none focus-visible:ring-4 focus-visible:ring-warm-ac/40" href="${escapeHtml(d.installUrl)}" target="_blank" rel="noopener noreferrer">
-         <span>${tt('installBtn')}</span><span class="${nudge}" aria-hidden="true">${arrow}</span></a>
-       <p class="text-xs text-warm-mu">${tt('installNote1')}</p>
-       <p class="text-xs text-warm-mu">${tt('installOr')}</p>
-       <div class="flex gap-2">
-         <input id="manifest" readonly dir="ltr" class="${field} min-w-0 flex-1 font-mono text-[13px]" value="${escapeHtml(d.manifestUrl)}" aria-label="${tt('manifestAria')}">
-         <button type="button" id="copy" class="${btn}">${tt('copy')}</button>
-       </div>
-       <p class="text-xs text-warm-mu">${tt('installNote2')}</p>`
-    : `<p class="text-sm text-warm-mu">${tt('installNotReady')}
-       <code dir="ltr" class="rounded bg-warm-bg px-1.5 py-0.5">${escapeHtml(d.installUrl)}</code></p>`;
-
-  /** Short install box for the main screen, so the link is at hand without reopening the wizard. */
-  const installCompact = d.stremioReady
-    ? `<section class="${tile} flex flex-col gap-2.5"><div class="text-sm font-bold text-warm-tx">${tt('installTitle')}</div>
-<div class="grid grid-cols-2 gap-2.5"><a id="install-d" class="${btn} text-center" href="${escapeHtml(d.installUrl)}" target="_blank" rel="noopener noreferrer">${tt('installBtn')}</a><button type="button" id="open-stremio" class="${btn}">${tt('openStremio')}</button></div>
-<div class="flex gap-2"><input id="manifest-d" readonly dir="ltr" class="${field} min-w-0 flex-1 font-mono text-[13px]" value="${escapeHtml(d.manifestUrl)}" aria-label="${tt('manifestAria')}"><button type="button" id="copy-d" class="${btn}">${tt('copy')}</button></div></section>`
-    : '';
-
-  const testRow = (label: string, button: string, resultId: string, extra = '', rowName = '') =>
-    `<div${rowName ? ` data-check-row="${rowName}"` : ''} class="${extra}flex items-center justify-between gap-3 rounded-2xl border border-warm-ln px-3.5 py-2.5"><div class="min-w-0"><div class="text-sm font-semibold text-warm-tx">${label}</div><span class="${result} mt-0.5 !text-xs text-warm-mu" id="${resultId}"></span></div>${button}</div>`;
-  const testBtn = (attr: string) =>
-    `<button type="button" class="${btn} shrink-0 !py-2 !text-[13px]" ${attr}>${tt('testBtn')}</button>`;
-  /** The three checks, used in the last wizard step and on the main screen (ids differ by prefix). */
-  const checks = (rp: string, sampleId: string, outId: string) =>
-    `<div class="grid grid-cols-2 gap-2.5">${testRow(tt('testAi'), testBtn(`data-test="ai" data-rp="${rp}"`), `${rp}ai`)}
-${testRow(tt('testOs'), testBtn(`data-test="opensubtitles" data-rp="${rp}"`), `${rp}opensubtitles`)}
-${testRow(tt('testSubdl'), testBtn(`data-test="subdl" data-rp="${rp}"`), `${rp}subdl`, d.subdlKeyConfigured ? '' : 'hidden ', 'subdl')}
-${testRow(tt('testJimaku'), testBtn(`data-test="jimaku" data-rp="${rp}"`), `${rp}jimaku`, d.jimakuKeyConfigured ? '' : 'hidden ', 'jimaku')}
-${testRow(tt('testSample'), testBtn(`id="${sampleId}" data-sample data-res="${rp}sample" data-out="${outId}"`), `${rp}sample`, 'col-span-2 ')}
-<pre id="${outId}" hidden dir="auto" class="col-span-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-2xl border border-warm-ln bg-warm-bg p-3 text-xs"></pre></div>`;
-
+  const c = createUiCtx(d);
+  const { lang, dir, tt, arrow, STEPS, startStep } = c;
   // The script only needs the texts it writes itself; the title-bar texts live in the markup.
   const clientDict = Object.fromEntries(
     Object.entries(dictFor(lang)).filter(([key]) => !TITLE_BAR_KEYS.has(key)),
-  );
-
-  const keyPh = (configured: boolean) => (configured ? tt('savedPh') : tt('pasteKeyPh'));
-
-  // Settings > Developers
-  const dev = d.dev ?? {
-    soundCheck: 'background' as const,
-    seasonPacks: true,
-    preferTranslation: false,
-    prefetchNext: false,
-    embeddedWaitSec: 15,
-    embeddedMaxEtaSec: 180,
-    sources: [
-      { id: 'subdl' as const, on: true, hasKey: d.subdlKeyConfigured === true },
-      { id: 'opensubtitles' as const, on: true, hasKey: true },
-      { id: 'jimaku' as const, on: true, hasKey: d.jimakuKeyConfigured === true },
-    ],
-  };
-  const soundOptions = (['background', 'wait', 'off'] as const)
-    .map(
-      (m) =>
-        `<option value="${m}"${dev.soundCheck === m ? ' selected' : ''}>${tt(m === 'background' ? 'devSoundBackground' : m === 'wait' ? 'devSoundWait' : 'devSoundOff')}</option>`,
-    )
-    .join('');
-  const SOURCE_NAME = {
-    subdl: 'devSrcSubdl',
-    opensubtitles: 'devSrcOs',
-    jimaku: 'devSrcJimaku',
-  } as const;
-  const RECOMMENDED = { subdl: 1, opensubtitles: 2, jimaku: 3 } as const;
-  const orderRows = dev.sources
-    .map(
-      (s) =>
-        `<li data-src="${s.id}" class="flex items-center gap-2 rounded-xl border border-warm-ln px-3 py-2"><label class="flex min-w-0 flex-1 cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-warm-tx"><input type="checkbox" class="h-4 w-4 accent-warm-ac"${s.on ? ' checked' : ''}><span>${tt(SOURCE_NAME[s.id])}</span><span class="rounded-full bg-warm-ac/15 px-2 py-0.5 text-[11px] font-bold text-warm-ac">${tt('devRec', { n: RECOMMENDED[s.id] })}</span>${s.hasKey ? '' : `<span class="rounded-full bg-warm-ln px-2 py-0.5 text-[11px] font-bold text-warm-mu">${tt('devNoKey')}</span>`}</label><button type="button" data-move="-1" class="${btn} !px-2.5 !py-1 !text-xs" aria-label="${tt('devMoveUp')}">&#9650;</button><button type="button" data-move="1" class="${btn} !px-2.5 !py-1 !text-xs" aria-label="${tt('devMoveDown')}">&#9660;</button></li>`,
-    )
-    .join('');
-  const redoOptions = (['subdl', 'opensubtitles', 'jimaku'] as const)
-    .map((id) => `<option value="${id}">${tt(SOURCE_NAME[id])}</option>`)
-    .join('');
-
-  const devSection = group(
-    'secDev',
-    `<p class="text-xs text-warm-mu">${tt('devNote')}</p>
-<div><label class="${labelCls}" for="dev-sound">${tt('devSoundLabel')}</label>${selectField('dev-sound', soundOptions)}<p class="mt-1 text-xs text-warm-mu">${tt('devSoundHint')}</p></div>
-<div><label class="${labelCls}" for="dev-emb-wait">${tt('devEmbWaitLabel')}</label><input class="${field}" id="dev-emb-wait" type="number" inputmode="numeric" min="0" max="120" dir="ltr" value="${dev.embeddedWaitSec}"><p class="mt-1 text-xs text-warm-mu">${tt('devEmbWaitHint')}</p></div>
-<div><label class="${labelCls}" for="dev-emb-eta">${tt('devEmbEtaLabel')}</label><input class="${field}" id="dev-emb-eta" type="number" inputmode="numeric" min="0" max="600" dir="ltr" value="${dev.embeddedMaxEtaSec}"><p class="mt-1 text-xs text-warm-mu">${tt('devEmbEtaHint')}</p></div>
-<div class="flex flex-col divide-y divide-warm-ln overflow-hidden rounded-2xl border border-warm-ln">${toggle('dev-packs', dev.seasonPacks, 'devPacksLabel', 'devPacksHint', true)}
-${toggle('dev-prefetch', dev.prefetchNext, 'devPrefetchLabel', 'devPrefetchHint', true)}
-${toggle('dev-translate', dev.preferTranslation, 'devTranslateLabel', 'devTranslateHint', true)}</div>
-<div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><div class="text-sm font-bold text-warm-tx">${tt('devOrderTitle')}</div><p class="text-xs text-warm-mu">${tt('devOrderHint')}</p>
-<ul id="dev-order" class="flex flex-col gap-2">${orderRows}</ul>
-<button type="button" id="dev-order-reset" class="${btn} !py-1.5 !text-[13px]">${tt('devOrderReset')}</button></div>
-<div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><div class="text-sm font-bold text-warm-tx">${tt('devRedoTitle')}</div><p class="text-xs text-warm-mu">${tt('devRedoHint')}</p>
-<div><label class="${labelCls}" for="dev-redo-item">${tt('devRedoItem')}</label>${selectField('dev-redo-item', '')}</div>
-<div><label class="${labelCls}" for="dev-redo-src">${tt('devRedoSource')}</label>${selectField('dev-redo-src', redoOptions)}</div>
-<button type="button" id="dev-redo-btn" class="${btn}">${tt('devRedoBtn')}</button><span class="${result} text-center" id="dev-redo-result"></span></div>
-<div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><div class="text-sm font-bold text-warm-tx">${tt('testTitle')}</div><p class="text-xs text-warm-mu">${tt('testDesc')}</p>
-${toggle('d-test', d.testMode === true, 'testOn')}
-<div id="test-run" class="${d.testMode ? 'flex' : 'hidden'} flex-col gap-2"><button type="button" id="test-run-btn" class="${btn}">${tt('testRun')}</button></div></div>`,
   );
 
   return `<!doctype html>
@@ -360,187 +107,23 @@ ${toggle('d-test', d.testMode === true, 'testOn')}
 <title>${tt('appTitle')}</title>
 <style nonce="${escapeHtml(d.nonce)}">${CSS}${POINTER_CSS}</style></head>
 <body class="min-h-screen bg-warm-bg font-sans text-warm-tx antialiased">
-${d.desktop ? titleBar : ''}
+${d.desktop ? renderTitleBar(c) : ''}
 <main class="mx-auto flex min-h-screen w-full flex-col items-center px-4 pb-10 sm:px-10 ${d.desktop ? 'pt-[76px]' : 'pt-10'}">
 
-<div id="wizard" class="${startStep ? 'flex' : 'hidden'} w-full max-w-[520px] flex-col items-center">
-<div class="mb-3 flex w-full items-center justify-end gap-2"><button type="button" class="js-news ${btn} relative !px-3 !py-2 !border-transparent" aria-label="${tt('newsBell')}" title="${tt('newsBell')}"><span class="text-base leading-none" aria-hidden="true">&#128276;</span><span class="js-news-badge absolute -top-1 -end-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-warm-ac px-1 text-[10px] font-bold text-warm-on"></span></button>${langMenu()}</div>
-<ol id="w-bars" class="mb-7 flex w-full gap-1.5" aria-label="${tt('setupProgress')}">${STEPS.map(
-    (s, i) =>
-      `<li class="h-[5px] flex-1 rounded-full bg-warm-ln transition-colors" data-bar="${i + 1}" title="${escapeHtml(s[0])}"><span class="sr-only">${escapeHtml(s[0])}</span></li>`,
-  ).join('')}</ol>
-<section class="flex min-h-[540px] w-full flex-col gap-5 rounded-[22px] border border-warm-ln bg-warm-sf p-8" aria-live="polite">
-<div><div id="w-stepof" class="mb-2 text-xs font-semibold tracking-wide text-warm-ac">${tt('stepOf', { n: 1, total: STEPS.length })}</div><h2 id="w-title" class="text-[26px] font-bold leading-tight text-warm-tx">${escapeHtml(STEPS[0]?.[1] ?? '')}</h2><p id="w-sub" class="mt-2 text-sm leading-relaxed text-warm-mu">${escapeHtml(STEPS[0]?.[2] ?? '')}</p></div>
+${renderWizard(c)}
 
-<div data-pane="1" class="flex flex-col gap-2">
-<label class="${labelCls}" for="k-ai">${tt('keyAiLabel')}</label>
-<input class="${field}" id="k-ai" type="password" autocomplete="off" placeholder="${d.aiConfigured ? tt('savedPh') : tt('keyAiPh')}">
-<p class="text-xs text-warm-mu">${tt('keyAiHelp')}${d.aiConfigured ? ` ${tt('savedProvider', { p: d.aiProviderLabel || t(lang, 'configured') })}` : ''}</p>
-<div class="mt-1 flex flex-wrap gap-2">${keyLink('https://aistudio.google.com/apikey', t(lang, 'getGemini'), true)}${keyLink('https://platform.claude.com/settings/keys', t(lang, 'getClaude'))}${keyLink('https://platform.openai.com/api-keys', t(lang, 'getOpenAI'))}</div>
-</div>
+${renderDashboard(c)}
 
-<div data-pane="2" class="hidden flex-col gap-3.5">
-<div><label class="${labelCls}" for="k-os">${tt('osKeyLabel')}</label>
-<input class="${field}" id="k-os" type="password" autocomplete="off" placeholder="${keyPh(d.openSubtitlesKeyConfigured)}"></div>
-<div class="grid grid-cols-2 gap-3">
-<div><label class="${labelCls}" for="k-user">${tt('username')}</label>
-<input class="${field}" id="k-user" type="text" autocomplete="off" placeholder="${d.openSubtitlesUsername ? tt('savedPh') : tt('osUserPh')}"></div>
-<div><label class="${labelCls}" for="k-pass">${tt('password')}</label>
-${passwordField('k-pass', d.openSubtitlesLoginConfigured ? tt('savedPh') : tt('osPassPh'))}</div>
-</div>
-<div class="flex flex-wrap gap-2">${keyLink('https://www.opensubtitles.com/en/users/sign_up', t(lang, 'createOsAccount'), true)}${keyLink('https://www.opensubtitles.com/consumers', t(lang, 'getOsKey'), true)}</div>
-<div class="mt-1 border-t border-warm-ln pt-3.5"><label class="${labelCls}" for="k-subdl">${tt('subdlKeyLabel')}</label>
-<input class="${field}" id="k-subdl" type="password" autocomplete="off" placeholder="${keyPh(d.subdlKeyConfigured ?? false)}">
-<p class="mt-1 mb-2 text-xs text-warm-mu">${tt('subdlHint')}</p>
-<div class="flex flex-wrap gap-2">${keyLink('https://subdl.com/panel/api', t(lang, 'getSubdlKey'), true)}</div></div>
-</div>
-
-<div data-pane="3" class="hidden flex-col gap-4">
-<div><label class="${labelCls}" for="lang">${tt('langLabel')}</label>${selectField('lang', langOptions)}</div>
-${dualSwitch('dual', d.dualSubtitles, true)}
-</div>
-
-<div data-pane="4" class="hidden flex-col gap-2.5">
-${checks('r-', 'sample', 'sample-out')}
-</div>
-
-<div data-pane="5" class="hidden flex-col gap-3.5">${install}</div>
-
-${d.desktop ? `<div data-pane="6" class="hidden flex-col gap-3">${toggle('w-startup', true, 'startupLabel', 'startupHint')}${toggle('w-minimized', true, 'minimizedLabelWizard', 'minimizedHint')}</div>` : ''}
-
-<div class="mt-auto"><span class="${result} mb-2 text-center" id="w-result"></span>
-<div class="flex items-center justify-between gap-3"><button type="button" id="w-back" class="invisible rounded-lg py-2.5 text-sm font-semibold text-warm-mu transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${tt('back')}</button><button type="button" id="w-next" class="${btnPrimary} min-w-[150px] text-center">${tt('next')} ${arrow}</button></div></div>
-</section>
-</div>
-
-<div id="dash" class="${startStep ? 'hidden' : 'flex'} w-full max-w-[560px] flex-col gap-[18px] lg:max-w-[1040px] xl:max-w-[1280px]">
-<div class="flex flex-wrap items-center justify-between gap-3"><div><h1 class="text-[26px] font-extrabold text-warm-tx">${tt('dashTitle')}</h1>${d.testMode ? `<div class="mt-1.5 inline-block rounded-full bg-amber-400/15 px-2.5 py-0.5 text-xs font-bold text-amber-300">${tt('testBanner')}</div>` : ''}<div class="mt-1 text-[13px] text-warm-mu">${d.aiConfigured ? `${tt('providerLine')} <span dir="ltr">${escapeHtml(providerLine(d.aiProviderLabel, d.aiModel))}</span>` : tt('noKeyYet')}</div></div>
-<div class="flex flex-wrap items-center gap-2 max-sm:w-full sm:justify-end">${langMenu()}<button type="button" class="js-news ${btn} relative !px-3 !py-2" aria-label="${tt('newsBell')}" title="${tt('newsBell')}"><span class="text-base leading-none" aria-hidden="true">&#128276;</span><span class="js-news-badge absolute -top-1 -end-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-warm-ac px-1 text-[10px] font-bold text-warm-on"></span></button><button type="button" id="open-library" class="${btn} !py-2">${tt('mySubs')}</button><button type="button" id="open-settings" class="${btn} flex items-center gap-2 !py-2"><span class="text-base leading-none" aria-hidden="true">&#9881;</span>${tt('settings')}</button></div></div>
-<div class="flex flex-col gap-[18px] lg:grid lg:grid-cols-2 lg:items-start lg:gap-5"><div class="flex flex-col gap-[18px]">
-<section id="st-upgrade" class="${tile} hidden flex-col gap-3 !border-warm-ac/60" role="status"><div><div class="text-sm font-bold text-warm-tx">${tt('upgradeTitle')}</div><div id="st-upgrade-text" class="mt-0.5 text-xs text-warm-mu"></div></div><div dir="ltr" class="flex justify-start"><button type="button" id="st-upgrade-close" class="${btn} !px-4 !py-1.5 !text-[13px]">${tt('toastOk')}</button></div></section>
-<section class="flex flex-col gap-3.5 rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-xl shadow-black/20">
-<div class="flex flex-wrap items-center justify-between gap-3"><div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div><div class="flex flex-wrap items-center gap-2"><button type="button" id="st-cancel-btn" class="${btn} hidden whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('qCancel')}</button><button type="button" id="st-skip-btn" class="${btn} hidden whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('qSkip')}</button><button type="button" id="sync-now-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('syncNowHint')}">${tt('syncNowBtn')}</button><button type="button" id="resume-btn" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('resumeHint')}">${tt('resumeBtn')}</button></div></div>
-<div id="st-progress-text" class="text-[26px] font-extrabold leading-tight text-warm-tx">${tt('noSub')}</div>
-<div class="h-2.5 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('progressAria')}" aria-valuemin="0" aria-valuemax="100"><div id="st-progress" class="h-full w-0 rounded-full bg-warm-ac"></div></div>
-<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-warm-mu"><span id="st-progress-eta"></span><span id="st-total-eta" class="hidden font-semibold text-warm-tx"></span></div>
-<div id="st-delivered" class="hidden text-xs text-warm-ok" role="status"></div>
-<div id="st-sync" class="hidden flex-col gap-1.5 rounded-xl border border-warm-ln bg-warm-bg px-3 py-2" role="status"><div id="st-sync-text" class="text-[13px] text-warm-tx"></div><div id="st-sync-bar" class="flex items-center gap-3"><div class="h-3 flex-1 overflow-hidden rounded-full bg-warm-ln" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="st-sync-fill" class="h-full w-0 rounded-full bg-warm-ok"></div></div><div class="flex flex-col items-end"><div id="st-sync-pct" dir="ltr" class="min-w-[3.5rem] text-end text-xl font-extrabold text-warm-ok">0%</div><div id="st-sync-eta" class="whitespace-nowrap text-[11px] text-warm-mu"></div></div><button type="button" id="st-sync-stop" class="${btn} whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('syncStopBtn')}</button></div><div id="st-sync-ok-row" dir="ltr" class="flex justify-start"><button type="button" id="st-sync-ok" class="${btn} !px-4 !py-1.5 !text-[13px]">${tt('toastOk')}</button></div></div>
-</section>
-<section id="st-queue" class="${tile} hidden flex-col gap-2.5"><h2 class="text-sm font-bold text-warm-tx">${tt('qTitle')}</h2><ul id="st-queue-list" class="flex flex-col gap-2"></ul></section>
-<div class="grid gap-3.5">
-<div class="${tile} flex items-end justify-between gap-3"><div><div class="text-xs text-warm-mu">${tt('stLines')}</div><div id="st-lines" class="mt-1 text-[26px] font-extrabold">0</div></div><div class="text-end"><div class="text-xs text-warm-mu">${tt('stSize')}</div><div id="st-size" dir="ltr" class="mt-1 text-[26px] font-extrabold">0 KB</div></div></div>
-<div id="st-quota" class="${tile} hidden"><div class="flex items-baseline justify-between gap-3"><div class="flex items-center gap-2 text-xs text-warm-mu"><span>${tt('stQuota')}</span>${srcBadge('opensubtitles')}</div><div id="st-quota-text" class="text-sm font-bold" dir="ltr"></div></div><div class="mt-2 h-2 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('stQuota')}" aria-valuemin="0" aria-valuemax="100"><div id="st-quota-bar" class="h-full w-0 rounded-full bg-warm-ok transition-[width] duration-500"></div></div><div id="st-quota-hint" class="mt-1.5 hidden text-xs text-warm-mu"></div></div>
-<div id="st-subdl" class="${tile}"><div class="flex items-baseline justify-between gap-3"><div class="flex items-center gap-2 text-xs text-warm-mu"><span>${tt('stSubdl')}</span>${srcBadge('subdl')}</div><div id="st-subdl-text" class="text-sm font-bold ${d.subdlKeyConfigured ? '' : 'text-warm-mu'}" dir="auto">${d.subdlKeyConfigured ? '0' : tt('stSubdlNoKey')}</div></div><div id="st-subdl-nokey" class="mt-1.5 text-xs text-warm-mu ${d.subdlKeyConfigured ? 'hidden' : ''}">${tt('stSubdlNoKeyHint')}<div class="mt-2">${keyLink('https://subdl.com/panel/api', t(lang, 'getSubdlKey'))}</div></div><div id="st-subdl-info" class="${d.subdlKeyConfigured ? '' : 'hidden'}"><div class="mt-1.5 text-xs text-warm-mu">${tt('stSubdlHint')}</div><div class="mt-2">${keyLink('https://subdl.com/panel/api', t(lang, 'stSubdlPanel'))}</div></div></div>
-</div>
-</div><div class="flex flex-col gap-[18px]">
-<div class="${tile} flex items-center justify-between gap-3"><div class="min-w-0 flex-1"><label class="text-xs text-warm-mu" for="q-lang">${tt('stTarget')}</label><select class="${field} mt-1" id="q-lang">${langOptions}</select></div><label class="flex shrink-0 cursor-pointer flex-col items-center gap-1.5"><span class="text-xs text-warm-mu">${tt('stDual')}</span><input type="checkbox" id="q-dual" class="peer sr-only"${d.dualSubtitles ? ' checked' : ''}><span class="relative h-[23px] w-10 shrink-0 rounded-full bg-warm-ln transition peer-checked:bg-warm-ac peer-focus-visible:ring-2 peer-focus-visible:ring-warm-ac/60 after:absolute after:start-[3px] after:top-[3px] after:h-[17px] after:w-[17px] after:rounded-full after:bg-white after:transition rtl:peer-checked:after:-translate-x-[17px] ltr:peer-checked:after:translate-x-[17px]"></span></label></div>
-<section class="${tile} flex flex-col gap-2.5"><div><div class="text-sm font-bold text-warm-tx">${tt('checksTitle')}</div><div class="mt-0.5 text-xs text-warm-mu">${tt('checksSub')}</div></div>
-${checks('dr-', 'dsample', 'dsample-out')}
-</section>
-${installCompact}
-<div class="flex items-center gap-2.5 text-[13px] text-warm-mu"><span class="text-warm-ok" aria-hidden="true">&#10003;</span>${tt('keepRunning')}</div></div></div>
-</div>
-
-<div id="lib" class="hidden w-full max-w-[640px] lg:max-w-[1040px] xl:max-w-[1280px] flex-col gap-4">
-<div class="flex items-start justify-between gap-3"><div><h1 class="text-[26px] font-extrabold text-warm-tx">${tt('libTitle')}</h1><div id="lib-total" class="mt-1 text-[13px] text-warm-mu"></div></div>
-<button type="button" id="lib-back" class="${btn} !py-2">${tt('libBack')}</button></div>
-<p class="text-sm text-warm-mu">${tt('libSub')}</p>
-<div class="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-warm-ln bg-warm-sf px-3.5 py-2.5">
-<div class="flex items-center gap-3"><button type="button" id="lib-all" class="${btn} !py-1.5 !text-[13px]">${tt('libSelectAll')}</button><span id="lib-size" class="text-xs text-warm-mu"></span></div>
-<div id="lib-sel-bar" class="hidden items-center gap-2"><span id="lib-sel-count" class="text-[13px] font-semibold text-warm-tx"></span><button type="button" id="lib-none" class="${btn} !py-1.5 !text-[13px]">${tt('libSelectNone')}</button><button type="button" id="lib-del-sel" class="${btnDanger} !py-1.5 !text-[13px]" disabled>${tt('libDeleteSel')}</button></div>
-</div>
-<span class="${result}" id="lib-result"></span>
-<div id="lib-list" class="flex flex-col gap-2.5"></div>
-<div class="flex justify-center pt-2"><button type="button" id="lib-del-all" class="${btnDanger} !py-1.5 !text-xs">${tt('libDeleteAll')}</button></div>
-<p id="lib-empty" hidden class="rounded-2xl border border-dashed border-warm-ln p-6 text-center text-sm text-warm-mu">${tt('libEmpty')}</p>
-</div>
+${renderLibrary(c)}
 
 <p class="mt-auto max-w-[560px] px-1 pt-8 text-center text-xs text-warm-mu/80">${tt('privacy')}</p>
 </main>
 
-<div id="del-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="del-title">
-<div class="w-full max-w-sm rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
-<h2 id="del-title" class="text-lg font-bold text-warm-tx"></h2>
-<p class="mt-1 text-sm text-warm-mu">${tt('libConfirmNote')}</p>
-<div class="mt-5 grid gap-2">
-<button type="button" id="del-yes" class="${btnDanger}">${tt('libDelete')}</button>
-<button type="button" id="del-no" class="px-4 py-2 text-sm text-warm-mu transition hover:text-warm-tx focus:outline-none">${tt('cancel')}</button>
-</div></div></div>
+${renderConfirmModals(c)}
 
-<div id="unsaved-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="unsaved-title">
-<div class="w-full max-w-sm rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
-<h2 id="unsaved-title" class="text-lg font-bold text-warm-tx">${tt('unsavedTitle')}</h2>
-<p class="mt-1 text-sm text-warm-mu">${tt('unsavedBody')}</p>
-<div class="mt-5 grid gap-2">
-<button type="button" id="unsaved-save" class="${btnPrimary}">${tt('unsavedSave')}</button>
-<button type="button" id="unsaved-discard" class="${btnDanger}">${tt('unsavedDiscard')}</button>
-<button type="button" id="unsaved-stay" class="px-4 py-2 text-sm text-warm-mu transition hover:text-warm-tx focus:outline-none">${tt('unsavedStay')}</button>
-</div></div></div>
+${renderDrawer(c)}
 
-<div id="news-panel" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="news-panel-title">
-<div class="flex max-h-[85vh] w-full max-w-lg flex-col gap-3 rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
-<div class="flex items-center justify-between"><h2 id="news-panel-title" class="text-lg font-bold text-warm-tx">${tt('newsBell')}</h2><button type="button" id="news-panel-close" class="rounded-lg px-2 text-lg text-warm-mu transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac" aria-label="${tt('newsClose')}">&#10005;</button></div>
-<div id="news-body" class="flex flex-col gap-2.5 overflow-auto pe-1"></div>
-</div></div>
-
-<div id="drawer" class="${d.desktop ? 'top-9' : 'top-0'} fixed inset-x-0 bottom-0 z-40 hidden justify-start bg-black/45" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
-<div class="flex h-full w-[420px] max-w-full flex-col gap-[18px] overflow-auto border-e border-warm-ln bg-warm-sf p-[26px]">
-<div class="flex items-center justify-between"><h2 id="drawer-title" class="text-xl font-bold">${tt('settingsTitle')}</h2><button type="button" id="close-settings" class="rounded-lg px-2 text-lg text-warm-mu transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac" aria-label="${tt('closeSettings')}">&#10005;</button></div>
-<div class="flex flex-col gap-3" id="groups">
-${group(
-  'secKeys',
-  `<ul class="grid gap-2 text-sm">
-${keyRow('aiApiKey', tt('rowAi'), d.aiConfigured, escapeHtml(d.aiProviderLabel) || tt('configured'))}
-${keyRow('openSubtitlesApiKey', tt('rowOsKey'), d.openSubtitlesKeyConfigured)}
-${keyRow('subdlApiKey', tt('rowSubdl'), d.subdlKeyConfigured ?? false)}
-${keyRow('jimakuApiKey', tt('rowJimaku'), d.jimakuKeyConfigured ?? false)}
-${keyRow('openSubtitlesLogin', `${tt('rowOsLogin')}${d.openSubtitlesUsername ? ` (<span class="font-mono" dir="ltr">${escapeHtml(d.openSubtitlesUsername)}</span>)` : ''}`, d.openSubtitlesLoginConfigured)}
-</ul>
-<div><label class="${labelCls}" for="d-ai">${tt('aiKeyLabel')}</label><input class="${field}" id="d-ai" type="password" autocomplete="off" placeholder="${keyPh(d.aiConfigured)}"></div>
-<div><label class="${labelCls}" for="d-os">${tt('osKeyLabel')}</label><input class="${field}" id="d-os" type="password" autocomplete="off" placeholder="${keyPh(d.openSubtitlesKeyConfigured)}"></div>
-<div class="grid grid-cols-2 gap-3"><div><label class="${labelCls}" for="d-user">${tt('username')}</label><input class="${field}" id="d-user" type="text" autocomplete="off" placeholder="${d.openSubtitlesUsername ? tt('keptPh') : tt('username')}"></div><div><label class="${labelCls}" for="d-pass">${tt('password')}</label>${passwordField('d-pass', d.openSubtitlesLoginConfigured ? tt('keptPh') : tt('password'))}</div></div>
-<div><label class="${labelCls}" for="d-subdl">${tt('subdlKeyLabel')}</label><input class="${field}" id="d-subdl" type="password" autocomplete="off" placeholder="${keyPh(d.subdlKeyConfigured ?? false)}"><p class="mt-1 text-xs text-warm-mu">${tt('subdlHint')}</p></div>
-<div><label class="${labelCls}" for="d-jimaku">${tt('jimakuKeyLabel')}</label><input class="${field}" id="d-jimaku" type="password" autocomplete="off" placeholder="${keyPh(d.jimakuKeyConfigured ?? false)}"><p class="mt-1 text-xs text-warm-mu">${tt('jimakuHint')}</p></div>`,
-)}
-${group(
-  'secTranslate',
-  `<div><label class="${labelCls}" for="d-lang">${tt('langLabel')}</label>${selectField('d-lang', langOptions)}</div>
-<div class="flex flex-col divide-y divide-warm-ln overflow-hidden rounded-2xl border border-warm-ln">${toggle('d-dual', d.dualSubtitles, 'dualLabel', undefined, true)}
-${toggle('d-emb', d.embeddedSubtitles ?? true, 'embLabel', 'embHint', true)}
-${toggle('d-clean', d.cleanSubtitles ?? true, 'cleanLabel', 'cleanHint', true)}
-${toggle('d-ask', d.translationMode === 'ask', 'askLabel', 'askHint', true)}</div>
-<div><label class="${labelCls}" for="d-src">${tt('srcLabel')}</label>${selectField('d-src', `<option value="opensubtitles"${d.subtitleSource === 'subdl' ? '' : ' selected'}>${tt('srcOs')}</option><option value="subdl"${d.subtitleSource === 'subdl' ? ' selected' : ''}>${tt('srcSubdl')}</option>`)}<p class="mt-1 text-xs text-warm-mu">${tt('srcHint')}</p></div>`,
-)}
-${
-  d.desktop
-    ? group(
-        'secGeneral',
-        `<div class="flex flex-col divide-y divide-warm-ln overflow-hidden rounded-2xl border border-warm-ln">${toggle('d-startup', false, 'startupLabel', 'startupHint', true)}
-${toggle('d-minimized', false, 'minimizedLabel', 'minimizedHint', true)}</div>
-<p id="startup-note" class="hidden text-xs text-warm-mu">${tt('startupUnavailable')}</p>`,
-      )
-    : ''
-}
-${group(
-  'secMaintenance',
-  `<p class="text-xs text-warm-mu">${tt('clearNote')}</p>
-<div class="grid grid-cols-2 gap-2.5"><button type="button" id="clear-cache" class="${btn}">${tt('clearCache')}</button><button type="button" id="rerun" class="${btn}">${tt('rerun')}</button></div>
-<span class="${result} text-center" id="clear-result"></span>
-<div class="flex flex-col gap-2.5 border-t border-warm-ln pt-3.5"><p class="text-xs text-warm-mu">${tt('diagNote')}</p><button type="button" id="copy-diag" class="${btn}">${tt('diagBtn')}</button></div>`,
-)}
-${group('menuAbout', `<p class="text-xs text-warm-mu">${tt('aboutDesc')}</p>${d.desktop ? updatesRow : ''}${d.devSettings ? devSection : devSection.replace('<details', '<details hidden')}`)}
-</div>
-<div class="sticky -bottom-[26px] z-10 -mx-[26px] -mb-[26px] mt-auto grid gap-2 border-t border-warm-ln bg-warm-sf/95 px-[26px] pb-[26px] pt-4 backdrop-blur"><span class="${result} text-center" id="save-result"></span><button type="button" id="save" class="${btnPrimary} w-full !py-3">${tt('save')}</button></div>
-</div></div>
-
-<div id="ext-modal" class="no-drag fixed inset-0 z-[65] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="ext-title">
-<div class="w-full max-w-sm rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
-<h2 id="ext-title" class="text-lg font-bold text-warm-tx">${tt('extTitle')}</h2>
-<p id="ext-body" class="mt-1 text-sm text-warm-mu">${tt('extBody')}</p>
-<div id="ext-host" dir="ltr" class="mt-3 break-all rounded-xl border border-warm-ln bg-warm-bg px-3 py-2 font-mono text-[13px] text-warm-tx"></div>
-<div class="mt-5 grid grid-cols-2 gap-2.5"><button type="button" id="ext-open" class="${btnPrimary}">${tt('extOpen')}</button><button type="button" id="ext-cancel" class="${btn}">${tt('cancel')}</button></div>
-</div></div>
-<div id="toast" role="status" aria-live="polite" class="pointer-events-none fixed bottom-6 left-1/2 z-[70] max-w-[90vw] -translate-x-1/2 translate-y-8 rounded-2xl border px-5 py-3 text-sm font-semibold opacity-0 shadow-2xl transition duration-300"></div>
+${renderExtModal(c)}
 <script nonce="${escapeHtml(d.nonce)}">
 // Every response also carries its HTTP status, so the page can pick the matching message.
 const post = (url, body) => fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}).then(async r => ({...(await r.json()), status: r.status}));

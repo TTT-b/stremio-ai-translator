@@ -15,8 +15,11 @@ Pushed to origin. Commits so far: dead-code cleanup, H1, M1, merge of main 1.8.0
   M1 types/constants/helpers -> src/jobs/jobTypes.ts (manager.ts 1898 lines). Each: worker moved verbatim,
   independent QA = PASS, `npm run check` green (512 tests), HTML render byte-identical to baseline.
 - **M2 done**: read-only status views -> src/jobs/jobStatus.ts (pure functions; stats() still assembles).
-- **Next, Stage 2**: H2 server-side markup per screen -> src/web/ui/*.ts. Then Stage 3: H3 (browser
-  script, stays inline with same nonce) + M3 (sync/upgrade, shared state, HIGH risk). Stage 4: M4 runJob
+- **H2 done**: server-side markup per screen -> src/web/ui/{context,titleBar,wizard,dashboard,library,
+  drawer,modals,provider}.ts (html.ts 1414 -> about 1230 lines: head, inline script, assembly). Shared
+  helpers live in `createUiCtx(d)` (context.ts); each screen is `renderX(c: UiCtx)`. HTML render
+  byte-identical on all 8 variants, 560 tests green.
+- **Next, Stage 3**: H3 (browser script, stays inline with same nonce) + M3 (sync/upgrade, shared state, HIGH risk). Stage 4: M4 runJob
   pipeline (HIGHEST risk, last). Stage 5: final QA + manual Stremio checklist. Lines in the original plan
   shifted by about -275 in manager.ts: re-find the areas by name.
 - **Process per area**: Sonnet worker moves code verbatim; independent code-reviewer (plus
@@ -24,7 +27,7 @@ Pushed to origin. Commits so far: dead-code cleanup, H1, M1, merge of main 1.8.0
 - **html.ts render check**: baseline is in the session scratchpad (render.ts + baseline.html, covers he/en x desktop x ai).
   If it is gone, recreate it from commit 97a7c92 (render renderStatusPage for a fixed input, fixed nonce,
   8 variants) before touching html.ts, then compare after each area.
-- **Resume**: `git checkout refactor/split-manager-html`, `npm install`, `npm run check`, start with Stage 2.
+- **Resume**: `git checkout refactor/split-manager-html`, `npm install`, `npm run check`, start with Stage 3.
 
 ## What is built on the branch
 
