@@ -12,6 +12,36 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '1.9.0': {
+    en: [
+      {
+        title: 'Choose the translation model',
+        text: 'Settings, Translation model: pick the model your key uses (Google Gemini, Claude or OpenAI) from a list read with your own key. Press Refresh list to update it.',
+      },
+      {
+        title: 'Switches model when it is busy (Gemini)',
+        text: 'If the free Gemini model is overloaded, the app moves to the next model by itself and tells you on the main screen. You can turn this off in the same place.',
+      },
+      {
+        title: 'Gentler on a busy AI service',
+        text: 'While the provider is overloaded the app sends one request at a time, then speeds up again. This helps against "the AI did not answer in time" errors.',
+      },
+    ],
+    he: [
+      {
+        title: 'בחירת מודל התרגום',
+        text: 'בהגדרות, "מודל התרגום": בוחרים את המודל של המפתח שלך (Google Gemini, Claude או OpenAI) מתוך רשימה שנקראת עם המפתח שלך. הכפתור "רענן רשימה" מעדכן אותה.',
+      },
+      {
+        title: 'מעבר אוטומטי למודל אחר כשהוא עמוס (Gemini)',
+        text: 'אם מודל ה-Gemini החינמי עמוס, התוכנה עוברת בעצמה למודל הבא ומודיעה במסך הראשי. אפשר לכבות את זה באותו מקום.',
+      },
+      {
+        title: 'עדינה יותר כששירות ה-AI עמוס',
+        text: 'כשהספק עמוס התוכנה שולחת בקשה אחת בכל פעם ומאיצה שוב כשהוא מתאושש. זה עוזר נגד השגיאה "ה-AI לא ענה בזמן".',
+      },
+    ],
+  },
   '1.8.0': {
     en: [
       {
