@@ -86,6 +86,29 @@ describe('OpenAiProvider', () => {
     expect(JSON.stringify(seen[0]?.body)).not.toContain(KEY);
   });
 
+  it('sends a temperature only to models that accept one (not o-series or gpt-5)', async () => {
+    const sentTemperature = async (model: string): Promise<unknown> => {
+      const seen: Seen[] = [];
+      const p = new OpenAiProvider({
+        apiKey: KEY,
+        model,
+        timeoutMs: 1000,
+        fetchImpl: fakeFetch(
+          () => reply({ choices: [{ message: { content: '{"translations":[]}' } }] }),
+          seen,
+        ),
+      });
+      await p.translateChunk(req);
+      return seen[0]?.body.temperature;
+    };
+    expect(await sentTemperature('gpt-4o-mini')).toBe(0.3);
+    expect(await sentTemperature('gpt-4.1')).toBe(0.3);
+    expect(await sentTemperature('o3-mini')).toBeUndefined();
+    expect(await sentTemperature('o4-mini')).toBeUndefined();
+    expect(await sentTemperature('gpt-5')).toBeUndefined();
+    expect(await sentTemperature('gpt-5-mini')).toBeUndefined();
+  });
+
   it('maps HTTP failures to app errors', async () => {
     const make = (status: number, body: unknown = {}, h: Record<string, string> = {}) =>
       new OpenAiProvider({
@@ -150,6 +173,9 @@ describe('AnthropicProvider', () => {
     expect(seen[0]?.headers['x-api-key']).toBe('sk-ant-SECRET');
     expect(seen[0]?.headers['anthropic-version']).toBeTruthy();
     expect(typeof seen[0]?.body.system).toBe('string');
+    // Newer Claude models reject a temperature setting, so none is sent.
+    expect(seen[0]?.body).not.toHaveProperty('temperature');
+    expect(seen[0]?.body.max_tokens).toBeGreaterThan(0);
   });
 
   it('reports a missing key without calling the network', async () => {

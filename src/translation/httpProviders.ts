@@ -165,6 +165,9 @@ abstract class HttpProvider implements TranslationProvider {
   }
 }
 
+/** Reasoning models (o-series, gpt-5) only accept the default temperature and reject any other. */
+const OPENAI_FIXED_TEMPERATURE = /^(o\d|gpt-5)/;
+
 interface OpenAiResponse {
   choices?: { message?: { content?: string } }[];
   usage?: { prompt_tokens?: number; completion_tokens?: number };
@@ -181,7 +184,7 @@ export class OpenAiProvider extends HttpProvider {
       { Authorization: `Bearer ${this.opts.apiKey}` },
       {
         model: this.opts.model,
-        temperature: 0.3,
+        ...(OPENAI_FIXED_TEMPERATURE.test(this.opts.model) ? {} : { temperature: 0.3 }),
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: user },
@@ -214,7 +217,6 @@ export class AnthropicProvider extends HttpProvider {
       {
         model: this.opts.model,
         max_tokens: 8192,
-        temperature: 0.3,
         system,
         messages: [{ role: 'user', content: user }],
       },
