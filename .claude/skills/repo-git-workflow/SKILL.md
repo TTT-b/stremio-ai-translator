@@ -1,5 +1,5 @@
 ---
-name: git-workflow
+name: repo-git-workflow
 description: Safe Git and GitHub routine for this repo (TTT-b/stremio-ai-translator). Use before pulling, committing, pushing, tagging, or opening a pull request.
 ---
 

@@ -15,7 +15,7 @@
   `Set-Content` (it garbles the text; `tests/encoding.test.ts` catches this).
 
 - Skills in `.claude/skills/`: follow `model-routing` (Sonnet by default, Opus only for big plans,
-  save tokens) and `git-workflow` (safe pull/commit/push) on every task.
+  save tokens) and `repo-git-workflow` (safe pull/commit/push) on every task.
 
 ## Working rules
 
