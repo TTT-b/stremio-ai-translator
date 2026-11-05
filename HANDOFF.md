@@ -19,7 +19,10 @@ Pushed to origin. Commits so far: dead-code cleanup, H1, M1, merge of main 1.8.0
   drawer,modals,provider}.ts (html.ts 1414 -> about 1230 lines: head, inline script, assembly). Shared
   helpers live in `createUiCtx(d)` (context.ts); each screen is `renderX(c: UiCtx)`. HTML render
   byte-identical on all 8 variants, 560 tests green.
-- **Next, Stage 3**: H3 (browser script, stays inline with same nonce) + M3 (sync/upgrade, shared state, HIGH risk). Stage 4: M4 runJob
+- **H3 done**: the inline browser script -> src/web/ui/script/{core,wizard,drawer,status,library,news}.ts,
+  joined by `renderScript(c)` (index.ts), same single `<script>` with the same nonce (html.ts about 110 lines).
+  Render byte-identical to the baseline, 560 tests green.
+- **Next, Stage 3 rest**: M3 (sync/upgrade, shared state, HIGH risk). Stage 4: M4 runJob
   pipeline (HIGHEST risk, last). Stage 5: final QA + manual Stremio checklist. Lines in the original plan
   shifted by about -275 in manager.ts: re-find the areas by name.
 - **Process per area**: Sonnet worker moves code verbatim; independent code-reviewer (plus
@@ -27,7 +30,7 @@ Pushed to origin. Commits so far: dead-code cleanup, H1, M1, merge of main 1.8.0
 - **html.ts render check**: baseline is in the session scratchpad (render.ts + baseline.html, covers he/en x desktop x ai).
   If it is gone, recreate it from commit 97a7c92 (render renderStatusPage for a fixed input, fixed nonce,
   8 variants) before touching html.ts, then compare after each area.
-- **Resume**: `git checkout refactor/split-manager-html`, `npm install`, `npm run check`, start with Stage 3.
+- **Resume**: `git checkout refactor/split-manager-html`, `npm install`, `npm run check`, start with M3.
 
 ## What is built on the branch
 

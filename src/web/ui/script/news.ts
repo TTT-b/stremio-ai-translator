@@ -1,0 +1,166 @@
+import { t } from '../../i18n';
+import type { UiCtx } from '../context';
+
+/** News and updates, copy buttons. */
+export function scriptNews(c: UiCtx): string {
+  const { lang } = c;
+  return `// News and updates (the bell): messages from the author and the release notes of every version.
+const newsPanel = $('news-panel');
+const setNews = (open) => { newsPanel.classList.toggle('hidden', !open); newsPanel.classList.toggle('flex', open); };
+let newsData = null;
+const unseenIds = () => {
+  if (!newsData) return [];
+  const seen = new Set(newsData.seen);
+  const ids = newsData.items.map(i => i.id).filter(id => !seen.has(id));
+  const latest = newsData.releases[0];
+  if (latest && !seen.has('release-' + latest.version)) ids.push('release-' + latest.version);
+  return ids;
+};
+const drawBadge = () => {
+  const n = unseenIds().length;
+  document.querySelectorAll('.js-news-badge').forEach(b => { b.textContent = String(n); b.classList.toggle('hidden', n === 0); b.classList.toggle('inline-flex', n > 0); });
+};
+const loadNews = async () => {
+  try { const r = await (await fetch('/api/news')).json(); newsData = r.ok ? r : null; } catch { newsData = null; }
+  drawBadge();
+};
+// A release note: a plain bullet, or a short title card that opens to show its explanation.
+const noteNode = (n) => {
+  const li = el('li', typeof n === 'string' ? 'flex gap-2.5' : 'list-none');
+  if (typeof n === 'string') {
+    li.append(el('span', 'mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-warm-ac'), el('span', '', n));
+    return li;
+  }
+  const d = el('details', 'group rounded-xl border border-warm-ln bg-warm-sf');
+  const sum = el('summary', 'flex cursor-pointer list-none items-center justify-between gap-3 p-3 text-sm font-semibold text-warm-tx');
+  sum.append(el('span', '', n.title), el('span', 'text-warm-mu transition group-open:rotate-180', '▾'));
+  d.append(sum, el('p', 'px-3 pb-3 text-sm leading-relaxed text-warm-mu', n.text));
+  li.append(d);
+  return li;
+};
+const tag = () => el('span', 'rounded-full bg-warm-ac px-2 py-0.5 text-[10px] font-bold text-warm-on', T.newsNew);
+const drawNews = () => {
+  const body = $('news-body');
+  body.replaceChildren();
+  if (!newsData) { body.append(el('p', 'text-sm text-warm-mu', T.newsOffline)); return; }
+  const seen = new Set(newsData.seen);
+  if (!newsData.online) body.append(el('p', 'rounded-xl border border-warm-ln px-3 py-2 text-xs text-warm-mu', T.newsOffline));
+  if (newsData.items.length) body.append(el('h3', 'text-xs font-bold uppercase tracking-wide text-warm-ac', T.newsFromCreator));
+  for (const i of newsData.items) {
+    const card = el('div', 'rounded-2xl border border-warm-ln bg-warm-bg p-3.5');
+    const head = el('div', 'flex items-start justify-between gap-3');
+    head.append(el('div', 'text-sm font-bold text-warm-tx', i.title[UI]));
+    const meta = el('div', 'flex shrink-0 items-center gap-2 text-xs text-warm-mu');
+    if (!seen.has(i.id)) meta.append(tag());
+    const day = el('span', '', i.date); day.dir = 'ltr'; meta.append(day);
+    head.append(meta);
+    card.append(head, el('p', 'mt-1.5 whitespace-pre-line text-sm text-warm-tx/90', i.body[UI]));
+    if (i.link) {
+      const a = el('a', 'mt-2 inline-block text-xs font-semibold text-warm-ac hover:underline', T.newsLink);
+      a.href = i.link; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      card.append(a);
+    }
+    body.append(card);
+  }
+  body.append(el('h3', 'mt-2 text-xs font-bold uppercase tracking-wide text-warm-ac', T.newsWhatsNew));
+  // The newest three versions are listed; older ones stay behind a button so the list stays short.
+  const VISIBLE = 3;
+  const older = el('div', 'hidden flex-col gap-2.5');
+  newsData.releases.forEach((r, idx) => {
+    const d = el('details', 'rounded-2xl border border-warm-ln bg-warm-bg');
+    d.open = idx === 0;
+    const s = el('summary', 'flex cursor-pointer list-none items-center justify-between gap-3 p-3.5 text-sm font-bold text-warm-tx');
+    s.append(el('span', '', f(T.newsVersion, {v: r.version})));
+    if (idx === 0 && !seen.has('release-' + r.version)) s.append(tag());
+    const ul = el('ul', 'space-y-1.5 px-3.5 pb-3.5 text-sm text-warm-tx/90');
+    for (const n of (r.notes[UI] || r.notes.en)) ul.append(noteNode(n));
+    d.append(s, ul);
+    (idx < VISIBLE ? body : older).append(d);
+  });
+  const extra = newsData.releases.length - VISIBLE;
+  if (extra > 0) {
+    const more = el('button', 'rounded-2xl border border-warm-ln px-4 py-2 text-sm font-semibold text-warm-mu transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac', f(T.newsOlder, {n: extra}));
+    more.type = 'button';
+    more.addEventListener('click', () => {
+      const show = older.classList.contains('hidden');
+      older.classList.toggle('hidden', !show); older.classList.toggle('flex', show);
+      more.textContent = show ? T.newsHideOlder : f(T.newsOlder, {n: extra});
+    });
+    body.append(more, older);
+  }
+};
+const openNews = async () => {
+  await loadNews();
+  drawNews();
+  setNews(true);
+  const ids = unseenIds();
+  if (ids.length) {
+    try { const r = await post('/api/news/seen', {ids}); if (r.ok) { newsData.seen.push(...ids); drawBadge(); } } catch { /* shown as new once more */ }
+  }
+};
+document.querySelectorAll('.js-news').forEach(b => b.addEventListener('click', openNews));
+$('news-panel-close').addEventListener('click', () => setNews(false));
+newsPanel.addEventListener('click', (e) => { if (e.target === newsPanel) setNews(false); });
+loadNews();
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { setDrawer(false); setDelModal(false); setNews(false); setSyncModal(false); } });
+if (window.desktop) {
+  window.desktop.setLanguage(UI);
+  const maxIcon = $('win-max-icon');
+  $('win-max').addEventListener('click', () => window.desktop.toggleMaximize());
+  window.desktop.onMaximizeChange((m) => { maxIcon.setAttribute('width', m ? '7' : '9'); maxIcon.setAttribute('height', m ? '7' : '9'); maxIcon.setAttribute('y', m ? '2.5' : '.5'); });
+  $('win-min').addEventListener('click', () => window.desktop.minimize());
+  const modal = $('exit-modal');
+  const setModal = (open) => { modal.classList.toggle('hidden', !open); modal.classList.toggle('flex', open); };
+  $('win-close').addEventListener('click', () => setModal(true));
+  $('exit-cancel').addEventListener('click', () => setModal(false));
+  $('exit-tray').addEventListener('click', () => { setModal(false); window.desktop.hide(); });
+  $('exit-quit').addEventListener('click', () => window.desktop.quit());
+  modal.addEventListener('click', (e) => { if (e.target === modal) setModal(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setModal(false); });
+
+  // Updates: top-bar button only when an update is downloaded; manual check lives in Settings.
+  const updateBtn = $('update-btn');
+  const checkBtn = $('check-update');
+  const UPDATE_TEXT = {
+    checking: [true, T.updChecking],
+    none: [true, T.updNone],
+    unavailable: [true, T.updUnavailable],
+    error: [false, T.updError]
+  };
+  // The button's own display class would override the hidden attribute, so toggle classes instead.
+  const showUpdateBtn = (on) => { updateBtn.classList.toggle('hidden', !on); updateBtn.classList.toggle('inline-flex', on); };
+  const applyUpdate = (s) => {
+    showUpdateBtn(s.status === 'downloaded');
+    if (s.status === 'downloaded') updateBtn.title = f(T.updateInstallV, {v: s.version});
+    const out = $('update-result');
+    if (!out) return;
+    if (s.status === 'downloading') show('update-result', true, f(T.updDownloading, {v: s.version}));
+    else if (s.status === 'downloaded') show('update-result', true, f(T.updReady, {v: s.version}));
+    else if (UPDATE_TEXT[s.status]) show('update-result', ...UPDATE_TEXT[s.status]);
+    else out.textContent = '';
+    checkBtn.disabled = s.status === 'checking';
+  };
+  window.desktop.updater.state().then((s) => showUpdateBtn(s.status === 'downloaded'));
+  window.desktop.updater.onState(applyUpdate);
+  updateBtn.addEventListener('click', () => window.desktop.updater.install());
+  checkBtn.addEventListener('click', () => window.desktop.updater.check().then(applyUpdate));
+  window.desktop.version().then((v) => { $('app-version').textContent = v; });
+
+  // What's New: shown once, on the first launch after an update, in the screen's language.
+  const news = $('news-modal');
+  const closeNews = () => { news.classList.add('hidden'); news.classList.remove('flex'); window.desktop.whatsNew.dismiss(); };
+  window.desktop.whatsNew.get(UI).then((w) => {
+    if (!w) return;
+    $('news-version').textContent = w.version;
+    const list = $('news-list');
+    for (const n of w.notes) list.append(noteNode(n));
+    news.classList.remove('hidden');
+    news.classList.add('flex');
+  });
+  $('news-close').addEventListener('click', closeNews);
+}
+for (const [btnId, fieldId] of [['copy', 'manifest'], ['copy-d', 'manifest-d']]) {
+  const copyBtn = $(btnId);
+  if (copyBtn) copyBtn.addEventListener('click', () => { navigator.clipboard.writeText($(fieldId).value); toast(true, ${JSON.stringify(t(lang, 'copied'))}); });
+}`;
+}
