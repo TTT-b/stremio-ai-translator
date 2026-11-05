@@ -5,6 +5,26 @@ Read `CLAUDE.md` and `PLAN.md` first. The user is not a developer: give exact Po
 or make a release without the user's OK. First: `git pull`, `npm install`, `npm run check`
 (on a slow machine: `npx vitest run --testTimeout=90000`). 504 tests were green on the laptop.
 
+## REFACTOR IN PROGRESS (branch refactor/split-manager-html, cut from feat/mp4-save)
+
+Pure move-code split of src/jobs/manager.ts (was 2173 lines) and src/web/html.ts (was 1414), no behavior change.
+Not pushed; main untouched. Commits so far: chore dead-code cleanup, H1, M1.
+
+- **Done**: H1 shared UI pieces -> src/web/ui/components.ts (html.ts 1390 lines);
+  M1 types/constants/helpers -> src/jobs/jobTypes.ts (manager.ts 1898 lines). Each: worker moved verbatim,
+  independent QA = PASS, `npm run check` green (512 tests), HTML render byte-identical to baseline.
+- **Next, Stage 2**: M2 read-only status views (queue(), stats(), syncEtaSec, exactComing, backgroundSync)
+  -> src/jobs/jobStatus.ts, and H2 server-side markup per screen -> src/web/ui/*.ts. Then Stage 3: H3 (browser
+  script, stays inline with same nonce) + M3 (sync/upgrade, shared state, HIGH risk). Stage 4: M4 runJob
+  pipeline (HIGHEST risk, last). Stage 5: final QA + manual Stremio checklist. Lines in the original plan
+  shifted by about -275 in manager.ts: re-find the areas by name.
+- **Process per area**: Sonnet worker moves code verbatim; independent code-reviewer (plus
+  silent-failure-hunter for M3/M4) checks with `git diff --color-moved`; `npm run check`; one commit.
+- **html.ts render check**: baseline is in the session scratchpad (render.ts + baseline.html, covers he/en x desktop x ai).
+  If it is gone, recreate it from commit 97a7c92 (render renderStatusPage for a fixed input, fixed nonce,
+  8 variants) before touching html.ts, then compare after each area.
+- **Resume**: `git checkout refactor/split-manager-html`, `npm install`, `npm run check`, start with Stage 2.
+
 ## What is built on the branch
 
 - **Sound-sync button, notices, stop button**: "Sync to sound" (`POST /api/sync-now`), "Stop sync"
