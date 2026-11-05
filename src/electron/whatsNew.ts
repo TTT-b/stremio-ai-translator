@@ -16,7 +16,7 @@ export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
     en: [
       {
         title: 'Choose the translation model',
-        text: 'Settings, Translation model: pick the model your key uses (Google Gemini, Claude or OpenAI) from a list read with your own key. Press Refresh list to update it.',
+        text: 'Settings, Translation model: pick the model your key uses (Google Gemini, Claude or OpenAI) from a short list of the models that work for translation, read with your own key. Press Refresh list to update it.',
       },
       {
         title: 'Switches model when it is busy (Gemini)',
@@ -30,7 +30,7 @@ export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
     he: [
       {
         title: 'בחירת מודל התרגום',
-        text: 'בהגדרות, "מודל התרגום": בוחרים את המודל של המפתח שלך (Google Gemini, Claude או OpenAI) מתוך רשימה שנקראת עם המפתח שלך. הכפתור "רענן רשימה" מעדכן אותה.',
+        text: 'בהגדרות, "מודל התרגום": בוחרים את המודל של המפתח שלך (Google Gemini, Claude או OpenAI) מתוך רשימה קצרה של המודלים שמתאימים לתרגום, שנקראת עם המפתח שלך. הכפתור "רענן רשימה" מעדכן אותה.',
       },
       {
         title: 'מעבר אוטומטי למודל אחר כשהוא עמוס (Gemini)',

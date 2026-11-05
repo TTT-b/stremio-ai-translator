@@ -545,10 +545,11 @@ local `.env` file. Password fields show the eye button only after you type somet
 
 ### Choosing the translation model
 
-Settings, Translation, has a "Translation model" section. Its title and icon follow the AI
-provider detected from your key (Google Gemini, Anthropic Claude or OpenAI). The list of models
-is read from the provider with your own key (button **Refresh list**) and only shows models that
-can translate text; for OpenAI the filter is a best guess by name. The pick is saved per provider
+Settings, Translation, has a "Translation model" section. Its title names the AI
+provider detected from your key (Google Gemini, Anthropic Claude or OpenAI); the icon is a generic AI sparkle. The list of models
+is read from the provider with your own key (button **Refresh list**) and is cut down to a short
+list of stable text models (no previews, "-latest" aliases or image/audio variants; newest
+first); for OpenAI the filter is a best guess by name. The pick is saved per provider
 and used for new translations. It is part of the cache identity, so a subtitle already translated
 with another model is translated again. For Gemini there is also **Switch model automatically
 when it is busy** (on by default): if the chosen model is overloaded, rate limited, out of quota

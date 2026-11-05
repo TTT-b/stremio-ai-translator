@@ -58,6 +58,36 @@ describe('listModels', () => {
     }
   });
 
+  it('gemini: shows only stable models, newest first, without previews, aliases and variants', async () => {
+    const ids = [
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      'gemini-flash-latest',
+      'gemini-3.1-pro-preview-customtools',
+      'gemini-3.1-flash-lite-preview',
+      'gemini-nano-banana-2.1',
+      'gemini-omni-1.1-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.5-flash',
+    ];
+    const { fetchImpl } = fakeFetch([
+      {
+        models: ids.map((id) => ({
+          name: `models/${id}`,
+          displayName: id,
+          supportedGenerationMethods: ['generateContent'],
+        })),
+      },
+    ]);
+    const out = await listModels('gemini', 'AIzaSECRET', fetchImpl);
+    expect(out.map((m) => m.id)).toEqual([
+      'gemini-3.5-flash-lite',
+      'gemini-3.5-flash',
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+    ]);
+  });
+
   it('anthropic: lists ids with display names and follows has_more', async () => {
     const { fetchImpl, calls } = fakeFetch([
       {

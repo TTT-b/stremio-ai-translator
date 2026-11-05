@@ -15,6 +15,32 @@ const MAX_PAGES = 5;
 const NOT_TEXT_MODEL =
   /image|imagen|veo|tts|audio|live|realtime|transcribe|embed|aqa|moderation|whisper|dall-e|search|instruct|codex|vision/i;
 
+/** Stable Gemini text models only: no previews, "-latest" aliases, custom-tools or other variants. */
+const GEMINI_STABLE = /^gemini-(\d+(?:\.\d+)?)-(flash-lite|flash|pro)$/;
+const GEMINI_TIER = { 'flash-lite': 0, flash: 1, pro: 2 } as const;
+/** Plain GPT / o-series ids: no dated snapshots, previews, "-chat-latest" or other variants. */
+const OPENAI_PLAIN = /^(gpt-\d+(\.\d+)?o?(-mini|-nano)?|o\d+(-mini)?)$/;
+const DATED = /-\d{8}$/;
+
+/** Newest version first, then lite, flash, pro. */
+function sortGemini(list: ModelOption[]): ModelOption[] {
+  const key = (id: string): [number, number] => {
+    const m = GEMINI_STABLE.exec(id);
+    return [Number(m?.[1] ?? 0), GEMINI_TIER[(m?.[2] ?? 'pro') as keyof typeof GEMINI_TIER]];
+  };
+  return [...list].sort((a, b) => {
+    const [va, ta] = key(a.id);
+    const [vb, tb] = key(b.id);
+    return vb - va || ta - tb;
+  });
+}
+
+/** Keep the short, useful list; if that leaves nothing, keep the broader one rather than none. */
+function curated(list: ModelOption[], keep: (id: string) => boolean): ModelOption[] {
+  const some = list.filter((m) => keep(m.id));
+  return some.length > 0 ? some : list;
+}
+
 async function getJson(
   url: string,
   headers: Record<string, string>,
@@ -67,7 +93,7 @@ async function listGemini(key: string, fetchImpl: typeof fetch): Promise<ModelOp
     token = data.nextPageToken;
     if (!token) break;
   }
-  return out;
+  return sortGemini(curated(out, (id) => GEMINI_STABLE.test(id)));
 }
 
 interface AnthropicList {
@@ -92,7 +118,12 @@ async function listAnthropic(key: string, fetchImpl: typeof fetch): Promise<Mode
     after = data.has_more ? data.last_id : undefined;
     if (!after) break;
   }
-  return out;
+  const ids = new Set(out.map((m) => m.id));
+  // Skip a dated snapshot when the plain alias is listed too.
+  return curated(
+    out,
+    (id) => id.startsWith('claude-') && !(DATED.test(id) && ids.has(id.replace(DATED, ''))),
+  );
 }
 
 interface OpenAiList {
@@ -106,11 +137,12 @@ async function listOpenAi(key: string, fetchImpl: typeof fetch): Promise<ModelOp
     { Authorization: `Bearer ${key}` },
     fetchImpl,
   )) as OpenAiList;
-  return (data.data ?? [])
+  const chat = (data.data ?? [])
     .map((m) => m.id ?? '')
     .filter((id) => /^(gpt-|o\d|chatgpt-)/.test(id) && !NOT_TEXT_MODEL.test(id))
     .sort()
     .map((id) => ({ id, label: id }));
+  return curated(chat, (id) => OPENAI_PLAIN.test(id));
 }
 
 /**

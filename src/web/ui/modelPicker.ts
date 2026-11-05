@@ -1,18 +1,9 @@
 import { btn, escapeHtml, labelCls, result, selectField } from './components';
 import type { UiCtx } from './context';
 
-/** Plain inline marks (the page's CSP allows no images). Not the companies' logos. */
-const ICONS: Record<string, string> = {
-  // four-point sparkle
-  gemini:
-    '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" class="text-warm-ac"><path d="M8 1c.5 3.6 2.4 5.5 7 7-4.6 1.5-6.5 3.4-7 7-.5-3.6-2.4-5.5-7-7 4.6-1.5 6.5-3.4 7-7z"/></svg>',
-  // eight-ray burst
-  anthropic:
-    '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" class="text-warm-ac"><path d="M8 1.5v13M1.5 8h13M3.4 3.4l9.2 9.2M12.6 3.4l-9.2 9.2"/></svg>',
-  // hexagon with a centre knot
-  openai:
-    '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" class="text-warm-ac"><path d="M8 1.5l5.6 3.25v6.5L8 14.5l-5.6-3.25v-6.5z"/><circle cx="8" cy="8" r="1.8"/></svg>',
-};
+/** One generic "AI" mark for every provider (the page's CSP allows no images; not a company logo). */
+const AI_ICON =
+  '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" class="text-warm-ac"><path d="M8 1c.5 3.6 2.4 5.5 7 7-4.6 1.5-6.5 3.4-7 7-.5-3.6-2.4-5.5-7-7 4.6-1.5 6.5-3.4 7-7z"/></svg>';
 
 /** The model chooser: its title and icon follow the provider detected from the saved key. */
 export function renderModelPicker(c: UiCtx): string {
@@ -29,5 +20,5 @@ export function renderModelPicker(c: UiCtx): string {
       ? `<div class="overflow-hidden rounded-2xl border border-warm-ln">${toggle('d-auto-model', d.autoSwitchModel ?? true, 'modelAutoLabel', 'modelAutoHint', true)}</div>`
       : ''
   }`;
-  return groupRaw(title, ICONS[provider] ?? '', body);
+  return groupRaw(title, AI_ICON, body);
 }
