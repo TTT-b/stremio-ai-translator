@@ -69,6 +69,11 @@ export type {
   SubtitleOrigin,
 } from './jobTypes';
 
+/** The fit would leave the subtitle where it is (no stretch, under 0.1 s): nothing to move. */
+function isNoShift(fit: TimingFit): boolean {
+  return fit.scale === 1 && Math.abs(fit.offsetMs) < 100 && !fit.parts?.length;
+}
+
 export class JobManager {
   private readonly jobs = new Map<string, Job>();
   private running = 0;
@@ -110,8 +115,14 @@ export class JobManager {
     season?: number;
     episode?: number;
     via: string;
+    /** Who gave the source subtitle (OpenSubtitles, SubDL, Jimaku), when known. */
+    source?: string;
     at: number;
   } | null = null;
+  /** Episodes (with language) whose lines were already counted in `linesTranslated` this session. */
+  private countedVideos = new Set<string>();
+  /** When each episode last got a failure notice, so Stremio's repeated requests notify once. */
+  private failureNoticeAt = new Map<string, number>();
   /** How the latest background sound check ended (shown on the main screen for a while). */
   private lastSync: {
     title: string;
@@ -688,6 +699,10 @@ export class JobManager {
       }
       job.result = outcome;
       job.status = 'done';
+      // A subtitle served from the cache counts for the session once (new translations count themselves).
+      if (outcome.via === 'cache' && !job.spec.prefetch) {
+        this.countLines(job, outcome.cues, Buffer.byteLength(outcome.content));
+      }
       const partialWasShown = job.partial?.served === true;
       delete job.partial;
       if (!job.spec.prefetch) {
@@ -700,7 +715,7 @@ export class JobManager {
         void this.upgradeLater(job, log);
         void this.upgradeFromSound(job, log);
       }
-      if (partialWasShown) void this.announceUpgrade(job, true);
+      if (partialWasShown) void this.announceUpgrade(job);
       log.info(
         {
           stage: 'ASSEMBLY',
@@ -724,6 +739,7 @@ export class JobManager {
         if (!job.spec.prefetch) {
           this.lastFailed = true;
           this.lastErrorCode = job.error.code;
+          this.announceFailure(job, job.error.code);
         }
         log.warn(
           { errorCode: job.error.code, durationMs: this.now() - started, ...job.error.details },
@@ -860,18 +876,40 @@ export class JobManager {
     }
   }
 
+  /** Builds the notice (title and episode, no subtitle text) and hands it to a desktop hook. */
+  private async announce(
+    job: Job,
+    send: (notice: { title: string; season?: number; episode?: number }) => void,
+  ): Promise<void> {
+    const v = job.spec.video;
+    send({
+      title: await this.titleFor(job),
+      ...(v.season !== undefined ? { season: v.season } : {}),
+      ...(v.episode !== undefined ? { episode: v.episode } : {}),
+    });
+  }
+
+  private announceFailure(job: Job, code: string): void {
+    const key = videoKey(job.spec);
+    const last = this.failureNoticeAt.get(key);
+    if (last !== undefined && this.now() - last < 60_000) return;
+    this.failureNoticeAt.set(key, this.now());
+    void this.announce(job, (notice) => this.deps.onFailed?.({ ...notice, code }));
+  }
+
   /** Tell the main screen and the desktop that a better subtitle replaced the shown one. */
-  private async announceUpgrade(job: Job, once = false): Promise<void> {
+  private async announceUpgrade(job: Job, force = false): Promise<void> {
     const v = job.spec.video;
     const notice = {
       title: await this.titleFor(job),
       ...(v.season !== undefined ? { season: v.season } : {}),
       ...(v.episode !== undefined ? { episode: v.episode } : {}),
     };
-    // Stremio's two requests for one episode finish together: tell the user once.
+    // One notice per episode: Stremio's two requests finish together, and a later step (video
+    // subtitle, sound check) must not nag again. Only the user's own "Sync to sound" always tells.
     const last = this.lastUpgrade;
     if (
-      once &&
+      !force &&
       last &&
       this.now() - last.at < 60_000 &&
       last.title === notice.title &&
@@ -900,6 +938,11 @@ export class JobManager {
     const before = job.result;
     if (!moved && !job.syncStopped) void this.noteSync(job, 'kept');
     if (!moved || !before || !this.canUpgrade(job)) return;
+    if (isNoShift(moved.fit)) {
+      // Already on the speech: nothing changed, so there is nothing to reselect and no notice.
+      void this.noteSync(job, 'inSync');
+      return;
+    }
     try {
       const cues = parseSubtitle(before.content).cues;
       const content = serializeSubtitle({ format: 'srt', cues: applyFit(cues, moved.fit) });
@@ -966,7 +1009,7 @@ export class JobManager {
     void run
       .then(async (moved) => {
         if (!moved) return job.syncStopped ? undefined : this.noteSync(job, 'kept');
-        if (moved.fit.scale === 1 && Math.abs(moved.fit.offsetMs) < 100) {
+        if (isNoShift(moved.fit)) {
           return this.noteSync(job, 'inSync');
         }
         const cues = parseSubtitle(before.content).cues;
@@ -987,7 +1030,7 @@ export class JobManager {
           'subtitle moved onto the speech on request',
         );
         await this.noteSync(job, 'moved', moved.fit.offsetMs);
-        await this.announceUpgrade(job);
+        await this.announceUpgrade(job, true);
       })
       .catch((err: unknown) => {
         log.warn(
@@ -1011,8 +1054,19 @@ export class JobManager {
       ...(v.season !== undefined ? { season: v.season } : {}),
       ...(v.episode !== undefined ? { episode: v.episode } : {}),
       via: job.result.via,
+      ...(job.result.source ? { source: job.result.source.provider } : {}),
       at: this.now(),
     };
+  }
+
+  /** Count a finished subtitle's lines for the session counter, once per episode and language. */
+  private countLines(job: Job, cues: number, bytes: number, fresh = false): void {
+    const key = videoKey(job.spec);
+    // A new translation always counts (a redo too); a cached one only the first time.
+    if (!fresh && this.countedVideos.has(key)) return;
+    this.countedVideos.add(key);
+    this.linesTranslated += cues;
+    this.bytesTranslated += bytes;
   }
 
   /** Remember how the background sound check ended, for the main screen. */
@@ -1235,7 +1289,10 @@ export class JobManager {
         );
         this.stopIfCancelled(job);
         // Finished inside the wait (not left running in the background): tell the main screen.
-        if (!job.lateFit) void this.noteSync(job, moved ? 'moved' : 'kept', moved?.fit.offsetMs);
+        if (!job.lateFit) {
+          if (moved && isNoShift(moved.fit)) void this.noteSync(job, 'inSync');
+          else void this.noteSync(job, moved ? 'moved' : 'kept', moved?.fit.offsetMs);
+        }
         if (moved) {
           placedOnSpeech = true;
           chosen = moved.source;
@@ -1436,8 +1493,7 @@ export class JobManager {
     this.safeSet(trKey, 'translation', content, result.file.cues.length, log);
     this.safeSet(outKey, 'translation', content, result.file.cues.length, log);
     if (!sharing) {
-      this.linesTranslated += result.file.cues.length;
-      this.bytesTranslated += Buffer.byteLength(content);
+      this.countLines(job, result.file.cues.length, Buffer.byteLength(content), true);
     }
     keys.add(trKey);
     return {

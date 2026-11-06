@@ -1,10 +1,42 @@
 # HANDOFF - where the work stands (2026-11-05, branch refactor/split-manager-html)
 
+## START HERE TOMORROW (2026-11-06 end of day)
+
+- State: branch refactor/split-manager-html, v1.9.1 built (release/Stremio-AI-Subtitle-Translator-Setup-1.9.1.exe), npm run check green (586 tests). NOTHING committed yet (all work since 1.9.0 is uncommitted), nothing published.
+- Included in 1.9.1: Stremio wait/failure messages, direct status-card buttons, source chips, cached-line counter. Toasts: ONE "subtitle is ready, select it again" toast only when the final subtitle actually changed (deduped per episode for 60 s; no-shift sound result = "in sync", no toast; manual "Sync to sound" always tells) + the failure toast. Status card wording: moved / already in sync / not sure / video not found (no seconds shown).
+- Next: user installs 1.9.1 and tests on a new (uncached) episode: wait text in Stremio, single toast, failure case, card wording. Ask for the result.
+- Then: commit by file name (no attribution lines), ask OK, release v1.9.1 (tag, gh release with exe + blockmap + latest.yml), user checks Check for updates from 1.9.0.
+- Open/optional: Stop/abort bug (aborted signal still starts ffmpeg in src/sync/speech.ts, cueFit.ts, videoFit.ts); refactor M3/M4/Stage 5; remove creator-only diagnostics before merging to main.
+- Do NOT build: subtitle signature, remember per episode, cue-only check.
+
 Read `CLAUDE.md` and `PLAN.md` first. The user is not a developer: give exact PowerShell steps, answer in Hebrew.
 `main` is 1.8.0 and is already merged INTO this branch. Never push to `main` or make a release without the
 user's OK. First: `git pull`, `npm install`, `npm run check` (560 tests green).
 Electron was updated to 44.10.2 (npm audit fix); the app was started with `npx electron .` and the server
 answered (not tested with a real translation yet).
+
+## Stremio messages and Windows toasts (2026-11-06, v1.9.1, uncommitted)
+
+- Placeholder texts (src/stremio/placeholder.ts): one waiting text for every stage, failure text (not found vs generic), both he/en by the UI language. No percentages or reasons in Stremio; reasons stay in the app.
+- Toasts: JobManager hook onFailed (once per episode per minute). A "subtitle ready" toast was built and then removed at the user's request (too noisy); only the exact-sync upgrade toast and the failure toast remain. Prefetch jobs never notify. Wired server.ts -> startup.ts -> electron/main.ts (notifyFailed).
+- Version bumped to 1.9.1 with he+en release notes. Next: npm run dist, user installs from release/ and tests, only then publish (check latest.yml + exe on the release).
+- Not built by decision: subtitle signature, remember per episode.
+
+## Lighter status-card buttons (2026-11-06, uncommitted, `npm run check` green, 581 tests)
+
+- "Stop sync" button removed from the UI (the `/api/sync-stop` endpoint stays, a test uses it).
+- Header row, no menu: Cancel (only with a job), Skip (only when `skippable`), Continue (only when
+  `resumable`, highlighted), Sync to sound (only once Stremio took a subtitle: `lastDelivered`).
+- Chips under the progress bar (from `lastDelivered`): real source (`source`: opensubtitles/subdl/jimaku/video)
+  plus "From cache" (amber) / "Translated now" (green) / "Ready subtitle" (`via`). Inline SVG icons (CSP).
+  `/api/status` `lastDelivered.source` is new (`noteDelivered` in manager.ts). Chips show the delivered
+  subtitle only, not the one still being translated.
+- Session line counter now also counts cached subtitles, once per episode+language (`countLines`).
+- Not checked by eye yet: `npm run build:css`, `npm run build:desktop`, stop the installed app, `npx electron .`.
+- KNOWN BUG, not fixed: an already-aborted signal still lets ffmpeg run (`detectSpeech`, `readPieceWithFfmpeg`,
+  `fitSubtitleToVideo` never check `signal.aborted` at the start), so Skip/Cancel keep working in the background.
+- Approved, NOT built: Stremio placeholder messages (translating / no subtitle / failure) and Windows toasts
+  when a subtitle is ready or fails. Do NOT build "remember per episode".
 
 ## v1.9.0 (2026-11-05): model choice + adaptive lanes (built on the refactor branch)
 

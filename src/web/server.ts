@@ -13,7 +13,8 @@ import {
   CANCELLED_MESSAGE,
   pendingMessage,
   placeholderSrt,
-  progressMessage,
+  failureMessage,
+  waitingMessage,
 } from '../stremio/placeholder';
 import { fitSubtitleToEmbeddedCues } from '../sync/cueFit';
 import { fitSubtitleToVideo } from '../sync/videoFit';
@@ -78,6 +79,7 @@ export interface ServerDeps {
   /** Ask mode: a new request is waiting for the user's OK (the desktop app shows a notification). */
   onPending?: JobManagerDeps['onPending'];
   onUpgraded?: JobManagerDeps['onUpgraded'];
+  onFailed?: JobManagerDeps['onFailed'];
   /** Where cache and job files live. Defaults to ./data */
   dataDir?: string;
   /** Reads a subtitle track from the playing video file. Injectable for tests. */
@@ -249,6 +251,7 @@ export function createApp(deps: ServerDeps): express.Express {
     ...(deps.loadEmbedded ? { loadEmbedded: deps.loadEmbedded } : {}),
     ...(deps.onPending ? { onPending: deps.onPending } : {}),
     ...(deps.onUpgraded ? { onUpgraded: deps.onUpgraded } : {}),
+    ...(deps.onFailed ? { onFailed: deps.onFailed } : {}),
     ...(deps.limits ? { limits: deps.limits } : {}),
     ...(deps.cancelCooldownMs !== undefined ? { cancelCooldownMs: deps.cancelCooldownMs } : {}),
     ...(deps.stallAfterMs !== undefined ? { stallAfterMs: deps.stallAfterMs } : {}),
@@ -1145,22 +1148,18 @@ export function createApp(deps: ServerDeps): express.Express {
       send(jobs.partialSrt(job, uiLang, true) ?? '', 'partial-stopped', job.id);
     } else if (job.status === 'failed' && job.error) {
       send(
-        placeholderSrt(`Subtitle unavailable: ${job.error.userMessage}`),
+        placeholderSrt(failureMessage(uiLang, job.error.code)),
         `failed:${job.error.code}`,
         job.id,
       );
     } else if (job.status === 'pending') {
-      send(
-        placeholderSrt(pendingMessage(readSettings(deps.settingsPath).uiLanguage ?? 'he')),
-        'pending',
-        job.id,
-      );
+      send(placeholderSrt(pendingMessage(uiLang)), 'pending', job.id);
     } else if (job.status === 'cancelled') {
       send(placeholderSrt(CANCELLED_MESSAGE), 'cancelled', job.id);
     } else if (job.partial) {
       send(jobs.partialSrt(job, uiLang, false) ?? '', 'partial', job.id);
     } else {
-      send(placeholderSrt(progressMessage(uiLang, job.stage)), 'in-progress', job.id);
+      send(placeholderSrt(waitingMessage(uiLang)), 'in-progress', job.id);
     }
   });
 

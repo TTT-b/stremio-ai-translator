@@ -54,6 +54,8 @@ export interface JobStats {
     season?: number;
     episode?: number;
     via: string;
+    /** Who gave the source subtitle (opensubtitles, subdl, jimaku), when known. */
+    source?: string;
     at: number;
   } | null;
   /** How the latest background sound check ended, for half an hour. */

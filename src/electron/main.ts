@@ -219,11 +219,36 @@ function notifyUpgraded(item: { title: string; season?: number; episode?: number
       : '';
   const body =
     uiLang === 'he'
-      ? `כתובית מדויקת מוכנה: ${item.title}${where}. בחר אותה שוב ב-Stremio.`
-      : `An exact subtitle is ready: ${item.title}${where}. Select it again in Stremio.`;
+      ? `הכתובית מוכנה: ${item.title}${where}. בחר אותה שוב ב-Stremio.`
+      : `The subtitle is ready: ${item.title}${where}. Select it again in Stremio.`;
   const note = new Notification({ title: TITLE, body, icon });
   note.on('click', showWindow);
   note.show();
+}
+
+/** Where the episode is, for a toast body. */
+function episodeWhere(item: { season?: number; episode?: number }): string {
+  if (item.season === undefined || item.episode === undefined) return '';
+  return uiLang === 'he'
+    ? ` עונה ${item.season} פרק ${item.episode}`
+    : ` S${item.season}E${item.episode}`;
+}
+
+function showToast(body: string): void {
+  if (!Notification.isSupported()) return;
+  const note = new Notification({ title: TITLE, body, icon });
+  note.on('click', showWindow);
+  note.show();
+}
+
+/** A translation failed. Only the title is shown; the reason is in the app. */
+function notifyFailed(item: { title: string; season?: number; episode?: number }): void {
+  const where = episodeWhere(item);
+  showToast(
+    uiLang === 'he'
+      ? `משהו השתבש: ${item.title}${where}. לחץ כאן לפרטים.`
+      : `Something went wrong: ${item.title}${where}. Click here for details.`,
+  );
 }
 
 /** Built fresh every time it opens, so the pause state and the time left are current. */
@@ -429,6 +454,7 @@ if (!app.requestSingleInstanceLock()) {
       running = await startAddon(app.getPath('userData'), {
         onPending: notifyPending,
         onUpgraded: notifyUpgraded,
+        onFailed: notifyFailed,
       });
       createWindow(running.port);
       createTray();

@@ -12,6 +12,36 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '1.9.1': {
+    en: [
+      {
+        title: 'Clear messages in Stremio',
+        text: 'While the subtitle is being made, Stremio now shows "TTT Sub: Translating... when it is done, select the subtitle again". If it fails, it says that no subtitle was found or that something went wrong, and the reason is in the app.',
+      },
+      {
+        title: 'Windows notifications',
+        text: 'You get one notification when a subtitle you need to select again is ready, and one when a translation fails. If nothing changed, nothing pops up.',
+      },
+      {
+        title: 'Easier status card',
+        text: 'The buttons on the status card work directly, each subtitle shows where it came from, and the card now says plainly whether the timing was moved, was already right, or could not be checked.',
+      },
+    ],
+    he: [
+      {
+        title: 'הודעות ברורות ב-Stremio',
+        text: 'בזמן שהכתובית נוצרת, Stremio מציג עכשיו "TTT Sub: מתרגם... בסיום בחר שוב את הכתובית". אם נכשל, כתוב שלא נמצאה כתובית או שמשהו השתבש, והסיבה מופיעה באפליקציה.',
+      },
+      {
+        title: 'התראות Windows',
+        text: 'מקבלים התראה אחת כשכתובית שצריך לבחור שוב מוכנה, ואחת כשתרגום נכשל. אם שום דבר לא השתנה, לא קופצת הודעה.',
+      },
+      {
+        title: 'כרטיס מצב נוח יותר',
+        text: 'הכפתורים בכרטיס המצב עובדים ישירות, כל כתובית מראה מאיפה היא הגיעה, והכרטיס אומר בפשטות אם התזמון הוזז, היה תקין כבר, או שלא הצלחתי לבדוק אותו.',
+      },
+    ],
+  },
   '1.9.0': {
     en: [
       {

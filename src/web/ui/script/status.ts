@@ -79,10 +79,6 @@ const dismissSyncNotices = () => {
 };
 $('st-upgrade-close').addEventListener('click', dismissSyncNotices);
 $('st-sync-ok').addEventListener('click', dismissSyncNotices);
-$('st-sync-stop').addEventListener('click', async () => {
-  try { await post('/api/sync-stop', {}); } catch { toast(false, FAILED); }
-  refreshStatus();
-});
 // Cancel (and Skip, when a step can be skipped) sit with the other buttons and show only while there is a job.
 let stopJob = '';
 const renderStop = (items) => {
@@ -121,6 +117,28 @@ const refreshStatus = async () => {
     const dl = r.lastDelivered;
     $('st-delivered').classList.toggle('hidden', !dl);
     if (dl) $('st-delivered').textContent = f(T.deliveredText, {name: nameOf(dl)});
+    // Sync to sound only makes sense once Stremio has taken a subtitle.
+    $('sync-now-btn').classList.toggle('hidden', !dl);
+    // Chips: who gave the source subtitle, and whether it came from the cache or was translated now.
+    const SVG = (d) => '<svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+    const ICON_WORLD = SVG('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>');
+    const ICON_DB = SVG('<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>');
+    const ICON_LANG = SVG('<path d="M4 5h7M9 3v2c0 4-2 7-5 8M5 9c1 2 3 4 6 5M12 20l4-9 4 9M13.5 17h5"/>');
+    const SRC_CHIPS = {
+      opensubtitles: [T.chipSrcOs, 'border-sky-400/40 text-sky-300'],
+      subdl: [T.chipSrcSubdl, 'border-violet-400/40 text-violet-300'],
+      jimaku: [T.chipSrcJimaku, 'border-pink-400/40 text-pink-300'],
+      video: [T.chipSrcVideo, 'border-teal-400/40 text-teal-300'],
+    };
+    const CHIP_BASE = 'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold ';
+    const sc = dl && SRC_CHIPS[dl.source];
+    $('st-chip-src').classList.toggle('hidden', !sc);
+    if (sc) { $('st-chip-src').className = CHIP_BASE + sc[1]; $('st-chip-src').innerHTML = ICON_WORLD + '<span>' + sc[0] + '</span>'; }
+    const viaChip = dl && (dl.via === 'cache' ? [T.chipCache, ICON_DB, 'border-amber-500/40 text-amber-300'] : dl.via === 'translated' ? [T.chipNew, ICON_LANG, 'border-warm-ok/40 text-warm-ok'] : dl.via === 'direct' ? [T.chipDirect, ICON_LANG, 'border-warm-ln text-warm-mu'] : null);
+    $('st-chip-via').classList.toggle('hidden', !viaChip);
+    if (viaChip) { $('st-chip-via').className = CHIP_BASE + viaChip[2]; $('st-chip-via').innerHTML = viaChip[1] + '<span>' + viaChip[0] + '</span>'; }
+    $('st-chips').classList.toggle('hidden', !dl);
+    $('st-chips').classList.toggle('flex', !!dl);
     const syncBox = $('st-sync');
     // A finished notice goes away by itself after a minute. When an exact subtitle arrived after the
     // sound check, only that one is shown: the check's "kept" answer is no longer the whole story.
@@ -139,7 +157,7 @@ const refreshStatus = async () => {
     } else if (r.exactComing) {
       $('st-sync-text').textContent = f(T.syncWaitExact, {name: nameOf(r.exactComing)});
     } else if (syncShown) {
-      $('st-sync-text').textContent = ls.outcome === 'moved' ? f(T.syncMoved, {name: nameOf(ls), s: (Math.abs(ls.offsetMs || 0) / 1000).toFixed(1)}) : ls.outcome === 'inSync' ? f(T.syncInSync, {name: nameOf(ls)}) : ls.outcome === 'unavailable' ? f(T.syncUnavailable, {name: nameOf(ls)}) : f(T.syncKept, {name: nameOf(ls)});
+      $('st-sync-text').textContent = ls.outcome === 'moved' ? f(T.syncMoved, {name: nameOf(ls)}) : ls.outcome === 'inSync' ? f(T.syncInSync, {name: nameOf(ls)}) : ls.outcome === 'unavailable' ? f(T.syncUnavailable, {name: nameOf(ls)}) : f(T.syncKept, {name: nameOf(ls)});
     }
     const q = r.quota;
     $('st-quota').classList.toggle('hidden', !q);
@@ -154,7 +172,7 @@ const refreshStatus = async () => {
       hint.classList.toggle('hidden', !hint.textContent);
     }
     if (subdlOn) $('st-subdl-text').textContent = f(T.stSubdlCount, {n: r.subdlDownloads || 0});
-    // Always a normal button; it only lights up when there is something to continue.
+    // Continue shows only when there is something it can do.
     const up = r.upgrade;
     const upVisible = fresh(up);
     $('st-upgrade').classList.toggle('hidden', !upVisible);
@@ -163,8 +181,7 @@ const refreshStatus = async () => {
       const where = up.season !== undefined && up.episode !== undefined ? (UI === 'he' ? ' עונה ' + up.season + ' פרק ' + up.episode : ' S' + up.season + 'E' + up.episode) : '';
       $('st-upgrade-text').textContent = f(T.upgradeText, {name: up.title + where});
     }
-    $('resume-btn').classList.toggle('!border-warm-ac', !!r.resumable);
-    $('resume-btn').classList.toggle('!text-warm-ac', !!r.resumable);
+    $('resume-btn').classList.toggle('hidden', !r.resumable);
     renderQueue(r.queue || []);
     renderStop(r.queue || []);
   } catch { /* the app may be restarting */ }

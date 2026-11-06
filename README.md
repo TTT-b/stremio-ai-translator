@@ -113,8 +113,13 @@ Build it yourself (Node.js 22+): `npm run dist` writes the installer to `release
    button and the add-on address with a **Copy** button are also at the bottom of the main
    screen, so you do not need to reopen the setup wizard.
 3. Play a movie or episode, open the subtitles menu and pick the entry labelled by this add-on.
-4. If it says **"Translation in progress - reselect this subtitle in a minute"**, wait and select
-   it again. A full episode usually takes 1-5 minutes the first time.
+4. If it says **"TTT Sub: Translating... when it is done, select the subtitle again"**, wait and select
+   it again. A full episode usually takes 1-5 minutes the first time. If it fails the player says
+   "TTT Sub: No subtitle found for this episode" or "TTT Sub: Something went wrong. Open the app for
+   details" (the reason is in the app). The desktop app shows a Windows notification once when a translation fails
+   and one when the final subtitle is ready and you need to select it again (only if it actually changed;
+   nothing when the timing was already right, and nothing while it is translating). The status card says
+   whether the timing was moved, was already in sync, could not be verified, or the video was not found.
 
 The subtitle list answers immediately with a local link. Opening it waits up to `SUB_WAIT_MS`
 (15 s) for the job and otherwise shows the placeholder. A translation that fails part-way resumes
@@ -126,7 +131,7 @@ The page uses a focused, warm-dark design: one centered card at a time. The inte
 **Hebrew (right to left) or English (left to right)**: Hebrew by default, switch in **Settings →
 Interface language** (or the small language button above the wizard). Everything the page shows
 follows the choice: buttons, error and test messages, the What's new notes and the tray menu. The
-server, its logs and the Stremio placeholder subtitles stay in English. Button names below are
+server and its logs stay in English; the Stremio placeholder subtitles follow the interface language. Button names below are
 the English meaning. Every release adds its What's new notes in both languages
 (`src/electron/whatsNew.ts`), and every screen text lives in `src/web/i18n.ts` with both languages.
 

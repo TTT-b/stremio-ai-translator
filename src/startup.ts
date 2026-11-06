@@ -20,7 +20,11 @@ export interface RunningAddon {
  */
 export function startAddon(
   root: string,
-  hooks: { onPending?: ServerDeps['onPending']; onUpgraded?: ServerDeps['onUpgraded'] } = {},
+  hooks: {
+    onPending?: ServerDeps['onPending'];
+    onUpgraded?: ServerDeps['onUpgraded'];
+    onFailed?: ServerDeps['onFailed'];
+  } = {},
 ): Promise<RunningAddon> {
   const envPath = resolve(root, '.env');
   loadDotenv({ path: envPath, quiet: true });
@@ -57,6 +61,7 @@ export function startAddon(
     },
     ...(hooks.onPending ? { onPending: hooks.onPending } : {}),
     ...(hooks.onUpgraded ? { onUpgraded: hooks.onUpgraded } : {}),
+    ...(hooks.onFailed ? { onFailed: hooks.onFailed } : {}),
   });
 
   return new Promise((resolvePromise, reject) => {

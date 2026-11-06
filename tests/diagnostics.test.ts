@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { videoTable } from '../src/logging/diagnostics';
+import { recentLogLines, videoTable } from '../src/logging/diagnostics';
 
 const logWith = (lines: object[]): string => {
   const dir = mkdtempSync(join(tmpdir(), 'diag-'));
@@ -127,5 +127,26 @@ describe('videoTable', () => {
     ).join('\n');
     expect(text).not.toContain('SECRET DIALOGUE');
     expect(text).not.toContain('kkkkkkkkkkkk');
+  });
+});
+
+describe('recentLogLines validation problems', () => {
+  it('shows what failed validation as kinds and line numbers, never text', () => {
+    const dir = logWith([
+      {
+        level: 40,
+        videoId: 'tt1',
+        stage: 'VALIDATION',
+        msg: 'chunk failed validation',
+        attempt: 2,
+        problemCount: 3,
+        problems: ['missing id 12', 'unknown id Secret dialogue here', 'empty translation id 14'],
+      },
+    ]);
+    const text = recentLogLines(dir).join('\n');
+    expect(text).toContain('attempt=2');
+    expect(text).toContain('problemCount=3');
+    expect(text).toContain('problems=missing id 12; unknown id; empty translation id 14');
+    expect(text).not.toContain('Secret');
   });
 });

@@ -16,27 +16,23 @@ export function pendingMessage(lang: 'he' | 'en'): string {
 
 export const CANCELLED_MESSAGE = 'Translation cancelled';
 
-/** What the job is doing, as the player shows it while the subtitle is not ready. */
-export function progressMessage(lang: 'he' | 'en', stage: string | undefined): string {
-  const again =
-    lang === 'he' ? 'בחר שוב את הכתוביות בסוף התהליך' : 'reselect the subtitles when it finishes';
-  const he: Record<string, string> = {
-    queued: 'ממתין בתור',
-    local: 'בודק אם יש כתוביות בתוך הסרט',
-    search: 'מחפש כתוביות',
-    sync: 'מסנכרן את הכתוביות',
-  };
-  const en: Record<string, string> = {
-    queued: 'Waiting in the queue',
-    local: 'Checking for subtitles inside the video',
-    search: 'Searching for subtitles',
-    sync: 'Syncing the subtitles',
-  };
-  // No percentage: Stremio loads this text once, so a number would stay frozen on the screen.
-  const translating = lang === 'he' ? 'מתרגם את הכתוביות' : 'Translating the subtitles';
-  const line =
-    stage === 'translate' ? translating : ((lang === 'he' ? he : en)[stage ?? ''] ?? translating);
-  return `${line} - ${again}`;
+/** Shown in the player while the subtitle is being made. Stremio loads it once, so no percentage. */
+export function waitingMessage(lang: 'he' | 'en'): string {
+  return lang === 'he'
+    ? 'TTT Sub: מתרגם... בסיום בחר שוב את הכתובית'
+    : 'TTT Sub: Translating... when it is done, select the subtitle again';
+}
+
+/** Shown in the player when the job failed. The reason is in the app, not here. */
+export function failureMessage(lang: 'he' | 'en', code: string): string {
+  if (code === 'SOURCE_SUBTITLE_NOT_FOUND') {
+    return lang === 'he'
+      ? 'TTT Sub: לא נמצאה כתובית לפרק הזה'
+      : 'TTT Sub: No subtitle found for this episode';
+  }
+  return lang === 'he'
+    ? 'TTT Sub: משהו השתבש. פתח את האפליקציה לפרטים'
+    : 'TTT Sub: Something went wrong. Open the app for details';
 }
 
 /** The line shown after a partial subtitle, from its last line to the end of the movie. */

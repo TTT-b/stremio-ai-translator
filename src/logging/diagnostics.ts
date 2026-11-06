@@ -44,7 +44,32 @@ const SAFE_FIELDS = [
   'usable',
   'matched',
   'unsure',
+  'attempt',
+  'problemCount',
+  'from',
+  'to',
 ] as const;
+
+/** The only validation problems that may be shown, each with an optional line number. */
+const PROBLEM_KIND =
+  /^(missing id|unknown id|duplicate id|empty translation id|markdown fence in id|malformed translation entry)(?: (\d{1,6}))?$/;
+
+/**
+ * What failed validation, as kinds and line numbers only. A problem the model made up (for example
+ * an unknown id that is really dialogue) is reduced to its kind, so no text reaches the report.
+ */
+function problemSummary(value: unknown): string | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const shown = value.slice(0, 5).flatMap((p) => {
+    if (typeof p !== 'string') return [];
+    const exact = PROBLEM_KIND.exec(p);
+    if (exact) return [exact[2] ? `${exact[1]} ${exact[2]}` : String(exact[1])];
+    const kind =
+      /^(missing id|unknown id|duplicate id|empty translation id|markdown fence in id)/.exec(p);
+    return [kind ? String(kind[1]) : 'other'];
+  });
+  return shown.length > 0 ? `problems=${shown.join('; ')}` : undefined;
+}
 
 const STAGES = new Set([
   'SOURCE',
@@ -121,6 +146,8 @@ export function recentLogLines(
         ? [`${k}=${String(v).slice(0, 40)}`]
         : [];
     });
+    const problems = problemSummary(line.problems);
+    if (problems) fields.push(problems);
     out.push({
       text: `${time} ${stage || 'LOG'} ${msg} ${fields.join(' ')}`.trimEnd(),
       videoId: typeof line.videoId === 'string' ? line.videoId : '',

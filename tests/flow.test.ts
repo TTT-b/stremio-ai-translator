@@ -52,6 +52,11 @@ interface Harness {
   lastSearch?: unknown;
 }
 
+/** Waits (up to about 3 s) until the check is true. */
+async function pollUntil(check: () => boolean): Promise<void> {
+  for (let i = 0; i < 120 && !check(); i++) await new Promise((r) => setTimeout(r, 25));
+}
+
 async function start(opts: {
   candidates?: SubtitleCandidate[];
   searchError?: AppError;
@@ -61,6 +66,7 @@ async function start(opts: {
   refreshGuessAfterMs?: number;
   stallAfterMs?: number;
   onUpgraded?: NonNullable<Parameters<typeof createApp>[0]['onUpgraded']>;
+  onFailed?: NonNullable<Parameters<typeof createApp>[0]['onFailed']>;
   /** Replaces the fake AI: gets the request and the call number. */
   translate?: ConstructorParameters<typeof FakeProvider>[0];
   cancelCooldownMs?: number;
@@ -162,6 +168,7 @@ async function start(opts: {
     ...(opts.logDir ? { logDir: opts.logDir } : {}),
     ...(opts.cancelCooldownMs !== undefined ? { cancelCooldownMs: opts.cancelCooldownMs } : {}),
     ...(opts.onUpgraded ? { onUpgraded: opts.onUpgraded } : {}),
+    ...(opts.onFailed ? { onFailed: opts.onFailed } : {}),
     ...(opts.stallAfterMs !== undefined ? { stallAfterMs: opts.stallAfterMs } : {}),
     ...(opts.refreshGuessAfterMs !== undefined
       ? { refreshGuessAfterMs: opts.refreshGuessAfterMs }
@@ -585,7 +592,7 @@ describe('subtitle request flow', () => {
     const path = new URL(sub.url).pathname;
 
     const first = await (await current.get(path)).text();
-    expect(first).toContain('בחר שוב את הכתוביות בסוף התהליך');
+    expect(first).toContain('TTT Sub: מתרגם... בסיום בחר שוב את הכתובית');
     expect(first).toMatch(/^1\n\d\d:\d\d:\d\d,\d{3} --> /); // still a valid SRT
 
     // A second request while running shares the same job (one translation, not two).
@@ -676,8 +683,8 @@ describe('subtitle request flow', () => {
       (await (await current.get('/subtitles/movie/tt0111161.json')).json()) as SubsResponse
     ).subtitles[0]!;
     const srt = await (await current.get(new URL(sub.url).pathname)).text();
-    expect(srt).toContain('Subtitle unavailable');
-    expect(srt).toContain('download quota');
+    expect(srt).toContain('TTT Sub: משהו השתבש. פתח את האפליקציה לפרטים');
+    expect(srt).not.toContain('quota'); // the reason is shown in the app, not in the player
   });
 
   it('no candidates -> SOURCE_SUBTITLE_NOT_FOUND placeholder', async () => {
@@ -686,8 +693,43 @@ describe('subtitle request flow', () => {
       (await (await current.get('/subtitles/movie/tt0111161.json')).json()) as SubsResponse
     ).subtitles[0]!;
     expect(await (await current.get(new URL(sub.url).pathname)).text()).toContain(
-      'No suitable source subtitle',
+      'TTT Sub: לא נמצאה כתובית לפרק הזה',
     );
+  });
+
+  it('shows the placeholders in English when the app is in English', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    current = await start({ gate, subWaitMs: 50, settings: { uiLanguage: 'en' } });
+    const sub = (
+      (await (await current.get('/subtitles/movie/tt0111161.json')).json()) as SubsResponse
+    ).subtitles[0]!;
+    const waiting = await (await current.get(new URL(sub.url).pathname)).text();
+    expect(waiting).toContain('TTT Sub: Translating... when it is done, select the subtitle again');
+    release();
+    await current.close();
+    current = await start({ candidates: [], settings: { uiLanguage: 'en' } });
+    const none = (
+      (await (await current.get('/subtitles/movie/tt0111161.json')).json()) as SubsResponse
+    ).subtitles[0]!;
+    expect(await (await current.get(new URL(none.url).pathname)).text()).toContain(
+      'TTT Sub: No subtitle found for this episode',
+    );
+  });
+
+  it('tells the desktop once when a job fails, with the error code only', async () => {
+    const failed: { code: string }[] = [];
+    current = await start({
+      searchError: new AppError('SOURCE_QUOTA_EXCEEDED'),
+      onFailed: (item) => failed.push(item),
+    });
+    const res = await current.get('/subtitles/movie/tt0111161.json');
+    const path = new URL(((await res.json()) as SubsResponse).subtitles[0]!.url).pathname;
+    await current.get(path);
+    await pollUntil(() => failed.length > 0);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.code).toBe('SOURCE_QUOTA_EXCEEDED');
   });
 
   it('invalid ids return an empty list and unknown /sub ids a placeholder', async () => {
@@ -1044,7 +1086,7 @@ describe('a stuck step never blocks the queue', () => {
       const res = await current.get(`/subtitles/movie/${id}.json`);
       const sub = ((await res.json()) as SubsResponse).subtitles[0]!;
       const srt = await (await current.get(new URL(sub.url).pathname)).text();
-      expect(srt).toContain('Subtitle unavailable');
+      expect(srt).toContain('TTT Sub: משהו השתבש');
     }
   });
 
@@ -1072,7 +1114,7 @@ describe('a stuck step never blocks the queue', () => {
     const srt = await (
       await current.get(await subPath(current, '/subtitles/movie/tt0111161.json'))
     ).text();
-    expect(srt).toContain('Subtitle unavailable');
+    expect(srt).toContain('TTT Sub: משהו השתבש');
   });
 
   it('tells the main screen why the last job failed', async () => {
@@ -1080,7 +1122,7 @@ describe('a stuck step never blocks the queue', () => {
     const srt = await (
       await current.get(await subPath(current, '/subtitles/movie/tt0111161.json'))
     ).text();
-    expect(srt).toContain('Subtitle unavailable');
+    expect(srt).toContain('TTT Sub: משהו השתבש');
     const status = (await (await current.get('/api/status')).json()) as {
       state: string;
       lastError: string | null;
@@ -1093,7 +1135,7 @@ describe('a stuck step never blocks the queue', () => {
     const srt = await (
       await current.get(await subPath(current, '/subtitles/movie/tt0111161.json'))
     ).text();
-    expect(srt).toContain('Subtitle unavailable');
+    expect(srt).toContain('TTT Sub: משהו השתבש');
   });
 });
 
@@ -1307,6 +1349,30 @@ describe('timing from the sound of the video', () => {
       lib = (await (await current.get('/api/library')).json()) as typeof lib;
     }
     expect(lib.items[0]?.timing).toBe('speech');
+  });
+
+  it('says "in sync" and shows no notice when the sound check finds nothing to move', async () => {
+    const upgraded: unknown[] = [];
+    current = await start({
+      findStream: async () => stream,
+      subWaitMs: 50,
+      limits: { syncWaitMs: 40 },
+      onUpgraded: (item) => upgraded.push(item),
+      speechFit: async () => {
+        await new Promise((r) => setTimeout(r, 300));
+        return { scale: 1, offsetMs: 20, score: 0.5, baseline: 0.5 };
+      },
+      candidates: [cand({ fileId: 7, language: 'en', downloadCount: 100 })],
+    });
+    await served('');
+    type St = { lastSync: { outcome: string } | null };
+    let last: St['lastSync'] = null;
+    for (let i = 0; i < 160 && last?.outcome !== 'inSync'; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      last = ((await (await current.get('/api/status')).json()) as St).lastSync;
+    }
+    expect(last?.outcome).toBe('inSync');
+    expect(upgraded).toHaveLength(0);
   });
 
   it('waits for the video to start playing in Stremio, then listens to it', async () => {
@@ -1880,7 +1946,7 @@ describe('partial subtitles (the first part is shown while the rest is translate
     expect(text).toContain('HE:Line 1');
     expect(text).toContain('HE:Line 4');
     expect(text).not.toContain('HE:Line 5');
-    expect(text).not.toContain('מתרגם את הכתוביות');
+    expect(text).not.toContain('TTT Sub: מתרגם');
     expect(text).toContain('התרגום ממשיך ברקע');
     // The note runs from the end of the part to the end of the movie (the last line ends at 23.5 s).
     expect(text).toMatch(/00:00:\d\d,\d{3} --> 00:00:23,500\nהתרגום ממשיך ברקע/);
@@ -1956,7 +2022,7 @@ describe('partial subtitles (the first part is shown while the rest is translate
     const text = await until(path, (t) => t.includes('התרגום נעצר'));
     expect(text).toContain('HE:Line 1');
     expect(text).toContain('התרגום נעצר');
-    expect(text).not.toContain('Subtitle unavailable');
+    expect(text).not.toContain('TTT Sub: משהו השתבש');
   });
 
   it('does not show a part when the setting is off', async () => {
@@ -1972,7 +2038,7 @@ describe('partial subtitles (the first part is shown while the rest is translate
     await new Promise((r) => setTimeout(r, 300));
     const text = await (await current.get(path)).text();
     expect(text).not.toContain('HE:Line 1');
-    expect(text).toContain('מתרגם את הכתוביות');
+    expect(text).toContain('TTT Sub: מתרגם');
     h.release();
   });
 
@@ -2220,6 +2286,44 @@ ${tag}
     expect(ready).toBe(true);
     const shown = await waitFor(async () => (await status()).lastDelivered !== null);
     expect(shown).toBe(true);
+  });
+
+  it('tells the main screen which provider gave the delivered subtitle', async () => {
+    type Status = { lastDelivered: { via: string; source?: string } | null };
+    const status = async () => (await (await current!.get('/api/status')).json()) as Status;
+    current = await start({
+      subWaitMs: 50,
+      settings: { prefetchNext: false },
+      candidates: [cand({ fileId: 1, language: 'he', provider: 'subdl' })],
+      contentFor: (c) => tagged(`From${c.fileId}`),
+    });
+    const path = await subUrl(current, MOVIE_FILE);
+    await waitFor(async () => (await (await current!.get(path)).text()).includes('From'));
+    expect(await waitFor(async () => (await status()).lastDelivered !== null)).toBe(true);
+    expect((await status()).lastDelivered).toMatchObject({ via: 'direct', source: 'subdl' });
+  });
+
+  it('counts the lines of a subtitle served from the cache in this session', async () => {
+    type Status = { linesTranslated: number; lastDelivered: { via: string } | null };
+    const status = async () => (await (await current!.get('/api/status')).json()) as Status;
+    const opts = { subWaitMs: 50, settings: { prefetchNext: false } };
+    current = await start(opts);
+    const first = await subUrl(current, MOVIE_FILE);
+    await waitFor(async () => (await (await current!.get(first)).text()).includes('HE:'));
+    const dataDir = current.dataDir;
+    await current.close();
+
+    current = await start({ ...opts, dataDir });
+    // After a restart the session counter is 0; the cached subtitle must be counted once.
+    expect((await status()).linesTranslated).toBe(0);
+    const again = await subUrl(current, MOVIE_FILE);
+    await waitFor(async () => (await (await current!.get(again)).text()).includes('HE:'));
+    expect(await waitFor(async () => (await status()).lastDelivered !== null)).toBe(true);
+    expect((await status()).lastDelivered?.via).toBe('cache');
+    expect((await status()).linesTranslated).toBeGreaterThan(0);
+    const counted = (await status()).linesTranslated;
+    await current.get(again);
+    expect((await status()).linesTranslated).toBe(counted);
   });
 
   it('lists where each subtitle came from, and whether it was translated', async () => {

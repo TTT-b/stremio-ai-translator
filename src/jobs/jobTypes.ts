@@ -189,6 +189,8 @@ export interface JobManagerDeps {
   onPending?: (item: { title: string; season?: number; episode?: number }) => void;
   /** Called when a better (exact-timing) subtitle replaced the shown one in the background. */
   onUpgraded?: (item: { title: string; season?: number; episode?: number }) => void;
+  /** Called once when a job failed. Only the error code, never subtitle text. */
+  onFailed?: (item: { title: string; season?: number; episode?: number; code: string }) => void;
   /** Developer test mode: made-up subtitles are not listed in the library. */
   testMode?: () => boolean;
   /** Reads a subtitle track from the playing video file. Injectable for tests. */
