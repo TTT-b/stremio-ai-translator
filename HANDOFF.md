@@ -14,8 +14,17 @@ answered (not tested with a real translation yet).
   `src/translation/fallback.ts` (`ModelFallbackProvider`, Gemini only, switches on timeout, rate limit,
   quota, model unavailable; cache identity stays the chosen model), settings `aiModels` (per provider,
   merged one level deep) and `autoSwitchModel`, UI `src/web/ui/modelPicker.ts`.
-- Unverified against real servers: the Gemini fallback model names (`GEMINI_FALLBACKS`) and the OpenAI
-  model-list shape. Known, not fixed: with no internet one chunk walks the whole fallback chain.
+- Model lists are curated (short stable list per provider, generic AI sparkle icon in the picker);
+  deprecated/retired Claude models are hidden. `GEMINI_FALLBACKS` was checked against Google's docs
+  (2026-11-06). Newer Claude (4.7+) and OpenAI o-series/gpt-5 reject `temperature`, so it is no longer
+  sent to them (`httpProviders.ts`).
+- Tested live by the user (2026-11-06): Gemini translation works (Dragon Ball S1E3, auto model switch seen).
+  NOT tested live: Anthropic and OpenAI (no keys), the OpenAI list filter (name heuristic), and whether
+  Anthropic still accepts `anthropic-version: 2023-06-01`. Known, not fixed: with no internet one chunk
+  walks the whole fallback chain; the UI says "provider rejected the key" even when OpenSubtitles gave
+  the 403 (same error code).
+- Stremio asks twice per play (without and with the video hash): two jobs, but the second shares the
+  first translation (no double AI cost).
 - `tailwind.config.js` content glob is now `./src/web/**/*.ts` (new files were being purged).
 - To ask the end-user: press "Copy diagnostics" after the update if it still fails.
 - Release is built with `npm run dist` and tested by the user before publishing (see repo-git-workflow).
