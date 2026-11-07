@@ -65,6 +65,10 @@ export const readPieceWithFfmpeg: ReadPiece = ({
   signal,
 }) =>
   new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new Error('stopped'));
+      return;
+    }
     const child = spawn(
       ffmpeg,
       [
@@ -116,6 +120,7 @@ export const readPieceWithFfmpeg: ReadPiece = ({
 export async function fitSubtitleToEmbeddedCues(
   opts: CueFitOptions,
 ): Promise<TimingFit | undefined> {
+  if (opts.signal.aborted) throw new Error('stopped');
   if (!opts.ffprobe || opts.cues.length < MIN_CUES) return undefined;
   const lengthSec = Math.max(...opts.cues.map((c) => c.endMs), 0) / 1000;
   if (lengthSec < MIN_LENGTH_SEC) return undefined;

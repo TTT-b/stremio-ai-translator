@@ -92,6 +92,7 @@ export function pickWindows(
 }
 
 export async function fitSubtitleToVideo(opts: VideoFitOptions): Promise<TimingFit | undefined> {
+  if (opts.signal.aborted) throw new Error('stopped');
   const detect = opts.detect ?? detectSpeech;
   const lengthSec = Math.max(...opts.cues.map((c) => c.endMs), 0) / 1000;
   if (opts.cues.length < 20 || lengthSec < 300) return undefined;

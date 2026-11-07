@@ -88,6 +88,10 @@ export function detectSpeech(
   window?: { startSec: number; durationSec: number },
 ): Promise<SpeechScan> {
   return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new Error('stopped'));
+      return;
+    }
     const child = spawn(
       ffmpeg,
       [
