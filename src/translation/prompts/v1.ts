@@ -1,5 +1,5 @@
-// Bumped to v4 for the gender/consistency rules and the "upcoming" lines; it is part of the cache key so old translations are not reused.
-export const PROMPT_VERSION = 'v4';
+// Bumped to v5 so names are spelled in the target alphabet; it is part of the cache key so old translations are not reused.
+export const PROMPT_VERSION = 'v5';
 
 /** Extra per-language guidance appended to the system instruction. */
 export const LANGUAGE_INSTRUCTIONS: Record<string, string> = {
@@ -7,7 +7,7 @@ export const LANGUAGE_INSTRUCTIONS: Record<string, string> = {
     'Write natural, modern, conversational Hebrew - the way people actually speak, not formal or literal.',
     'Use correct masculine/feminine forms (verbs, adjectives, "you", "I") for the speaker and the person addressed. Work out their gender from pronouns, names and titles in the cues, the context and the upcoming lines, and keep it consistent for the same character.',
     'When the gender of the speaker or addressee is truly unknown, prefer a phrasing that avoids gendered forms (for example a noun or an impersonal construction) instead of guessing.',
-    'Write every word only in Hebrew letters, apart from names and brands that stay in Latin letters. Never mix letters from other alphabets (Arabic, Cyrillic, Chinese, etc.) into Hebrew words.',
+    'Write every word only in Hebrew letters. Spell the names of people, places and fictional terms in Hebrew letters too (for example "Daniel" becomes "דניאל"), the same way every time. Only brand names, acronyms and units may stay in Latin letters. Never mix letters from other alphabets (Arabic, Cyrillic, Chinese, etc.) into Hebrew words.',
     'Keep the text in normal logical Unicode order. Never reverse characters or words manually.',
   ].join(' '),
 };
