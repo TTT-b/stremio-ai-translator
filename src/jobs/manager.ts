@@ -1829,12 +1829,14 @@ export class JobManager {
       }
     }
     // 3b. When OpenSubtitles has no downloads left, use another source's file instead.
-    const spare = () =>
-      rankSameLanguage(
-        candidates.filter((c) => !isMain(c)),
-        candidate.language,
-        videoName,
-      )[0];
+    // The same language first; else what a search would pick (English to translate).
+    const spare = () => {
+      const others = candidates.filter((c) => !isMain(c));
+      const sameLanguage = rankSameLanguage(others, candidate.language, videoName)[0];
+      if (sameLanguage) return sameLanguage;
+      const next = selectSubtitle(others, lang.code, 'en', videoName);
+      return next.kind === 'none' ? undefined : next.candidate;
+    };
     if (this.downloadsLeft === 0 && isMain(candidate)) candidate = spare() ?? candidate;
     let raw: string;
     try {
@@ -1863,8 +1865,11 @@ export class JobManager {
       candidate = alt;
       raw = await fetchRaw(candidate);
     }
+    // Another source's file may be in another language than the one first chosen.
+    const sameAsTarget = candidate.language.toLowerCase().split('-')[0] === lang.code.toLowerCase();
     return {
-      kind: selection.kind,
+      kind:
+        candidate === selection.candidate ? selection.kind : sameAsTarget ? 'direct' : 'translate',
       language: candidate.language,
       provider: candidate.provider ?? 'opensubtitles',
       raw,

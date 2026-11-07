@@ -1175,6 +1175,29 @@ describe('a stuck step never blocks the queue', () => {
     expect(current.downloads).toBe(1);
   });
 
+  it('translates the second provider English file when the Hebrew one hits the quota', async () => {
+    current = await start({
+      candidates: [
+        cand({ fileId: 1, language: 'he', downloadCount: 9000 }),
+        cand({
+          fileId: 2,
+          language: 'en',
+          provider: 'subdl',
+          downloadCount: 0,
+          downloadPath: '/subtitle/1-2.zip',
+        }),
+      ],
+      contentFor: (c) => `1\n00:00:01,000 --> 00:00:03,000\nFrom${c.fileId}\n`,
+      downloadError: (c) =>
+        c.provider === 'subdl' ? undefined : new AppError('SOURCE_QUOTA_EXCEEDED'),
+    });
+    const srt = await (
+      await current.get(await subPath(current, '/subtitles/movie/tt0111161.json'))
+    ).text();
+    expect(srt).toContain('HE:From2');
+    expect(current.translator.calls).toBeGreaterThan(0);
+  });
+
   it('still fails with the quota error when there is no second provider file', async () => {
     current = await start({
       candidates: [cand({ fileId: 1 })],
