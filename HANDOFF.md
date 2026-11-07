@@ -73,7 +73,7 @@ http://127.0.0.1:7000/ (kill node whose command line matches `*TTT Sub 1.9.1*src
 4. NOT approved yet (ask first): gender fix (cast hints, prompt v7), character memory between chunks,
    why the sound check gets "no data" on anime, optional ECC reinstall.
 5. Then: bump to 2.0 with he+en release notes, update README/TROUBLESHOOTING, commit by file names
-   (no attribution lines), push/release ONLY on explicit user OK; remove creator-only diagnostics
+   (no attribution lines), push/release ONLY on explicit user OK
    before merging to main.
 
 ---
@@ -84,7 +84,7 @@ http://127.0.0.1:7000/ (kill node whose command line matches `*TTT Sub 1.9.1*src
 - NEXT TASKS (from a user's 1.9.1 diagnostics, not started): (1) Two jobs for the same episode BOTH download from OpenSubtitles and BOTH translate (jobs 6de80711 and 1417e3c0 for tt4869896 S1E2, both "translating now" + "job done"). This doubles AI calls and OpenSubtitles quota (14/20 left). Find out why the second job does not reuse the first one's translation, fix with a test. (2) Chunks fail validation (duplicate/missing/unknown id) right after "AI model overloaded: switched to another model" (gemini-3.5-flash-lite -> gemini-3.1-flash-lite); one user's three attempts all failed (TRANSLATION_VALIDATION_FAILED at 913/993). Idea: re-translate only the missing lines, or split the chunk. The diagnostics now show `problems=` (kind + line number only).
 - (old) Included in 1.9.1: Stremio wait/failure messages, direct status-card buttons, source chips, cached-line counter. Toasts: ONE "subtitle is ready, select it again" toast only when the final subtitle actually changed (deduped per episode for 60 s; no-shift sound result = "in sync", no toast; manual "Sync to sound" always tells) + the failure toast. Status card wording: moved / already in sync / not sure / video not found (no seconds shown).
 - Included in 1.9.1: Stremio wait/failure messages, direct status-card buttons, source chips, cached-line counter. Toasts: ONE "subtitle is ready, select it again" toast only when the final subtitle actually changed (deduped per episode for 60 s; no-shift sound result = "in sync", no toast; manual "Sync to sound" always tells) + the failure toast. Status card wording: moved / already in sync / not sure / video not found (no seconds shown).
-- Open/optional: Stop/abort bug (aborted signal still starts ffmpeg in src/sync/speech.ts, cueFit.ts, videoFit.ts); refactor M3/M4/Stage 5; remove creator-only diagnostics before merging to main.
+- Open/optional: Stop/abort bug (aborted signal still starts ffmpeg in src/sync/speech.ts, cueFit.ts, videoFit.ts); refactor M3/M4/Stage 5.
 - Do NOT build: subtitle signature, remember per episode, cue-only check.
 
 Read `CLAUDE.md` and `PLAN.md` first. The user is not a developer: give exact PowerShell steps, answer in Hebrew.
@@ -220,7 +220,7 @@ Pushed to origin. Commits so far: dead-code cleanup, H1, M1, merge of main 1.8.0
    policy paragraph, a GitHub Actions workflow that builds the installer (only `check.yml` exists), and
    proof of reputation (1 star now: wait for a stable release and some users before applying).
    https://signpath.org/terms lists every condition.
-7. **Before merging to `main`**: remove the creator-only button (see above), `npm run check`, update
+7. **Before merging to `main`**: `npm run check`, update
    README / TROUBLESHOOTING / release notes, compare with `main`, ask the user.
 8. Old items: Dependabot PR #1; rotate the SubDL key that was once printed; a Jimaku key (anime
    source, set in settings); `unavailable` message also shows when ffmpeg is missing; no test for double
