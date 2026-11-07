@@ -125,6 +125,9 @@ export class JobManager {
     episode?: number;
     at: number;
   } | null = null;
+  /** The latest desktop notice (finished or upgraded), so one episode is announced once. */
+  private lastToldAbout: { title: string; season?: number; episode?: number; at: number } | null =
+    null;
   /** The subtitle Stremio took last (shown on the main screen for a while). */
   private lastDelivered: {
     title: string;
@@ -799,7 +802,12 @@ export class JobManager {
         });
         void Promise.race([Promise.allSettled(background), cap]).then(() => {
           if (job.upgradeAnnounced || job.cancelled) return;
-          return this.announce(job, (notice) => this.deps.onFinished?.(notice));
+          return this.announce(job, (notice) => {
+            // Stremio often asks twice for one episode (two jobs); the user gets one notice.
+            if (this.alreadyToldAbout(notice)) return;
+            this.lastToldAbout = { ...notice, at: this.now() };
+            this.deps.onFinished?.(notice);
+          });
         });
       }
       log.info(
@@ -995,19 +1003,22 @@ export class JobManager {
     };
     // One notice per episode: Stremio's two requests finish together, and a later step (video
     // subtitle, sound check) must not nag again. Only the user's own "Sync to sound" always tells.
-    const last = this.lastUpgrade;
-    if (
-      !force &&
-      last &&
+    if (!force && this.alreadyToldAbout(notice)) return;
+    this.lastUpgrade = { ...notice, at: this.now() };
+    this.lastToldAbout = { ...notice, at: this.now() };
+    this.deps.onUpgraded?.(notice);
+  }
+
+  /** Was the user told about this episode (finished or upgraded) in the last minute? */
+  private alreadyToldAbout(notice: { title: string; season?: number; episode?: number }): boolean {
+    const last = this.lastToldAbout;
+    return (
+      !!last &&
       this.now() - last.at < 60_000 &&
       last.title === notice.title &&
       last.season === notice.season &&
       last.episode === notice.episode
-    ) {
-      return;
-    }
-    this.lastUpgrade = { ...notice, at: this.now() };
-    this.deps.onUpgraded?.(notice);
+    );
   }
 
   /**
@@ -1042,6 +1053,15 @@ export class JobManager {
       if (!this.canUpgrade(job)) return;
       job.result = result;
       void this.record(job, result, log);
+      // Stremio may be holding the address of another job for this same episode (it asks again with
+      // a different file name or size). If that job has the very same lines, it gets the same move,
+      // or the player would keep the version that is still a second off.
+      for (const other of this.siblings(job.id)) {
+        if (other === job || other.status !== 'done' || !other.result) continue;
+        if (other.result.content !== before.content) continue;
+        other.result = { ...other.result, content, exact: true, timing: 'speech' };
+        other.upgradeAnnounced = true;
+      }
       log.info(
         { stage: 'ASSEMBLY', upgrade: 'done', via: 'sound' },
         'subtitle moved onto the speech in the background',

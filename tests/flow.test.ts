@@ -1081,6 +1081,27 @@ describe('embedded subtitles', () => {
     await current.get(path2);
     expect(current.downloads).toBe(1);
   });
+
+  it('translates once when Stremio asks twice for the same episode with different file names', async () => {
+    current = await start({
+      loadEmbedded: async () => undefined,
+      translate: async (req) => {
+        await new Promise((r) => setTimeout(r, 150)); // slow enough for both requests to overlap
+        return { translations: req.cues.map((c) => ({ id: c.id, text: `HE:${c.text}` })) };
+      },
+    });
+    const a = await subUrl(
+      current,
+      '/subtitles/movie/tt0111161/filename=Movie.2020.1080p.mkv.json',
+    );
+    const b = await subUrl(current, '/subtitles/movie/tt0111161/filename=Other.name.mkv.json');
+    expect(a).not.toBe(b);
+    const [one, two] = await Promise.all([current.get(a), current.get(b)]);
+    expect(await one.text()).toContain('HE:Hello there.');
+    expect(await two.text()).toContain('HE:Hello there.');
+    expect(current.translator.calls).toBe(2); // 3 cues, chunk size 2: paid once, not twice
+    expect(current.downloads).toBe(1);
+  });
 });
 
 function SRT_FOR_EMBEDDED(): string {
