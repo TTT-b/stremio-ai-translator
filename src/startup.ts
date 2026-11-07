@@ -23,6 +23,7 @@ export function startAddon(
   hooks: {
     onPending?: ServerDeps['onPending'];
     onUpgraded?: ServerDeps['onUpgraded'];
+    onFinished?: ServerDeps['onFinished'];
     onFailed?: ServerDeps['onFailed'];
   } = {},
 ): Promise<RunningAddon> {
@@ -61,6 +62,7 @@ export function startAddon(
     },
     ...(hooks.onPending ? { onPending: hooks.onPending } : {}),
     ...(hooks.onUpgraded ? { onUpgraded: hooks.onUpgraded } : {}),
+    ...(hooks.onFinished ? { onFinished: hooks.onFinished } : {}),
     ...(hooks.onFailed ? { onFailed: hooks.onFailed } : {}),
   });
 

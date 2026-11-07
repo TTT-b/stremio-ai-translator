@@ -1,3 +1,4 @@
+import { applyRtlFix } from './rtl';
 import type { Cue, SubtitleFile } from './types';
 
 /**
@@ -39,8 +40,40 @@ function stripNotes(line: string): string {
   return text.trim();
 }
 
+/**
+ * A music note written between music symbols instead of brackets ("♪ tense music plays ♪").
+ * Only a short description counts; sung lyrics between the same symbols stay.
+ */
+const MUSIC_NOUN =
+  /\b(?:music|musical|stinger|instrumental|theme|score|humming|whistling|chanting|vocali[sz]ing|singing|kalimba|guitar|piano|violin|drums?|strings|choir|orchestra)\b/i;
+/** A verb that only describes the music ("plays", "swells"), at the end of a very short note. */
+const MUSIC_VERB_END =
+  /\b(?:plays?|playing|swells|fades|intensifies|continues|resumes|builds|starts|ends|stops)(?:\s+\w+ly)?$/i;
+const MUSIC_NOTE_MAX_WORDS = 7;
+
+function isMusicSymbolNote(words: string): boolean {
+  if (!/[♪♫]/.test(words)) return false;
+  const text = words
+    .replace(/[♪♫#*~]/g, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/^[\s\-–—]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (text === '') return true;
+  if (/[?!]$/.test(text)) return false;
+  const count = text.split(' ').length;
+  if (count > MUSIC_NOTE_MAX_WORDS) return false;
+  // Descriptions are written in lower case; a capitalised short line is more likely a lyric, so it
+  // goes only when it also ends in a verb that describes the music.
+  const verbEnd = count <= 4 && MUSIC_VERB_END.test(text);
+  return /^\p{Ll}/u.test(text)
+    ? MUSIC_NOUN.test(text) || verbEnd
+    : MUSIC_NOUN.test(text) && verbEnd;
+}
+
 /** The words of a line, without any tags around them. */
 function cleanWords(words: string): string {
+  if (isMusicSymbolNote(words)) return '';
   const noLabel = words.replace(SPEAKER, (m) => (/^[-–—]/.test(m) ? '- ' : ''));
   // A dash in front of a note ("- (thud)") belongs to the note.
   const dash = /^([-–—]\s*)(.*)$/.exec(noLabel);
@@ -91,4 +124,20 @@ export function cleanSubtitle(file: SubtitleFile): SubtitleFile {
     if (text !== '') kept.push({ ...cue, index: kept.length + 1, text });
   }
   return { ...file, cues: kept };
+}
+
+const DIRECTION_MARKS = /[‎‏]/g;
+
+/**
+ * The same cleaning for a finished translation: the AI may write a sound note of its own
+ * ("[nostalgic music playing]"), which the viewer does not want. Cues left empty are dropped.
+ */
+export function cleanTranslated(cues: Cue[], rtl: boolean): Cue[] {
+  const kept: Cue[] = [];
+  for (const cue of cues) {
+    const text = cleanText(cue.text.replace(DIRECTION_MARKS, ''));
+    if (text !== '')
+      kept.push({ ...cue, index: kept.length + 1, text: rtl ? applyRtlFix(text) : text });
+  }
+  return kept;
 }

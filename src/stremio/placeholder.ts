@@ -1,6 +1,9 @@
 import { serializeSubtitle } from '../subtitles/serialize';
 import type { Cue } from '../subtitles/types';
 
+/** Hebrew lines start with the brand: a right-to-left mark puts it on the right, a left-to-right mark keeps its colon beside it. */
+const HE_BRAND = '‏TTT Sub:‎';
+
 /** A tiny valid SRT shown while the real subtitle is not available. */
 export function placeholderSrt(message: string): string {
   const text = message.replace(/\r?\n/g, ' ').replace(/-->/g, '->').trim();
@@ -19,7 +22,7 @@ export const CANCELLED_MESSAGE = 'Translation cancelled';
 /** Shown in the player while the subtitle is being made. Stremio loads it once, so no percentage. */
 export function waitingMessage(lang: 'he' | 'en'): string {
   return lang === 'he'
-    ? 'TTT Sub: מתרגם... בסיום בחר שוב את הכתובית'
+    ? `${HE_BRAND} מתרגם... בסיום בחר שוב את הכתובית`
     : 'TTT Sub: Translating... when it is done, select the subtitle again';
 }
 
@@ -27,11 +30,11 @@ export function waitingMessage(lang: 'he' | 'en'): string {
 export function failureMessage(lang: 'he' | 'en', code: string): string {
   if (code === 'SOURCE_SUBTITLE_NOT_FOUND') {
     return lang === 'he'
-      ? 'TTT Sub: לא נמצאה כתובית לפרק הזה'
+      ? `${HE_BRAND} לא נמצאה כתובית לפרק הזה`
       : 'TTT Sub: No subtitle found for this episode';
   }
   return lang === 'he'
-    ? 'TTT Sub: משהו השתבש. פתח את האפליקציה לפרטים'
+    ? `${HE_BRAND} משהו השתבש. פתח את האפליקציה לפרטים`
     : 'TTT Sub: Something went wrong. Open the app for details';
 }
 

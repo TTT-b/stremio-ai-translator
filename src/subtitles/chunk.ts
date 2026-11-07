@@ -21,7 +21,7 @@ export const cueId = (cue: Cue): string => String(cue.index);
  * Split cues into chunks of at most `size` cues. Each chunk also carries up to `contextSize`
  * source cues before it and up to `lookahead` cues after it (read-only, not to be re-translated).
  */
-export function chunkCues(cues: Cue[], size: number, contextSize = 3, lookahead = 4): Chunk[] {
+export function chunkCues(cues: Cue[], size: number, contextSize = 8, lookahead = 6): Chunk[] {
   if (size < 1) throw new RangeError('chunk size must be >= 1');
   const chunks: Chunk[] = [];
   const toContext = (c: Cue): ChunkCue => ({ id: cueId(c), text: c.text });

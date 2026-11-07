@@ -88,12 +88,18 @@ describe('page language', () => {
     expect(() => new Function(script)).not.toThrow();
   });
 
+  it('shows what is translating now, who is next, and one button to test every provider', () => {
+    const html = renderStatusPage(base);
+    for (const id of ['st-now-title', 'st-now-ep', 'st-next-text', 'checks-all', 'dr-ai']) {
+      expect(html).toContain(`id="${id}"`);
+    }
+  });
+
   it('offers the wizard a way back to the main screen and puts the checks on it', () => {
     const html = renderStatusPage(base);
     expect(html).toContain('id="dr-ai"');
     expect(html).toContain('id="news-panel"');
     expect(html.match(/js-news-badge/g)?.length).toBeGreaterThanOrEqual(2); // wizard and main screen
-    expect(html).toContain('id="dsample"');
     expect(html).toContain('let fromDash = true;');
     expect(renderStatusPage({ ...base, aiConfigured: false })).toContain('let fromDash = false;');
   });

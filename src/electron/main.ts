@@ -241,6 +241,16 @@ function showToast(body: string): void {
   note.show();
 }
 
+/** A translation finished while the user was waiting for it. */
+function notifyReady(item: { title: string; season?: number; episode?: number }): void {
+  const where = episodeWhere(item);
+  showToast(
+    uiLang === 'he'
+      ? `הכתוביות מוכנות: ${item.title}${where}. אם הן לא מופיעות, בחר אותן שוב ב-Stremio.`
+      : `Subtitles are ready: ${item.title}${where}. If they do not show, select them again in Stremio.`,
+  );
+}
+
 /** A translation failed. Only the title is shown; the reason is in the app. */
 function notifyFailed(item: { title: string; season?: number; episode?: number }): void {
   const where = episodeWhere(item);
@@ -454,6 +464,7 @@ if (!app.requestSingleInstanceLock()) {
       running = await startAddon(app.getPath('userData'), {
         onPending: notifyPending,
         onUpgraded: notifyUpgraded,
+        onFinished: notifyReady,
         onFailed: notifyFailed,
       });
       createWindow(running.port);

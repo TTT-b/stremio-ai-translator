@@ -8,6 +8,10 @@ import {
   translateEtaSec,
   type JobStats,
 } from './jobStatus';
+import { autoRetryDelayMs } from './autoRetry';
+
+/** The "subtitles ready" notice waits this long for a timing check to finish, then is sent anyway. */
+const FINISHED_NOTICE_MAX_WAIT_MS = 10 * 60_000;
 import { cacheKey, sha256 } from '../cache/fileCache';
 import type { Config } from '../config/env';
 import { findLanguage } from '../config/languages';
@@ -20,7 +24,8 @@ import { applyFit, type TimingFit } from '../sync/fit';
 import { cinemetaTitle, kitsuTitles, makeTitleResolver, parseFilename } from '../sources/titles';
 import type { SubtitleCandidate } from '../sources/types';
 import { type ConsensusItem, pickByConsensus } from '../subtitles/consensus';
-import { cleanSubtitle } from '../subtitles/clean';
+import { buildCast } from '../subtitles/cast';
+import { cleanSubtitle, cleanTranslated } from '../subtitles/clean';
 import { parseSubtitle } from '../subtitles/parse';
 import { serializeSubtitle } from '../subtitles/serialize';
 import type { ChunkCue } from '../subtitles/chunk';
@@ -28,7 +33,12 @@ import { stripForeignScripts } from '../subtitles/validate';
 import { withPartialNotice } from '../stremio/placeholder';
 import type { Cue } from '../subtitles/types';
 import { ModelFallbackProvider } from '../translation/fallback';
-import { CancelledError, translateSubtitle, type ChunkStore } from '../translation/pipeline';
+import {
+  CancelledError,
+  translateSubtitle,
+  type ChunkOutcome,
+  type ChunkStore,
+} from '../translation/pipeline';
 import { PROMPT_VERSION } from '../translation/prompts/v1';
 
 import {
@@ -77,6 +87,8 @@ function isNoShift(fit: TimingFit): boolean {
 export class JobManager {
   private readonly jobs = new Map<string, Job>();
   private running = 0;
+  /** Chunks being translated right now, so two jobs for the same text ask the AI only once. */
+  private readonly chunksInFlight = new Map<string, Promise<ChunkOutcome>>();
   private readonly waiting: (() => void)[] = [];
   private readonly now: () => number;
   private linesTranslated = 0;
@@ -85,6 +97,10 @@ export class JobManager {
   private started = 0;
   private lastFailed = false;
   private lastErrorCode: string | null = null;
+  /** Automatic restarts waiting for their time, by episode (see autoRetry.ts). */
+  private readonly autoRetries = new Map<string, { at: number; timer: NodeJS.Timeout }>();
+  /** Automatic tries already made per episode, forgotten once it is done or cancelled. */
+  private readonly autoRetryTries = new Map<string, number>();
   private rateLimited = 0;
   /** The user paused translating: no new part is sent to the AI until they continue. */
   private paused = false;
@@ -160,6 +176,7 @@ export class JobManager {
       const retryable =
         (force && (existing.status === 'failed' || existing.status === 'cancelled')) ||
         (existing.status === 'failed' &&
+          !this.autoRetries.has(videoKey(spec)) &&
           this.now() - (existing.finishedAt ?? 0) > (this.deps.retryFailedAfterMs ?? 60_000)) ||
         // After a cancel Stremio asks again within seconds; that must not undo the user's answer.
         // Ask mode only asks again, so it may restart at once.
@@ -252,6 +269,8 @@ export class JobManager {
   /** The user said no: drop the waiting jobs of this episode, or stop queued and running ones. */
   cancel(id: string): boolean {
     let done = false;
+    const target = this.jobs.get(id);
+    if (target) this.clearAutoRetry(videoKey(target.spec), true);
     for (const job of this.siblings(id)) {
       if (job.status === 'pending') {
         this.jobs.delete(job.id);
@@ -353,10 +372,60 @@ export class JobManager {
 
   /** Is there something the "Continue" button can do right now? */
   resumable(): boolean {
+    const last = this.restartable();
     return (
       [...this.jobs.values()].some((j) => this.isStalled(j) || this.isSyncStalled(j)) ||
-      !!this.restartable()
+      // A failure that is being restarted by itself needs no button.
+      (!!last && !this.autoRetries.has(videoKey(last.spec)))
     );
+  }
+
+  /** Seconds until the next automatic restart, or null when none is waiting. */
+  private autoRetryInSec(): number | null {
+    let soonest: number | null = null;
+    for (const { at } of this.autoRetries.values()) {
+      if (soonest === null || at < soonest) soonest = at;
+    }
+    return soonest === null ? null : Math.max(0, Math.ceil((soonest - this.now()) / 1000));
+  }
+
+  private clearAutoRetry(key: string, forgetTries: boolean): void {
+    const waiting = this.autoRetries.get(key);
+    if (waiting) clearTimeout(waiting.timer);
+    this.autoRetries.delete(key);
+    if (forgetTries) this.autoRetryTries.delete(key);
+  }
+
+  /** A failure that passes by itself (daily limit, busy AI): start the request again when it should. */
+  private scheduleAutoRetry(job: Job, log: Logger): void {
+    const err = job.error;
+    if (!err || job.spec.prefetch) return;
+    const key = videoKey(job.spec);
+    const tries = this.autoRetryTries.get(key) ?? 0;
+    const delay = autoRetryDelayMs(err.code, err.details['scope'], tries, this.now());
+    if (delay === null) return;
+    this.clearAutoRetry(key, false);
+    this.autoRetryTries.set(key, tries + 1);
+    const timer = setTimeout(() => this.runAutoRetry(key, job.spec, log), delay);
+    timer.unref();
+    this.autoRetries.set(key, { at: this.now() + delay, timer });
+    log.info(
+      { stage: 'API', errorCode: err.code, retryInSec: Math.round(delay / 1000), tries: tries + 1 },
+      'will try again by itself',
+    );
+  }
+
+  private runAutoRetry(key: string, spec: JobSpec, log: Logger): void {
+    this.autoRetries.delete(key);
+    const covered = [...this.jobs.values()].some(
+      (j) =>
+        videoKey(j.spec) === key &&
+        (j.status === 'done' || j.status === 'running' || j.status === 'pending'),
+    );
+    if (covered) return;
+    log.info({ stage: 'API' }, 'trying again by itself');
+    const job = this.ensure(spec, false, true);
+    if (job.status === 'pending') this.approve(job.id);
   }
 
   /**
@@ -502,6 +571,7 @@ export class JobManager {
       lastError: state === 'error' ? this.lastErrorCode : null,
       quota: this.quota ? { ...this.quota } : null,
       resumable: this.resumable(),
+      autoRetryInSec: this.autoRetryInSec(),
       upgrade:
         this.lastUpgrade && this.now() - this.lastUpgrade.at < UPGRADE_NOTICE_MS
           ? { ...this.lastUpgrade }
@@ -702,6 +772,7 @@ export class JobManager {
       }
       job.result = outcome;
       job.status = 'done';
+      this.clearAutoRetry(videoKey(job.spec), true);
       // A subtitle served from the cache counts for the session once (new translations count themselves).
       if (outcome.via === 'cache' && !job.spec.prefetch) {
         this.countLines(job, outcome.cues, Buffer.byteLength(outcome.content));
@@ -714,11 +785,23 @@ export class JobManager {
       }
       void this.record(job, job.result, log);
       this.prefetchNext(job, log);
+      const background: Promise<unknown>[] = [];
       if (job.result.exact === false) {
-        void this.upgradeLater(job, log);
-        void this.upgradeFromSound(job, log);
+        background.push(this.upgradeLater(job, log), this.upgradeFromSound(job, log));
       }
       if (partialWasShown) void this.announceUpgrade(job);
+      else if (!job.spec.prefetch && outcome.via !== 'cache') {
+        // A timing check is still running: wait for it, so the user gets one notice, the last one.
+        // (at most FINISHED_NOTICE_MAX_WAIT_MS, so a check that never ends cannot hide the notice)
+        const cap = new Promise<void>((resolve) => {
+          const t = setTimeout(resolve, FINISHED_NOTICE_MAX_WAIT_MS);
+          t.unref();
+        });
+        void Promise.race([Promise.allSettled(background), cap]).then(() => {
+          if (job.upgradeAnnounced || job.cancelled) return;
+          return this.announce(job, (notice) => this.deps.onFinished?.(notice));
+        });
+      }
       log.info(
         {
           stage: 'ASSEMBLY',
@@ -743,6 +826,7 @@ export class JobManager {
           this.lastFailed = true;
           this.lastErrorCode = job.error.code;
           this.announceFailure(job, job.error.code);
+          this.scheduleAutoRetry(job, log);
         }
         log.warn(
           { errorCode: job.error.code, durationMs: this.now() - started, ...job.error.details },
@@ -902,6 +986,7 @@ export class JobManager {
 
   /** Tell the main screen and the desktop that a better subtitle replaced the shown one. */
   private async announceUpgrade(job: Job, force = false): Promise<void> {
+    job.upgradeAnnounced = true;
     const v = job.spec.video;
     const notice = {
       title: await this.titleFor(job),
@@ -979,10 +1064,24 @@ export class JobManager {
   /** The user pressed Stop on the sound check that is listening; nothing else ends it but its own result. */
   stopSync(): boolean {
     const listening = [...this.jobs.values()].filter(
-      (j) => j.syncPercent !== undefined && !j.syncStopped,
+      (j) => (j.syncPercent !== undefined || j.syncWaiting) && !j.syncStopped,
     );
     for (const job of listening) job.syncStopped = true;
     return listening.length > 0;
+  }
+
+  /** Skip, after the job finished: ends only the search inside the video; the sound check goes on. */
+  skipBackgroundSearch(): boolean {
+    const searching = [...this.jobs.values()].filter((j) => j.exactPending && !j.searchSkipped);
+    for (const job of searching) job.searchSkipped = true;
+    return searching.length > 0;
+  }
+
+  /** Cancel, after the job finished: ends the search inside the video and the sound check. */
+  stopBackground(): boolean {
+    const searched = this.skipBackgroundSearch();
+    const stopped = this.stopSync();
+    return searched || stopped;
   }
 
   syncNow(): { ok: true } | { ok: false; code: 'NO_SUBTITLE' | 'NO_VIDEO' | 'BUSY' } {
@@ -1275,6 +1374,12 @@ export class JobManager {
                 void fit.then(
                   (moved) => {
                     if (moved) job.lateMove = moved.fit;
+                    // Say how the check ended right away: the job may still be translating, and
+                    // the main screen would otherwise show nothing until it is done.
+                    if (job.syncStopped || job.cancelled) return;
+                    if (!moved) void this.noteSync(job, 'kept');
+                    else if (isNoShift(moved.fit)) void this.noteSync(job, 'inSync');
+                    else void this.noteSync(job, 'moved', moved.fit.offsetMs);
                   },
                   () => undefined,
                 );
@@ -1319,6 +1424,7 @@ export class JobManager {
     this.stopIfCancelled(job);
     const raw = chosen.raw;
     const file = parseSubtitle(raw);
+    const cast = buildCast(file);
     const parsed = cfg.cleanSubtitles ? cleanSubtitle(file) : file;
     log.info({ stage: 'PARSER', cues: parsed.cues.length, format: parsed.format }, 'source parsed');
     job.progress = { done: 0, total: parsed.cues.length };
@@ -1385,6 +1491,7 @@ export class JobManager {
     }
 
     const chunkStore: ChunkStore = {
+      inFlight: this.chunksInFlight,
       keyFor: (chunk) => {
         const key = cacheKey({
           kind: 'chunk',
@@ -1453,6 +1560,7 @@ export class JobManager {
         concurrency: cfg.chunkConcurrency,
         maxValidationRetries: cfg.chunkMaxRetries,
         rtlFix: rtl,
+        cast,
         dualSubtitles: dual,
         isCancelled: () => [...watchers].every((w) => w.cancelled),
         waitWhilePaused: () => this.waitWhilePaused(() => [...watchers].every((w) => w.cancelled)),
@@ -1491,12 +1599,15 @@ export class JobManager {
     }
     watchers.delete(job);
     job.progress = { done: result.file.cues.length, total: result.file.cues.length };
-    const content = serializeSubtitle({ format: 'srt', cues: result.file.cues });
+    // A sound note the AI wrote itself is removed too (two-line dual subtitles are left as they are).
+    const finalCues =
+      cfg.cleanSubtitles && !dual ? cleanTranslated(result.file.cues, rtl) : result.file.cues;
+    const content = serializeSubtitle({ format: 'srt', cues: finalCues });
     // Only fully validated translations reach this point.
-    this.safeSet(trKey, 'translation', content, result.file.cues.length, log);
-    this.safeSet(outKey, 'translation', content, result.file.cues.length, log);
+    this.safeSet(trKey, 'translation', content, finalCues.length, log);
+    this.safeSet(outKey, 'translation', content, finalCues.length, log);
     if (!sharing) {
-      this.countLines(job, result.file.cues.length, Buffer.byteLength(content), true);
+      this.countLines(job, finalCues.length, Buffer.byteLength(content), true);
     }
     keys.add(trKey);
     return {
@@ -1593,7 +1704,12 @@ export class JobManager {
               language: picked.language,
               signal: abort.signal,
               // every step of the cue check is progress, even when the number stays the same
-              onProgress: (p) => {
+              onProgress: (p, estimated) => {
+                if (estimated) {
+                  // only time passed: the bar moves, but nothing came from the video
+                  job.syncPercent = Math.max(job.syncPercent ?? 0, p);
+                  return;
+                }
                 job.syncProgressAt = this.now();
                 onProgress(p);
               },
@@ -1699,7 +1815,7 @@ export class JobManager {
         // A recheck (a guessed-timing subtitle was already served) tries once, without the long wait.
         ...(quick ? { waitMs: 0, retryBudgetMs: 0 } : {}),
         maxEtaSec: cfg.embeddedMaxEtaSec,
-        shouldStop: () => !!job.cancelled || wasSkipped(),
+        shouldStop: () => !!job.cancelled || !!job.searchSkipped || wasSkipped(),
         ...(this.deps.fetchImpl ? { fetchImpl: this.deps.fetchImpl } : {}),
       },
     );

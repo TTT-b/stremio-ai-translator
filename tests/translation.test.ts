@@ -74,6 +74,33 @@ describe('translateSubtitle', () => {
     expect(kept.file.cues.every((c) => c.text === `${HEB} lad`)).toBe(true);
   });
 
+  it('asks again for a line where a foreign letter had to be cut out, and takes the clean answer', async () => {
+    const HEB = 'שלום';
+    const ARABIC = 'م';
+    const slip = new FakeProvider((req, call) => ({
+      translations: req.cues.map((c) => ({
+        id: c.id,
+        text: call === 1 && c.id === '2' ? `${HEB}${ARABIC}${HEB}` : `${HEB} ${c.id}`,
+      })),
+    }));
+    const r = await translateSubtitle(source, slip, opts({ chunkSize: 10 }));
+    expect(slip.calls).toBe(2);
+    expect(r.file.cues[1]?.text).toBe(`${HEB} 2`);
+  });
+
+  it('asks again for a line with a lone Hebrew letter between spaces', async () => {
+    const HEB = 'שלום';
+    const broken = new FakeProvider((req, call) => ({
+      translations: req.cues.map((c) => ({
+        id: c.id,
+        text: call === 1 && c.id === '3' ? `${HEB} ה ${HEB}` : `${HEB} ${c.id}`,
+      })),
+    }));
+    const r = await translateSubtitle(source, broken, opts({ chunkSize: 10 }));
+    expect(broken.calls).toBe(2);
+    expect(r.file.cues[2]?.text).toBe(`${HEB} 3`);
+  });
+
   it('keeps the first translation when the repair request fails', async () => {
     const HEB = 'שלום';
     const flaky = new FakeProvider((req, call) => {
@@ -212,12 +239,44 @@ describe('translateSubtitle', () => {
     });
   });
 
-  it('waits out rate limits and quota errors with growing pauses, then succeeds', async () => {
+  it('does not wait out a daily quota: it fails at once with the quota error', async () => {
+    const sleeps: number[] = [];
+    const provider = new FakeProvider(() => {
+      throw new AppError('PROVIDER_QUOTA_EXCEEDED', undefined, { scope: 'day' });
+    });
+    await expect(
+      translateSubtitle(
+        source,
+        provider,
+        opts({ concurrency: 1, chunkSize: 100, sleep: clockSleep(sleeps) }),
+      ),
+    ).rejects.toMatchObject({ code: 'PROVIDER_QUOTA_EXCEEDED' });
+    expect(provider.calls).toBe(1);
+    expect(sleeps).toEqual([]);
+  });
+
+  it('spaces requests out for the rest of the job after a 429', async () => {
+    const sleeps: number[] = [];
+    const provider = new FakeProvider((req, n) => {
+      if (n === 1) throw new AppError('PROVIDER_RATE_LIMITED');
+      return { translations: req.cues.map((c) => ({ id: c.id, text: `T:${c.text}` })) };
+    });
+    await translateSubtitle(
+      source,
+      provider,
+      opts({ concurrency: 1, chunkSize: 1, sleep: clockSleep(sleeps) }),
+    );
+    // One wait for the 429, then a gap of at least 6 s between the following requests.
+    expect(sleeps[0]).toBe(5000);
+    expect(sleeps.slice(1).some((ms) => ms >= 6000)).toBe(true);
+  });
+
+  it('waits out rate limits with growing pauses, then succeeds', async () => {
     const sleeps: number[] = [];
     const waits: number[] = [];
     const provider = new FakeProvider((req, n) => {
       if (n === 1) throw new AppError('PROVIDER_RATE_LIMITED');
-      if (n === 2) throw new AppError('PROVIDER_QUOTA_EXCEEDED');
+      if (n === 2) throw new AppError('PROVIDER_RATE_LIMITED');
       return { translations: req.cues.map((c) => ({ id: c.id, text: `T:${c.text}` })) };
     });
     const r = await translateSubtitle(
@@ -328,12 +387,12 @@ describe('translateSubtitle', () => {
     ).rejects.toMatchObject({ code: 'PROVIDER_RATE_LIMITED' });
   });
 
-  it('removes a stray Arabic letter inside Hebrew text without a retry', async () => {
+  it('removes a stray Arabic letter inside Hebrew text, after one more try for that line', async () => {
     const provider = new FakeProvider((req) => ({
       translations: req.cues.map((c) => ({ id: c.id, text: '\u05E9\u05DC\u0645\u05D5\u05DD' })),
     }));
     const r = await translateSubtitle(source, provider, opts({ chunkSize: 100, concurrency: 1 }));
-    expect(provider.calls).toBe(1);
+    expect(provider.calls).toBe(2);
     expect(r.file.cues.every((c) => c.text === '\u05E9\u05DC\u05D5\u05DD')).toBe(true);
   });
 
@@ -356,6 +415,21 @@ describe('translateSubtitle', () => {
     const r = await translateSubtitle(source, provider, opts({ chunkSize: 10 }));
     expect(provider.calls).toBe(2);
     expect(r.file.cues[0]?.text).toBe('ok:Hello there.');
+  });
+
+  it('keeps the good lines of a bad answer and asks again only for the missing ones', async () => {
+    const asked: string[][] = [];
+    const provider = new FakeProvider((req, n) => {
+      asked.push(req.cues.map((c) => c.id));
+      // First answer: only the first line. Second answer: everything that was asked.
+      const cues = n === 1 ? req.cues.slice(0, 1) : req.cues;
+      return { translations: cues.map((c) => ({ id: c.id, text: `ok:${c.text}` })) };
+    });
+    const r = await translateSubtitle(source, provider, opts({ chunkSize: 10 }));
+    expect(provider.calls).toBe(2);
+    expect(asked[1]?.length).toBe((asked[0]?.length ?? 0) - 1);
+    expect(asked[1]).not.toContain(asked[0]?.[0]);
+    expect(r.file.cues.every((c) => c.text.startsWith('ok:'))).toBe(true);
   });
 
   it('fails clearly when a chunk stays invalid (no corrupted output)', async () => {
@@ -512,6 +586,39 @@ describe('GeminiProvider', () => {
     },
   });
 
+  it('tells the per-minute 429 from the daily one by the quota id, not by the shared sentence', () => {
+    const p = providerWith(throwing(null));
+    const body = (quotaId: string, retry = '') =>
+      JSON.stringify({
+        error: {
+          code: 429,
+          message: 'You exceeded your current quota, please check your plan and billing details.',
+          status: 'RESOURCE_EXHAUSTED',
+          details: [
+            { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId }] },
+            ...(retry
+              ? [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: retry }]
+              : []),
+          ],
+        },
+      });
+    const minute = p.normalizeError(
+      apiError(429, body('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', '28s')),
+    );
+    expect(minute.code).toBe('PROVIDER_RATE_LIMITED');
+    expect(minute.retryAfterMs).toBe(28_000);
+    const tokens = p.normalizeError(
+      apiError(429, body('GenerateContentInputTokensPerModelPerMinute-FreeTier', '41s')),
+    );
+    expect(tokens.code).toBe('PROVIDER_RATE_LIMITED');
+    const day = p.normalizeError(
+      apiError(429, body('GenerateRequestsPerDayPerProjectPerModel-FreeTier', '41s')),
+    );
+    expect(day.code).toBe('PROVIDER_QUOTA_EXCEEDED');
+    expect(day.details['scope']).toBe('day');
+    expect(day.retryAfterMs).toBeUndefined();
+  });
+
   it('normalizes provider errors', () => {
     const p = providerWith(throwing(null));
     expect(
@@ -525,9 +632,9 @@ describe('GeminiProvider', () => {
     expect(rl.code).toBe('PROVIDER_RATE_LIMITED');
     expect(rl.retryable).toBe(true);
     expect(rl.retryAfterMs).toBe(12_500);
-    expect(p.normalizeError(apiError(429, 'You exceeded your current quota, per day')).code).toBe(
-      'PROVIDER_QUOTA_EXCEEDED',
-    );
+    const day = p.normalizeError(apiError(429, 'You exceeded your current quota, per day'));
+    expect(day.code).toBe('PROVIDER_QUOTA_EXCEEDED');
+    expect(day.details['scope']).toBe('day');
     const credits = p.normalizeError(apiError(402, 'Your prepayment credits are depleted.'));
     expect(credits.code).toBe('PROVIDER_QUOTA_EXCEEDED');
     expect(credits.retryable).toBe(false);

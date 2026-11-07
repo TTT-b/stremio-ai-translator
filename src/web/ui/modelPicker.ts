@@ -2,8 +2,7 @@ import { btn, escapeHtml, labelCls, result, selectField } from './components';
 import type { UiCtx } from './context';
 
 /** One generic "AI" mark for every provider (the page's CSP allows no images; not a company logo). */
-const AI_ICON =
-  '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" class="text-warm-ac"><path d="M8 1c.5 3.6 2.4 5.5 7 7-4.6 1.5-6.5 3.4-7 7-.5-3.6-2.4-5.5-7-7 4.6-1.5 6.5-3.4 7-7z"/></svg>';
+const AI_ICON = '<span class="text-[11px] font-extrabold text-warm-ac">AI</span>';
 
 /** The model chooser: its title and icon follow the provider detected from the saved key. */
 export function renderModelPicker(c: UiCtx): string {

@@ -44,6 +44,13 @@ const RESPONSE_JSON_SCHEMA = {
   required: ['translations'],
 };
 
+/**
+ * Measured on a real episode (12 runs of one 80-line chunk): at 1.0 the model twice dropped a
+ * repeated line, which slid the lines after it, and it put letters of another alphabet inside
+ * Hebrew words; at 0.3 neither happened. The setting never changes the number of requests.
+ */
+export const TRANSLATION_TEMPERATURE = 0.3;
+
 export interface GeminiOptions {
   apiKey: string;
   model: string;
@@ -55,6 +62,15 @@ export interface GeminiOptions {
 export function parseRetryAfterMs(message: string): number | undefined {
   const m = /retry(?:Delay"?:\s*"|\s+in\s+)(\d+(?:\.\d+)?)s/i.exec(message);
   return m ? Math.ceil(Number(m[1]) * 1000) : undefined;
+}
+
+/**
+ * Is this 429 the daily limit? Gemini names the broken quota in the error body
+ * ("GenerateRequestsPerDayPerProjectPerModel-FreeTier" against "...PerMinute..."). The retry hint
+ * ("retry in 28s") belongs to the per-minute window only, so a daily quota is never waited out.
+ */
+export function is429Daily(lowerMessage: string): boolean {
+  return /per\s?day|perday|_per_day|\bdaily\b/.test(lowerMessage);
 }
 
 export class GeminiProvider implements TranslationProvider {
@@ -114,6 +130,7 @@ export class GeminiProvider implements TranslationProvider {
       targetLanguage: req.targetLanguage,
       context: req.context,
       upcoming: req.upcoming ?? [],
+      ...(req.cast?.length ? { cast: req.cast } : {}),
       cues: req.cues,
     };
     let response;
@@ -125,7 +142,7 @@ export class GeminiProvider implements TranslationProvider {
           systemInstruction: buildSystemInstruction(req.targetLanguage, req.targetLanguageCode),
           responseMimeType: 'application/json',
           responseJsonSchema: RESPONSE_JSON_SCHEMA,
-          temperature: 0.3,
+          temperature: TRANSLATION_TEMPERATURE,
         },
       });
     } catch (err) {
@@ -177,8 +194,11 @@ export class GeminiProvider implements TranslationProvider {
       }
       if (status === 404) return new AppError('PROVIDER_MODEL_UNAVAILABLE', this.model);
       if (status === 429) {
-        const daily = /per day|daily|billing|exceeded your current quota/.test(lower);
-        if (daily && !/per minute/.test(lower)) return new AppError('PROVIDER_QUOTA_EXCEEDED');
+        // The free tier answers both "too many this minute" and "no more today" with the same
+        // 429 and the same sentence ("exceeded your current quota"); only the quota id tells them apart.
+        if (is429Daily(lower)) {
+          return new AppError('PROVIDER_QUOTA_EXCEEDED', undefined, { scope: 'day' });
+        }
         const e = new AppError('PROVIDER_RATE_LIMITED');
         const ms = parseRetryAfterMs(message);
         if (ms !== undefined) e.retryAfterMs = ms;

@@ -63,6 +63,20 @@ describe('ModelFallbackProvider', () => {
     expect(switches).toEqual(['m-a>m-b', 'm-b>m-c']);
   });
 
+  it('does not switch on a per-minute rate limit: it is waited out on the chosen model', async () => {
+    const { provider, made, switches } = build({
+      'm-a': () => {
+        throw new AppError('PROVIDER_RATE_LIMITED');
+      },
+    });
+    await expect(provider.translateChunk(REQ)).rejects.toMatchObject({
+      code: 'PROVIDER_RATE_LIMITED',
+    });
+    expect(made['m-b']?.calls).toBe(0);
+    expect(switches).toEqual([]);
+    expect(provider.activeModel()).toBe('m-a');
+  });
+
   it('does not switch for errors that another model cannot fix', async () => {
     const { provider, made } = build({
       'm-a': () => {
@@ -84,5 +98,20 @@ describe('ModelFallbackProvider', () => {
     down = false;
     const out = await provider.translateChunk(REQ);
     expect(out.translations[0]?.text).toBe('m-a:hi');
+  });
+
+  it('reports the busy error, not a missing model, when the last model does not exist', async () => {
+    const busy = (): void => {
+      throw new AppError('PROVIDER_TIMEOUT', 'HTTP 503');
+    };
+    const { provider } = build({
+      'm-a': busy,
+      'm-b': busy,
+      'm-c': () => {
+        throw new AppError('PROVIDER_MODEL_UNAVAILABLE', 'm-c');
+      },
+    });
+    // The pipeline waits out a busy error; a missing-model error would fail the job at once.
+    await expect(provider.translateChunk(REQ)).rejects.toMatchObject({ code: 'PROVIDER_TIMEOUT' });
   });
 });

@@ -1,6 +1,43 @@
 import { describe, expect, it } from 'vitest';
-import { cleanSubtitle, cleanText } from '../src/subtitles/clean';
+import { cleanSubtitle, cleanText, cleanTranslated } from '../src/subtitles/clean';
 import type { SubtitleFile } from '../src/subtitles/types';
+
+describe('music notes between music symbols', () => {
+  it.each([
+    '♪ tense music plays ♪',
+    '♪ soft music ♪',
+    '♪ Soft music plays ♪',
+    '<i>♪ instrumental music playing ♪</i>',
+    '♪ soft, tense music playing ♪',
+    '♪ woman vocalizing continues ♪',
+    '♪',
+    '♪ tense musical stinger ♪',
+    '♪ music intensifies ♪',
+    '♪ music ends abruptly ♪',
+    '♪ kalimba plays softly ♪',
+    '♪ dramatic majestic music\nplays ♪',
+    '- ♪ tense musical stinger\n- ♪ music intensifies',
+  ])('removes %s', (text) => {
+    expect(cleanText(text)).toBe('');
+  });
+
+  it('keeps the spoken line next to a music note', () => {
+    expect(cleanText('- ♪ tense musical stinger\n- Run!')).toBe('Run!');
+  });
+
+  it.each([
+    "♪ 'Cause I'm in too deep ♪",
+    "<i>♪ Someday you'll return to me ♪</i>",
+    '♪ Did you sink it in the sea? ♪',
+    "♪ Oh, little one,\nwhere'd you take my heart ♪",
+    '♪ I will always love you ♪',
+    '♪ Music is all I need ♪',
+    '♪ Soft music ♪',
+    '♪ Play me a song tonight ♪',
+  ])('keeps lyrics %s', (text) => {
+    expect(cleanText(text)).not.toBe('');
+  });
+});
 
 describe('cleanText', () => {
   it.each([
@@ -122,5 +159,23 @@ describe('credits and adverts', () => {
     expect(
       run(['The translation was wrong.', 'We need to sync our watches.', 'תרגום זה לא פשוט.']),
     ).toEqual(['The translation was wrong.', 'We need to sync our watches.', 'תרגום זה לא פשוט.']);
+  });
+});
+
+describe('cleanTranslated', () => {
+  const cue = (index: number, text: string) => ({
+    index,
+    startMs: index * 1000,
+    endMs: index * 1000 + 900,
+    text,
+  });
+
+  it('drops a sound note the AI wrote and keeps the speech, with the direction marks back', () => {
+    const out = cleanTranslated(
+      [cue(1, '‏[מוזיקה נוסטלגית מנגנת]‏'), cue(2, '‏שלום לכולם.‏'), cue(3, '[מוזיקה]')],
+      true,
+    );
+    expect(out.map((c) => c.text)).toEqual(['‏שלום לכולם.‏']);
+    expect(out[0]?.index).toBe(1);
   });
 });

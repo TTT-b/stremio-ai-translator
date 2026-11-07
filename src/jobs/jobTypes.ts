@@ -70,6 +70,8 @@ export interface Job {
   lateEmbedded?: Promise<ChosenSource | undefined>;
   /** The video's own subtitle is still being read (or translated) to replace the shown one. */
   exactPending?: boolean;
+  /** The user pressed Skip (or Cancel) after the job went on: the search inside the video stops. */
+  searchSkipped?: boolean;
   /** Cuts the requests that are waiting for the AI so they are asked again (set while translating). */
   kick?: () => number;
   /** Progress of listening to the video while the stage is 'sync', 0..100. */
@@ -84,6 +86,8 @@ export interface Job {
   syncWaiting?: boolean;
   /** The user moved on to another video: the sound check of this one stops listening. */
   syncStopped?: boolean;
+  /** A better subtitle replaced the shown one and the user was told (so "ready" is not said twice). */
+  upgradeAnnounced?: boolean;
   /** The sound check could not start: the video is not on this computer's Stremio server. */
   syncNoVideo?: boolean;
   /**
@@ -180,7 +184,7 @@ export interface JobManagerDeps {
     cues: Cue[];
     language: string;
     signal: AbortSignal;
-    onProgress?: (percent: number) => void;
+    onProgress?: (percent: number, estimated?: boolean) => void;
     log?: (info: Record<string, unknown>) => void;
   }) => Promise<TimingFit | undefined>;
   /** When set, every finished subtitle is listed here so the user can review and delete it. */
@@ -189,6 +193,8 @@ export interface JobManagerDeps {
   onPending?: (item: { title: string; season?: number; episode?: number }) => void;
   /** Called when a better (exact-timing) subtitle replaced the shown one in the background. */
   onUpgraded?: (item: { title: string; season?: number; episode?: number }) => void;
+  /** Called when a subtitle finished that no earlier notice covered (not an upgrade of a shown one). */
+  onFinished?: (item: { title: string; season?: number; episode?: number }) => void;
   /** Called once when a job failed. Only the error code, never subtitle text. */
   onFailed?: (item: { title: string; season?: number; episode?: number; code: string }) => void;
   /** Developer test mode: made-up subtitles are not listed in the library. */

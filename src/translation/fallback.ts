@@ -7,10 +7,13 @@ import type {
   TranslationProvider,
 } from './provider';
 
-/** Errors another model of the same provider may not have: overload, empty quota, no such model. */
+/**
+ * Errors another model of the same provider may not have: overload, empty quota, no such model.
+ * A per-minute rate limit is not here on purpose: it clears within a minute, the chosen model
+ * is the one worth waiting for, and trying every other model on it only spends more requests.
+ */
 const SWITCHABLE = new Set([
   'PROVIDER_TIMEOUT',
-  'PROVIDER_RATE_LIMITED',
   // Free-tier daily limits are per model, so a sibling model may still have quota.
   'PROVIDER_QUOTA_EXCEEDED',
   'PROVIDER_MODEL_UNAVAILABLE',
@@ -62,6 +65,8 @@ export class ModelFallbackProvider implements TranslationProvider {
     request: TranslateChunkRequest,
     signal?: AbortSignal,
   ): Promise<TranslateChunkResult> {
+    // A busy model is worth waiting for; a missing one is not. Keep the busy error to report.
+    let busy: AppError | undefined;
     for (;;) {
       const used = this.active;
       const provider = this.providers[used] as TranslationProvider;
@@ -71,9 +76,10 @@ export class ModelFallbackProvider implements TranslationProvider {
         const e = isAppError(err) ? err : provider.normalizeError(err);
         const next = used + 1;
         if (!SWITCHABLE.has(e.code)) throw e;
+        if (e.code !== 'PROVIDER_MODEL_UNAVAILABLE') busy = e;
         if (next >= this.providers.length) {
           if (this.active === used) this.active = 0;
-          throw e;
+          throw busy ?? e;
         }
         if (this.active === used) {
           this.active = next;

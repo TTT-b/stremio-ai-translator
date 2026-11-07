@@ -159,6 +159,7 @@ const S = {
   switchLang: { he: 'English', en: 'עברית' },
 
   dashTitle: { he: 'הכול מוכן', en: 'All set' },
+  aiProviderTitle: { he: 'ספק AI', en: 'AI provider' },
   providerLine: { he: 'ספק:', en: 'Provider:' },
   noKeyYet: { he: 'עדיין לא נשמר מפתח AI.', en: 'No AI key saved yet.' },
   settings: { he: 'הגדרות', en: 'Settings' },
@@ -232,6 +233,9 @@ const S = {
     en: 'Translated {d} of {t} lines ({p}%)',
   },
   progressAria: { he: 'קובץ הכתוביות הנוכחי', en: 'Current subtitle file' },
+  testAllBtn: { he: 'בדוק הכול', en: 'Test all' },
+  checksMore: { he: 'פירוט לפי ספק', en: 'Details per provider' },
+  qNext: { he: 'הבא בתור', en: 'Next in line' },
   checksTitle: { he: 'בדיקות חיבור', en: 'Connection checks' },
   checksSub: {
     he: 'בדוק שהספקים מגיבים ושהתרגום עובד.',
@@ -458,6 +462,10 @@ const S = {
     en: 'So translation is ready every time you open Stremio. You can change this later in Settings.',
   },
   stPaused: { he: 'התרגום מושהה', en: 'Translation paused' },
+  stAutoRetry: {
+    he: 'ה-AI לא זמין כרגע. ממשיך אוטומטית בעוד {t}',
+    en: 'The AI is not available right now. Continuing by itself in {t}',
+  },
   etaTotal: { he: 'סה״כ עד כתובית מלאה: {t}', en: 'Total until the full subtitle: {t}' },
   diagNote: {
     he: 'אם משהו לא עובד, העתק ושלח ליוצר. אין בזה מפתחות או טקסט כתוביות.',

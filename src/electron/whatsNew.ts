@@ -12,6 +12,36 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '2.0.0': {
+    en: [
+      {
+        title: 'Fully automatic',
+        text: 'Request a subtitle and wait. If the AI is busy or its daily limit is used up, the app waits and continues by itself, and Windows tells you once when the subtitle is ready.',
+      },
+      {
+        title: 'Better translation',
+        text: 'A new prompt keeps male and female forms and names consistent, marks songs, and fixes lines that slid out of place.',
+      },
+      {
+        title: 'Steadier progress and layout',
+        text: 'The sound-check bar no longer jumps from a third to the end, and My subtitles fits narrow windows.',
+      },
+    ],
+    he: [
+      {
+        title: 'אוטומטי לגמרי',
+        text: 'מבקשים כתובית וממתינים. אם ה-AI עמוס או שהמכסה היומית נגמרה, האפליקציה ממתינה וממשיכה לבד, ו-Windows מודיע פעם אחת כשהכתובית מוכנה.',
+      },
+      {
+        title: 'תרגום טוב יותר',
+        text: 'הנחיה חדשה שומרת על לשון זכר ונקבה ועל שמות באופן עקבי, מסמנת שירים ומתקנת שורות שהוזזו ממקומן.',
+      },
+      {
+        title: 'התקדמות והתאמה למסך',
+        text: 'פס בדיקת הסאונד כבר לא קופץ משליש לסוף, והספרייה מתאימה את עצמה לחלונות צרים.',
+      },
+    ],
+  },
   '1.9.1': {
     en: [
       {

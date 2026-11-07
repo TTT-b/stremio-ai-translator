@@ -164,12 +164,20 @@ $('save').addEventListener('click', async () => {
 const TEST_OK = {ai: T.testOkAi, opensubtitles: T.testOkOs, subdl: T.testOkSubdl, jimaku: T.testOkJimaku};
 document.querySelectorAll('[data-test]').forEach(b => b.addEventListener('click', async () => {
   const name = b.dataset.test, id = b.dataset.rp + name;
-  if (name === 'subdl' && !subdlOn) { show(id, false, T.testNoKeySubdl); return; }
-  if (name === 'jimaku' && !jimakuOn) { show(id, false, T.testNoKeyJimaku); return; }
+  if (name === 'subdl' && !subdlOn) { show(id, null, T.testNoKeySubdl); return; }
+  if (name === 'jimaku' && !jimakuOn) { show(id, null, T.testNoKeyJimaku); return; }
   show(id, null, T.testing);
   try { const r = await post('/api/test/' + name); show(id, r.ok, r.ok ? TEST_OK[name] : errText(r, FAILED)); }
   catch { show(id, false, FAILED); }
 }));
+// One button for all the checks on the main screen; each provider still shows its own result.
+$('checks-all').addEventListener('click', () => {
+  document.querySelectorAll('[data-test][data-rp="dr-"]').forEach((b) => {
+    const n = b.dataset.test;
+    if ((n === 'subdl' && !subdlOn) || (n === 'jimaku' && !jimakuOn)) return; // not set up: nothing to check
+    b.click();
+  });
+});
 // Eye button: shows or hides what was typed in a password field (nothing saved is ever sent here).
 document.querySelectorAll('[data-reveal]').forEach(b => {
   const input = $(b.dataset.reveal);

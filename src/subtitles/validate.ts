@@ -130,6 +130,67 @@ export function findSuspiciousLines(
   return ids;
 }
 
+/** A single Hebrew letter standing alone between spaces: the debris of a word that broke apart. */
+const LONE_HEBREW_LETTER = /(?:^|\s)\p{Script=Hebrew}(?=\s|$|[.,!?:;])/u;
+
+/**
+ * Ids of Hebrew lines holding a lone letter between spaces (a word the model broke apart, such as a
+ * letter left behind when an odd character was cut out). Only checked for Hebrew; a hint for one
+ * repair attempt, never a failure.
+ */
+export function findBrokenWords(translations: ChunkCue[], targetLanguageCode: string): string[] {
+  if (targetLanguageCode.toLowerCase() !== 'he') return [];
+  return translations
+    .filter((t) => typeof t?.text === 'string' && LONE_HEBREW_LETTER.test(t.text.trim()))
+    .map((t) => t.id);
+}
+
+const DRIFT_FACTOR = 2;
+const DRIFT_MIN_RUN = 3;
+const DRIFT_MIN_CUES = 10;
+const DRIFT_SPREAD = 3;
+const letterCount = (s: string): number => s.replace(/[^\p{L}\p{N}]/gu, '').length;
+
+/**
+ * Ids of lines that may have slid onto the wrong source line (a repeated line pushes the next
+ * ones down by one). The sign: three or more nearby lines whose length, compared with their
+ * source, is far from what the rest of the chunk shows. The run is widened a little on each side
+ * because a slide also moves the lines next to it. A hint for one repair attempt, never a failure.
+ */
+export function findDriftedLines(source: Cue[], translations: ChunkCue[]): string[] {
+  if (source.length < DRIFT_MIN_CUES) return [];
+  const byId = new Map(translations.map((t) => [t?.id, t?.text]));
+  const logs = source.map((c) => {
+    const text = byId.get(String(c.index));
+    return typeof text === 'string'
+      ? Math.log((letterCount(text) + 4) / (letterCount(c.text) + 4))
+      : 0;
+  });
+  const median = [...logs].sort((a, b) => a - b)[Math.floor(logs.length / 2)] ?? 0;
+  const off = logs.map((x) => Math.abs(x - median) > Math.log(DRIFT_FACTOR));
+  const hit = new Set<number>();
+  let start = -1;
+  let last = -1;
+  const close = (): void => {
+    if (start < 0 || last - start + 1 < DRIFT_MIN_RUN) return;
+    for (let k = start - DRIFT_SPREAD; k <= last + DRIFT_SPREAD; k++) {
+      if (k >= 0 && k < source.length) hit.add(k);
+    }
+  };
+  off.forEach((isOff, i) => {
+    if (!isOff) return;
+    if (start >= 0 && i - last <= 2) {
+      last = i;
+      return;
+    }
+    close();
+    start = i;
+    last = i;
+  });
+  close();
+  return source.filter((_, i) => hit.has(i)).map((c) => String(c.index));
+}
+
 /**
  * Check one chunk's translation against its source. Returns a list of problems
  * (empty = valid). Problem strings contain IDs only, never dialogue.

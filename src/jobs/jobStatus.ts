@@ -73,6 +73,8 @@ export interface JobStats {
   upgrade: { title: string; season?: number; episode?: number; at: number } | null;
   /** The Continue button has something to do: a stuck translation, or a cancelled/failed request. */
   resumable: boolean;
+  /** Seconds until the app restarts a failed translation by itself (daily limit, busy AI), else null. */
+  autoRetryInSec: number | null;
   queue: QueueItem[];
 }
 

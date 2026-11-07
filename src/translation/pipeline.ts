@@ -6,6 +6,8 @@ import type { Cue, SubtitleFile } from '../subtitles/types';
 import {
   assertSameStructure,
   findChunkProblems,
+  findBrokenWords,
+  findDriftedLines,
   findSuspiciousLines,
   stripForeignScripts,
 } from '../subtitles/validate';
@@ -13,11 +15,15 @@ import type { TokenUsage, TranslationProvider } from './provider';
 import { withRetry } from './retry';
 
 /** Persists validated chunk translations so a failed job resumes instead of restarting. */
+export type ChunkOutcome = { translations: ChunkCue[]; usage: TokenUsage };
+
 export interface ChunkStore {
   get(key: string): ChunkCue[] | undefined;
   set(key: string, translations: ChunkCue[]): void;
   /** Key for one chunk: must include everything that can change its translation. */
   keyFor(chunk: Chunk): string;
+  /** Chunks being translated right now, shared by all jobs of one manager. */
+  inFlight?: Map<string, Promise<ChunkOutcome>>;
 }
 
 /** Thrown when the user cancelled the job: the translation stops before its next request. */
@@ -34,6 +40,8 @@ export interface PipelineOptions {
   isCancelled?: () => boolean;
   targetLanguageCode: string;
   targetLanguageName: string;
+  /** Characters with a known gender ("Nisha: female"), sent with every request. */
+  cast?: string[];
   chunkSize: number;
   concurrency: number;
   /** Extra attempts when a chunk comes back invalid. */
@@ -83,7 +91,18 @@ export interface PipelineResult {
 
 const RATE_WAIT_BASE_MS = 5000;
 const RATE_WAIT_MAX_MS = 60_000;
-const RATE_BUDGET_MS = 20 * 60_000;
+/**
+ * A per-minute limit clears within a minute or so; a provider that still refuses after this long
+ * is not going to clear soon, and the job is then restarted later by the manager (finished parts
+ * are kept), instead of sending request after request.
+ */
+const RATE_BUDGET_MS = 6 * 60_000;
+/**
+ * After a 429 the free tier's per-minute limit (about 10 requests) is known to be the bottleneck:
+ * requests are then spaced at least this far apart for the rest of the job, so the limit is not hit
+ * again. Not applied before the first 429, so a key without such a limit loses no speed.
+ */
+const LEARNED_GAP_MS = 6500;
 /** A 5xx / timeout is waited out too, but a provider that stays down must not hold a job forever. */
 const OVERLOAD_MAX_WAITS = 8;
 /** The extra gap between requests never grows beyond this while the provider is pushing back. */
@@ -101,9 +120,8 @@ const isKicked = (err: AppError): boolean => err.details['kicked'] === true;
 
 const isBackoffError = (err: unknown): err is AppError =>
   isAppError(err) &&
-  (err.code === 'PROVIDER_RATE_LIMITED' ||
-    err.code === 'PROVIDER_QUOTA_EXCEEDED' ||
-    err.code === 'PROVIDER_TIMEOUT');
+  // A quota error (the day's limit or credits used up) is not waited out: nothing changes in minutes.
+  (err.code === 'PROVIDER_RATE_LIMITED' || err.code === 'PROVIDER_TIMEOUT');
 
 /**
  * Adaptive request pacing shared by all parallel lanes. While the provider is happy there is no
@@ -113,7 +131,8 @@ const isBackoffError = (err: unknown): err is AppError =>
 interface Throttle {
   pace(): Promise<void>;
   onSuccess(): void;
-  onPressure(pauseMs: number): void;
+  /** `rateLimited`: a 429 (the request limit), as opposed to an overloaded server. */
+  onPressure(pauseMs: number, rateLimited?: boolean): void;
   /** While the provider pushes back only the first lane keeps going; the others wait. */
   canStart(lane: number): boolean;
 }
@@ -126,11 +145,12 @@ function createThrottle(opts: PipelineOptions): Throttle {
   let cooldownUntil = 0;
   let pressured = false;
   let calmStreak = 0;
+  let learnedGap = 0;
   return {
     async pace() {
       const now = Date.now();
       const start = Math.max(now, nextSlot, cooldownUntil);
-      nextSlot = start + base + extra;
+      nextSlot = start + Math.max(base, learnedGap) + extra;
       if (start > now) await sleep(start - now);
     },
     onSuccess() {
@@ -141,7 +161,8 @@ function createThrottle(opts: PipelineOptions): Throttle {
     canStart(lane) {
       return !pressured || lane === 0;
     },
-    onPressure(pauseMs) {
+    onPressure(pauseMs, rateLimited = false) {
+      if (rateLimited) learnedGap = LEARNED_GAP_MS;
       pressured = true;
       calmStreak = 0;
       cooldownUntil = Math.max(cooldownUntil, Date.now() + pauseMs);
@@ -199,7 +220,7 @@ async function waitOutRateLimits<T>(
           'provider pushed back, waiting to retry',
         );
         waited += delay;
-        throttle.onPressure(delay);
+        throttle.onPressure(delay, err.code === 'PROVIDER_RATE_LIMITED');
         await sleep(delay);
       }
     }
@@ -231,7 +252,7 @@ function withKick<T>(call: Promise<T>, opts: PipelineOptions): Promise<T> {
 }
 
 /** Most lines one chunk may send back for a second look, and how many neighbours give context. */
-const MAX_REPAIR_LINES = 10;
+const MAX_REPAIR_LINES = 40;
 const REPAIR_NEIGHBOURS = 2;
 
 /**
@@ -247,11 +268,16 @@ async function repairSuspiciousLines(
   throttle: Throttle,
   log: Logger,
   usage: TokenUsage,
+  cutOut: ReadonlySet<string>,
 ): Promise<ChunkCue[]> {
-  const ids = findSuspiciousLines(chunk.cues, translations, opts.targetLanguageCode).slice(
-    0,
-    MAX_REPAIR_LINES,
-  );
+  const ids = [
+    ...new Set([
+      ...findSuspiciousLines(chunk.cues, translations, opts.targetLanguageCode),
+      ...findDriftedLines(chunk.cues, translations),
+      ...findBrokenWords(translations, opts.targetLanguageCode),
+      ...translations.filter((t) => cutOut.has(t.id)).map((t) => t.id),
+    ]),
+  ].slice(0, MAX_REPAIR_LINES);
   if (ids.length === 0 || opts.isCancelled?.()) return translations;
   const wanted = new Set(ids);
   const all = chunk.cues.map((c) => ({ id: String(c.index), text: c.text }));
@@ -271,6 +297,7 @@ async function repairSuspiciousLines(
         cues: redo,
         context: around,
         upcoming: [],
+        ...(opts.cast?.length ? { cast: opts.cast } : {}),
       }),
       opts,
     );
@@ -305,7 +332,7 @@ async function repairSuspiciousLines(
   }
 }
 
-async function translateOneChunk(
+async function translateOneChunkNow(
   chunk: Chunk,
   total: number,
   provider: TranslationProvider,
@@ -331,9 +358,21 @@ async function translateOneChunk(
     }
   }
 
+  // Lines that already came back fine are kept; a retry asks only for the missing or broken ones.
+  const have = new Map<string, string>();
+  /** Lines where a stray foreign letter was cut out; the word may now be short a letter. */
+  const cutOut = new Set<string>();
+  const sourceText = new Map(source.map((c) => [c.id, c.text]));
+
   for (let attempt = 1; attempt <= attempts; attempt++) {
     if (opts.isCancelled?.()) throw new CancelledError();
     const started = Date.now();
+    const todo = source.filter((c) => !have.has(c.id));
+    const todoIds = new Set(todo.map((c) => c.id));
+    const nearbyDone = source.filter(
+      (c, i) =>
+        !todoIds.has(c.id) && [-2, -1, 1, 2].some((k) => todoIds.has(source[i + k]?.id ?? '')),
+    );
     try {
       const result = await withRetry(
         async () =>
@@ -344,9 +383,10 @@ async function translateOneChunk(
                 provider.translateChunk({
                   targetLanguage: opts.targetLanguageName,
                   targetLanguageCode: opts.targetLanguageCode,
-                  cues: source,
-                  context: chunk.context,
+                  cues: todo,
+                  context: [...chunk.context, ...nearbyDone],
                   upcoming: chunk.upcoming,
+                  ...(opts.cast?.length ? { cast: opts.cast } : {}),
                 }),
                 opts,
               );
@@ -383,17 +423,36 @@ async function translateOneChunk(
       const cleaned = stripForeignScripts(chunk.cues, result.translations, opts.targetLanguageCode);
       if (cleaned !== result.translations) {
         log.info({ stage: 'VALIDATION', attempt }, 'removed stray foreign-script letters');
+        const before = new Map(result.translations.map((t) => [t.id, t.text]));
+        for (const t of cleaned) if (before.get(t.id) !== t.text) cutOut.add(t.id);
       }
-      const problems = findChunkProblems(chunk.cues, cleaned);
+      for (const t of cleaned) {
+        if (
+          typeof t?.id !== 'string' ||
+          typeof t.text !== 'string' ||
+          !todoIds.has(t.id) ||
+          have.has(t.id) ||
+          /```/.test(t.text) ||
+          (t.text.trim() === '' && (sourceText.get(t.id) ?? '').trim() !== '')
+        ) {
+          continue;
+        }
+        have.set(t.id, t.text);
+      }
+      const merged: ChunkCue[] = source
+        .filter((c) => have.has(c.id))
+        .map((c) => ({ id: c.id, text: have.get(c.id) as string }));
+      const problems = findChunkProblems(chunk.cues, merged);
       if (problems.length === 0) {
         const repaired = await repairSuspiciousLines(
           chunk,
-          cleaned,
+          merged,
           provider,
           opts,
           throttle,
           log,
           usage,
+          cutOut,
         );
         if (opts.chunkStore && storeKey) {
           try {
@@ -436,8 +495,38 @@ async function translateOneChunk(
   });
 }
 
+async function translateOneChunk(
+  chunk: Chunk,
+  total: number,
+  provider: TranslationProvider,
+  opts: PipelineOptions,
+  throttle: Throttle,
+): Promise<ChunkOutcome> {
+  const inFlight = opts.chunkStore?.inFlight;
+  const key = inFlight ? opts.chunkStore?.keyFor(chunk) : undefined;
+  if (inFlight && key) {
+    const running = inFlight.get(key);
+    if (running) {
+      try {
+        const shared = await running;
+        return { translations: shared.translations, usage: { inputTokens: 0, outputTokens: 0 } };
+      } catch {
+        /* the other job failed or was cancelled: translate it here instead */
+      }
+    }
+  }
+  const mine = translateOneChunkNow(chunk, total, provider, opts, throttle);
+  if (!inFlight || !key) return mine;
+  inFlight.set(key, mine);
+  try {
+    return await mine;
+  } finally {
+    if (inFlight.get(key) === mine) inFlight.delete(key);
+  }
+}
+
 /** Run `worker` over `items` with at most `limit` running at once; fails fast. */
-async function runPool<T, R>(
+export async function runPool<T, R>(
   items: T[],
   limit: number,
   worker: (item: T) => Promise<R>,
@@ -449,8 +538,10 @@ async function runPool<T, R>(
   let failed: unknown;
   let hasFailed = false;
   const lanes = Array.from({ length: Math.min(limit, items.length) }, async (_, lane) => {
-    while (!hasFailed) {
-      await gate?.(lane, () => hasFailed);
+    // A lane with nothing left to take must not wait for its turn: a throttled lane would
+    // otherwise wait forever after the last part was taken by another lane.
+    while (!hasFailed && next < items.length) {
+      await gate?.(lane, () => hasFailed || next >= items.length);
       if (hasFailed) return;
       const i = next++;
       if (i >= items.length) return;
@@ -469,6 +560,11 @@ async function runPool<T, R>(
   return results;
 }
 
+/** Hebrew vowel and cantillation marks (niqqud) look broken in players, so they are never kept. */
+export function stripHebrewPoints(text: string): string {
+  return text.replace(/[֑-ׇֽֿׁׂׅׄ]/g, '');
+}
+
 /**
  * Builds the output cues from the source cues and the translations by id: dual-subtitle layout
  * and the right-to-left fix. Timestamps and order come from the source.
@@ -479,7 +575,7 @@ export function assembleCues(
   opts: Pick<PipelineOptions, 'dualSubtitles' | 'rtlFix'>,
 ): Cue[] {
   return sourceCues.map((c) => {
-    let text = (byId.get(String(c.index)) ?? '').trim();
+    let text = stripHebrewPoints(byId.get(String(c.index)) ?? '').trim();
     if (opts.dualSubtitles) {
       // Strictly two lines: original, "\n", translation. Inner line breaks are folded into
       // spaces so a multi-line cue cannot produce more (or blank) lines that players mis-render.

@@ -71,6 +71,20 @@ describe('fitSubtitleToVideo', { timeout: 30_000 }, () => {
     expect(bad.length / fixed.length).toBeLessThan(0.02);
   });
 
+  it('moves the bar steadily toward the end of the planned pieces, never back, never past 90', async () => {
+    const seen: number[] = [];
+    await fitSubtitleToVideo({
+      ...base,
+      cues: shifted(truth, 9000),
+      detect: fakeDetect(db, []),
+      onProgress: (p) => seen.push(p),
+    });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen).toEqual([...seen].sort((a, b) => a - b));
+    expect(Math.max(...seen)).toBeLessThanOrEqual(90);
+    expect(Math.max(...seen)).toBeGreaterThan(40); // not stuck near a third when the answer comes early
+  });
+
   it('reports what is left off in each piece: about nothing for a plain shift', async () => {
     const fit = await fitSubtitleToVideo({
       ...base,

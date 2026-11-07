@@ -339,6 +339,16 @@ translation again once 20 seconds have passed (Stremio's own immediate re-ask is
 on to the next one: the video's own subtitle, then listening, then the download from OpenSubtitles. Which
 steps run at all is set in Settings (embedded subtitles).
 
+**Cancel and Skip after the subtitle was delivered.** The two buttons stay on the main screen as long as
+anything still runs in the background. **Skip** ends only the search inside the video (the sound check goes
+on); **Cancel** ends everything, the search and the sound check. The **Sync to sound** button shows only
+when the automatic check did not already confirm the timing of the latest subtitle.
+
+**Main screen.** The top card names what is translating now (series, season and episode) with the
+progress, lines and time left, and shows "Next in line" when another episode waits. One **Test all**
+button checks every configured provider (AI, OpenSubtitles, SubDL, Jimaku) and "Details per provider"
+shows which one passed or failed. The install box is collapsed to one line.
+
 **First subtitle source.** Under Translation you can choose which source is preferred first:
 SubDL (the default) or OpenSubtitles. SubDL needs a SubDL key (Accounts and keys); without a key
 OpenSubtitles is used. SubDL has no file-hash match, so its timing is less exact, but it does not use
@@ -382,6 +392,18 @@ translated are not translated twice.
 
 While the subtitle is not ready, the player shows what is happening (for example `Translating the
 subtitles… 45%`) in the interface language instead of one fixed sentence.
+
+### Fully automatic: limits, retries and one notice (v2.0)
+
+- A per-minute Gemini limit only slows the work down (the app paces itself and keeps the same model).
+  A daily limit is recognised too: the app waits by itself until the quota resets (midnight Pacific
+  time, plus a short margin) and continues, with no Continue button. Overloaded or timed-out requests
+  are retried after 1, 5 and 15 minutes. The main screen shows the time left.
+- Windows shows one notice when the subtitle is finished. When a timing check from the video's sound is
+  still running, the notice waits for it (at most 10 minutes), so you get one notice, not two.
+- The bar of the sound check counts the planned two pieces, so it no longer stops at a third and jumps to
+  the end when the answer comes early.
+- My subtitles: rows and buttons wrap on narrow windows instead of running off the screen.
 
 ### Speaker names and sound notes are removed
 

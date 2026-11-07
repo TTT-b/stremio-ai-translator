@@ -67,6 +67,7 @@ async function start(opts: {
   stallAfterMs?: number;
   onUpgraded?: NonNullable<Parameters<typeof createApp>[0]['onUpgraded']>;
   onFailed?: NonNullable<Parameters<typeof createApp>[0]['onFailed']>;
+  onFinished?: NonNullable<Parameters<typeof createApp>[0]['onFinished']>;
   /** Replaces the fake AI: gets the request and the call number. */
   translate?: ConstructorParameters<typeof FakeProvider>[0];
   cancelCooldownMs?: number;
@@ -172,6 +173,7 @@ async function start(opts: {
     ...(opts.cancelCooldownMs !== undefined ? { cancelCooldownMs: opts.cancelCooldownMs } : {}),
     ...(opts.onUpgraded ? { onUpgraded: opts.onUpgraded } : {}),
     ...(opts.onFailed ? { onFailed: opts.onFailed } : {}),
+    ...(opts.onFinished ? { onFinished: opts.onFinished } : {}),
     ...(opts.stallAfterMs !== undefined ? { stallAfterMs: opts.stallAfterMs } : {}),
     ...(opts.refreshGuessAfterMs !== undefined
       ? { refreshGuessAfterMs: opts.refreshGuessAfterMs }
@@ -261,6 +263,23 @@ describe('the Continue button', () => {
     });
     expect(text).toContain('HE:Hello there.');
     expect((await status(current)).resumable).toBe(false);
+  });
+
+  it('waits out a daily AI limit by itself: no Continue button, a countdown instead', async () => {
+    current = await start({
+      subWaitMs: 50,
+      translate: async () => {
+        throw new AppError('PROVIDER_QUOTA_EXCEEDED', undefined, { scope: 'day' });
+      },
+    });
+    await current.get('/subtitles/movie/tt0111161.json');
+    type Auto = St & { autoRetryInSec: number | null; state: string };
+    const auto = async () => (await (await current!.get('/api/status')).json()) as Auto;
+    await until(async () => (await auto()).autoRetryInSec !== null);
+    const st = await auto();
+    expect(st.autoRetryInSec).toBeGreaterThan(0);
+    expect(st.autoRetryInSec).toBeLessThanOrEqual(24 * 3600 + 120);
+    expect(st.resumable).toBe(false);
   });
 
   it('cuts a translation that stopped getting answers, and it finishes', async () => {
@@ -439,6 +458,61 @@ describe('an exact subtitle that arrives after the job finished', () => {
     const status = (await (await current.get('/api/status')).json()) as { upgrade: unknown };
     expect(status.upgrade).toBeNull();
   });
+
+  describe('Skip and Cancel while the search inside the video is still going', () => {
+    const postTo = (h: Harness, path: string) =>
+      fetch(h.base + path, { method: 'POST', headers: { Host: h.host } });
+    /** A video search that waits until it is told to stop, and records that it was told. */
+    const listening = () => {
+      const state = { told: false };
+      const load = (async (_q: unknown, deps: { shouldStop?: () => boolean }) => {
+        for (let i = 0; i < 400 && !deps.shouldStop?.(); i++)
+          await new Promise((r) => setTimeout(r, 10));
+        state.told = !!deps.shouldStop?.();
+        return undefined;
+      }) as never;
+      return { state, load };
+    };
+    const exactComing = async (h: Harness) =>
+      ((await (await h.get('/api/status')).json()) as { exactComing: unknown }).exactComing;
+
+    for (const [button, route] of [
+      ['Skip', '/api/background/skip'],
+      ['Cancel', '/api/background/stop'],
+    ] as const) {
+      it(`${button} ends the search and the downloaded subtitle stays`, async () => {
+        const { state, load } = listening();
+        current = await start({
+          subWaitMs: 50,
+          limits: { embeddedSoftMs: 30 },
+          loadEmbedded: load,
+        });
+        const sub = ((await (await current.get(FILE)).json()) as SubsResponse).subtitles[0]!;
+        const path = new URL(sub.url).pathname;
+        let text = '';
+        await until(async () => {
+          text = await (await current!.get(path)).text();
+          return text.includes('HE:');
+        });
+        await until(async () => (await exactComing(current!)) !== null);
+        expect(await exactComing(current)).not.toBeNull(); // the search is still going on
+        const r = await postTo(current, route);
+        expect(((await r.json()) as { ok: boolean }).ok).toBe(true);
+        await until(async () => (await exactComing(current!)) === null);
+        expect(await exactComing(current)).toBeNull();
+        expect(state.told).toBe(true);
+        expect(await (await current.get(path)).text()).toBe(text);
+      });
+    }
+
+    it('says nothing was stopped when nothing is running', async () => {
+      current = await start({});
+      for (const route of ['/api/background/stop', '/api/background/skip']) {
+        const r = await postTo(current, route);
+        expect(((await r.json()) as { ok: boolean }).ok).toBe(false);
+      }
+    });
+  });
 });
 
 describe('saving a subtitle as an SRT file', () => {
@@ -595,7 +669,7 @@ describe('subtitle request flow', () => {
     const path = new URL(sub.url).pathname;
 
     const first = await (await current.get(path)).text();
-    expect(first).toContain('TTT Sub: מתרגם... בסיום בחר שוב את הכתובית');
+    expect(first).toContain('‏TTT Sub:‎ מתרגם... בסיום בחר שוב את הכתובית');
     expect(first).toMatch(/^1\n\d\d:\d\d:\d\d,\d{3} --> /); // still a valid SRT
 
     // A second request while running shares the same job (one translation, not two).
@@ -703,7 +777,7 @@ describe('subtitle request flow', () => {
         await new Promise((r) => setTimeout(r, 25));
         text = await (await current.get(new URL(url).pathname)).text();
       }
-      expect(text).toContain('TTT Sub: משהו השתבש');
+      expect(text).toContain('‏TTT Sub:‎ משהו השתבש');
     }
     expect(asked).toBe(1); // the second request did not spend another download
     expect(current.downloads).toBe(0);
@@ -752,7 +826,7 @@ describe('subtitle request flow', () => {
       (await (await current.get('/subtitles/movie/tt0111161.json')).json()) as SubsResponse
     ).subtitles[0]!;
     const srt = await (await current.get(new URL(sub.url).pathname)).text();
-    expect(srt).toContain('TTT Sub: משהו השתבש. פתח את האפליקציה לפרטים');
+    expect(srt).toContain('‏TTT Sub:‎ משהו השתבש. פתח את האפליקציה לפרטים');
     expect(srt).not.toContain('quota'); // the reason is shown in the app, not in the player
   });
 
@@ -762,7 +836,7 @@ describe('subtitle request flow', () => {
       (await (await current.get('/subtitles/movie/tt0111161.json')).json()) as SubsResponse
     ).subtitles[0]!;
     expect(await (await current.get(new URL(sub.url).pathname)).text()).toContain(
-      'TTT Sub: לא נמצאה כתובית לפרק הזה',
+      '‏TTT Sub:‎ לא נמצאה כתובית לפרק הזה',
     );
   });
 
@@ -799,6 +873,16 @@ describe('subtitle request flow', () => {
     await new Promise((r) => setTimeout(r, 150));
     expect(failed).toHaveLength(1);
     expect(failed[0]!.code).toBe('SOURCE_QUOTA_EXCEEDED');
+  });
+
+  it('tells the desktop when a new translation is ready', async () => {
+    const ready: unknown[] = [];
+    current = await start({ onFinished: (item) => ready.push(item) });
+    const res = await current.get('/subtitles/movie/tt0111161.json');
+    const path = new URL(((await res.json()) as SubsResponse).subtitles[0]!.url).pathname;
+    await current.get(path);
+    await pollUntil(() => ready.length > 0);
+    expect(ready).toHaveLength(1);
   });
 
   it('invalid ids return an empty list and unknown /sub ids a placeholder', async () => {
@@ -1155,7 +1239,7 @@ describe('a stuck step never blocks the queue', () => {
       const res = await current.get(`/subtitles/movie/${id}.json`);
       const sub = ((await res.json()) as SubsResponse).subtitles[0]!;
       const srt = await (await current.get(new URL(sub.url).pathname)).text();
-      expect(srt).toContain('TTT Sub: משהו השתבש');
+      expect(srt).toContain('‏TTT Sub:‎ משהו השתבש');
     }
   });
 
@@ -1206,7 +1290,7 @@ describe('a stuck step never blocks the queue', () => {
     const srt = await (
       await current.get(await subPath(current, '/subtitles/movie/tt0111161.json'))
     ).text();
-    expect(srt).toContain('TTT Sub: משהו השתבש');
+    expect(srt).toContain('‏TTT Sub:‎ משהו השתבש');
   });
 
   it('tells the main screen why the last job failed', async () => {
@@ -1214,7 +1298,7 @@ describe('a stuck step never blocks the queue', () => {
     const srt = await (
       await current.get(await subPath(current, '/subtitles/movie/tt0111161.json'))
     ).text();
-    expect(srt).toContain('TTT Sub: משהו השתבש');
+    expect(srt).toContain('‏TTT Sub:‎ משהו השתבש');
     const status = (await (await current.get('/api/status')).json()) as {
       state: string;
       lastError: string | null;
@@ -1227,7 +1311,7 @@ describe('a stuck step never blocks the queue', () => {
     const srt = await (
       await current.get(await subPath(current, '/subtitles/movie/tt0111161.json'))
     ).text();
-    expect(srt).toContain('TTT Sub: משהו השתבש');
+    expect(srt).toContain('‏TTT Sub:‎ משהו השתבש');
   });
 });
 
@@ -2038,7 +2122,7 @@ describe('partial subtitles (the first part is shown while the rest is translate
     expect(text).toContain('HE:Line 1');
     expect(text).toContain('HE:Line 4');
     expect(text).not.toContain('HE:Line 5');
-    expect(text).not.toContain('TTT Sub: מתרגם');
+    expect(text).not.toContain('‏TTT Sub:‎ מתרגם');
     expect(text).toContain('התרגום ממשיך ברקע');
     // The note runs from the end of the part to the end of the movie (the last line ends at 23.5 s).
     expect(text).toMatch(/00:00:\d\d,\d{3} --> 00:00:23,500\nהתרגום ממשיך ברקע/);
@@ -2114,7 +2198,7 @@ describe('partial subtitles (the first part is shown while the rest is translate
     const text = await until(path, (t) => t.includes('התרגום נעצר'));
     expect(text).toContain('HE:Line 1');
     expect(text).toContain('התרגום נעצר');
-    expect(text).not.toContain('TTT Sub: משהו השתבש');
+    expect(text).not.toContain('‏TTT Sub:‎ משהו השתבש');
   });
 
   it('does not show a part when the setting is off', async () => {
@@ -2130,7 +2214,7 @@ describe('partial subtitles (the first part is shown while the rest is translate
     await new Promise((r) => setTimeout(r, 300));
     const text = await (await current.get(path)).text();
     expect(text).not.toContain('HE:Line 1');
-    expect(text).toContain('TTT Sub: מתרגם');
+    expect(text).toContain('‏TTT Sub:‎ מתרגם');
     h.release();
   });
 

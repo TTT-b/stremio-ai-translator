@@ -19,13 +19,13 @@ const checkbox = (checked, indeterminate, label, onChange) => {
 const setPicked = (ids, on) => { for (const id of ids) { if (on) picked.add(id); else picked.delete(id); } drawLib(); };
 const groupState = (ids) => { const n = ids.filter(id => picked.has(id)).length; return {checked: n > 0 && n === ids.length, partial: n > 0 && n < ids.length}; };
 const episodeRow = (e) => {
-  const row = el('div', 'flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-2 py-1.5 text-sm transition hover:bg-warm-bg');
-  const pick = el('label', 'flex min-w-0 flex-1 cursor-pointer items-center gap-3');
+  const row = el('div', 'flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-2 py-1.5 text-sm transition hover:bg-warm-bg');
+  const pick = el('label', 'flex min-w-[8rem] flex-1 cursor-pointer items-center gap-3');
   pick.append(checkbox(picked.has(e.id), false, e.title, (on) => setPicked([e.id], on)));
   const name = e.kind === 'series' ? f(T.libEpisode, {n: e.episode ?? '?'}) : (e.label || T.libSubtitle);
   pick.append(el('span', 'min-w-0 flex-1 truncate font-medium text-warm-tx', name));
   row.append(pick);
-  const meta = el('span', 'flex shrink-0 items-center gap-3 text-xs text-warm-mu');
+  const meta = el('span', 'flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1 text-xs text-warm-mu');
   const ltr = (text) => { const s = el('span', '', text); s.dir = 'ltr'; return s; };
   if (e.timing) {
     const TIMING = {

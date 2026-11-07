@@ -119,7 +119,7 @@ describe('main screen layout', () => {
 
   it('shows the model without dashes', () => {
     const html = renderStatusPage(base);
-    expect(html).toContain('Google Gemini 3.5 Flash Lite');
+    expect(html).toContain('Gemini 3.5 Flash Lite');
     expect(html).not.toContain('gemini-3.5-flash-lite');
   });
 
@@ -137,10 +137,12 @@ describe('main screen layout', () => {
     expect(html).toContain('id="open-stremio"');
   });
 
-  it('uses two columns on a wide window and one on a narrow one', () => {
+  it('keeps the main screen in one centered column, with every section in it', () => {
     const html = renderStatusPage(base);
-    expect(html).toContain('lg:max-w-[1040px]');
-    expect(html).toContain('lg:grid-cols-2');
+    expect(html).toContain('id="dash" class="flex w-full max-w-[560px] flex-col');
+    for (const id of ['st-queue', 'st-quota', 'st-subdl', 'checks-all', 'q-lang', 'q-dual']) {
+      expect(html).toContain(`id="${id}"`);
+    }
   });
 
   it('puts the Continue button inside the status card', () => {
@@ -354,10 +356,13 @@ describe('start with Windows, key-gated checks and the progress bar', () => {
     expect(browser.match(/data-bar="\d"/g)).toHaveLength(5);
   });
 
-  it('hides the SubDL and Jimaku checks until their key is set', () => {
+  it('hides the SubDL and Jimaku wizard checks until their key is set, but always shows the four home tiles', () => {
     const none = renderStatusPage(base);
-    expect(none.match(/data-check-row="subdl" class="hidden /g)).toHaveLength(2);
-    expect(none.match(/data-check-row="jimaku" class="hidden /g)).toHaveLength(2);
+    expect(none.match(/data-check-row="subdl" class="hidden /g)).toHaveLength(1);
+    expect(none.match(/data-check-row="jimaku" class="hidden /g)).toHaveLength(1);
+    for (const n of ['ai', 'opensubtitles', 'subdl', 'jimaku']) {
+      expect(none).toContain(`data-test="${n}" data-rp="dr-"`);
+    }
     const keyed = renderStatusPage({
       ...base,
       subdlKeyConfigured: true,

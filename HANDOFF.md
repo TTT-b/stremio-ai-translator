@@ -1,6 +1,77 @@
-# HANDOFF - where the work stands (2026-11-05, branch refactor/split-manager-html)
+# HANDOFF - where the work stands (2026-11-08, branch refactor/split-manager-html)
 
-## START HERE TOMORROW (2026-11-06 end of day)
+## v2.0.0 status (2026-11-08)
+
+Version bumped to 2.0.0 and committed on this branch. Done since the notes below: 429 daily/per-minute classification, pacing, auto-retry (src/jobs/autoRetry.ts), one "ready" toast that waits for the sound check (max 10 min), sound-check bar uses createSyncProgress, library layout wraps. NOT done: merge to main, remove creator-only diagnostics, release (needs the user's OK), user must enter the new OpenSubtitles account and rotate the second Gemini key. The installer is blocked by Windows Application Control when run silently: the user installs by double-click.
+
+## START HERE TOMORROW (2026-11-08)
+
+State: v1.9.1 released; everything below is UNCOMMITTED in `D:\TTT Sub 1.9.1` (do not touch `D:\TTT Sub`).
+`npm run check` is green (43 files, 610 tests, ~50 s). It all ships later as v2.0 (version NOT bumped yet).
+The user runs the app from source in the browser (Windows blocks unsigned exes): server is restarted on
+http://127.0.0.1:7000/ (kill node whose command line matches `*TTT Sub 1.9.1*src*index.ts*`, then
+`node "D:\TTT Sub 1.9.1\node_modules\tsx\dist\cli.mjs" "D:\TTT Sub 1.9.1\src\index.ts"` from
+`%APPDATA%\stremio-ai-subtitle-translator`). No hot reload.
+
+### Translation quality research (2026-11-07, done; scratch files deleted)
+
+- Overlord S1E4 vs English: good overall. ONE real 8-line shift (cues 265-272: a repeated line pushed
+  the next lines down by one). Karaoke/song lines (one syllable per cue) are handled inconsistently.
+- No reproducible regression from prompt v6 / temp 1.0 / context 8: ~20 controlled requests on the
+  failing chunk with v5 and v6 variants were all nearly clean. The shift is rare; its cause is unproven.
+- Prompt v6 follows Google's guidance (instructions ordered by importance, JSON schema output, temp 1.0
+  for Gemini 3). Weak spots: no thinking level set, no anchoring of the output to the source, validation
+  only checks ids (not alignment), gender rule is heavy.
+- Fixes done: removed dead fallback `gemini-2.5-flash-lite` (404 for new accounts); new cheap local
+  `findDriftedLines` (length-ratio vs the chunk median, 3+ lines off by 2x, widened by 3) feeds the
+  existing one-request-per-chunk repair step (`repairSuspiciousLines`, now up to 16 lines).
+- NOT done: not tried on a real episode yet; gender fix (prompt v7), character memory, song handling.
+- The user used a key from a second Google account for experiments: tell them to delete/rotate it.
+
+### Round 2 (2026-11-07 night): real episode (Avatar Seven Havens S01E09, gemini-3.5-flash-lite)
+
+- Found from the user's screenshots + 12 test runs of one 80-line chunk (scratch files deleted):
+  at temp 1.0 the model sometimes (2 of 4 runs) DROPPED the last of two identical lines, which slid
+  lines 9-21 and 46-61 by one; it also put an ARABIC letter inside Hebrew words ("נתחבר", "טיפש").
+  Our old silent cut of that letter left a word short of a letter (the likely source of "בשביל שנו").
+  At temp 0.3: 0 of 4 runs slid; at 0.6: 0 of 4 (one empty line). Samples are small; 0.4 also slid once.
+- Changed: temperature 0.3 for every model (`TRANSLATION_TEMPERATURE` in gemini.ts; no extra requests);
+  prompt v7 (sound notes short and idiomatic); a line where a foreign letter was cut out, a line with a
+  lone Hebrew letter (`findBrokenWords`), and drifted lines all feed the same single repair request per
+  chunk (cap 40 lines). The old test "no retry after a stray Arabic letter" now expects 1 extra call.
+- Still unfixed (model weaknesses seen): "שבעה המקלטים" (should be שבעת), "שולט" without ב, "זאת העבר",
+  wrong gender guesses. Candidates: prompt v8 grammar hints, a stronger model for the repair pass.
+- The 2nd research key the user pasted lived only in the (deleted) research folder; tell them to rotate it.
+- fit.test / videoFit.test can time out when the PC is busy (flaky under load, untouched by this work).
+
+### Done today (uncommitted, tested by unit tests only, NOT yet tried on a real episode)
+
+1. Translation reliability: `translateOneChunkNow` keeps the good lines of a bad answer and re-asks only the
+   missing/empty ones (test in tests/translation.test.ts). `ModelFallbackProvider` reports the busy error
+   (not "model unavailable") when the last model is missing (tests/fallback.test.ts). Duplicate guard: a
+   per-JobManager `chunksInFlight` map (via `ChunkStore.inFlight`) so two jobs for the same chunk ask the AI
+   once. A module-level map broke 21 flow tests, so it lives in the manager now.
+2. Prompt v6, niqqud stripping (`stripHebrewPoints`), signs/songs cleanup, Stremio placeholder tweaks.
+3. Home screen redesign (src/web/ui/dashboard.ts): original look, two columns at lg, fits one screen at
+   1280x720, even small buttons, SubDL link as a bordered button that never overflows, "ספק AI" tile with the
+   model name below, built-in sample row removed.
+
+### Tomorrow, in order
+
+1. Real test: translate one real episode; check no `TRANSLATION_VALIDATION_FAILED` / `PROVIDER_MODEL_UNAVAILABLE`
+   and no second job paying for the same episode. User must first enter the NEW OpenSubtitles account in settings.
+2. Ask the user: is the home screen final? What did they mean by "תחליף את הצבעים של הכפתורים ואת השם"
+   (colors of "דלג על השלב"/"ביטול" and which name)? Not answered yet.
+3. Apply the same style to settings, "הכתוביות שלי" (library) and the wizard, one screen at a time.
+4. NOT approved yet (ask first): gender fix (cast hints, prompt v7), character memory between chunks,
+   why the sound check gets "no data" on anime, optional ECC reinstall.
+5. Then: bump to 2.0 with he+en release notes, update README/TROUBLESHOOTING, commit by file names
+   (no attribution lines), push/release ONLY on explicit user OK; remove creator-only diagnostics
+   before merging to main.
+
+---
+
+## (older) 2026-11-06 notes
 
 - State (2026-11-06 night): v1.9.1 is COMMITTED, pushed and RELEASED (tag v1.9.1, GitHub release with exe + blockmap + latest.yml). The in-app update from 1.9.0 to 1.9.1 works (user confirmed). npm run check green (587 tests). `main` is still 1.8.0.
 - NEXT TASKS (from a user's 1.9.1 diagnostics, not started): (1) Two jobs for the same episode BOTH download from OpenSubtitles and BOTH translate (jobs 6de80711 and 1417e3c0 for tt4869896 S1E2, both "translating now" + "job done"). This doubles AI calls and OpenSubtitles quota (14/20 left). Find out why the second job does not reuse the first one's translation, fix with a test. (2) Chunks fail validation (duplicate/missing/unknown id) right after "AI model overloaded: switched to another model" (gemini-3.5-flash-lite -> gemini-3.1-flash-lite); one user's three attempts all failed (TRANSLATION_VALIDATION_FAILED at 913/993). Idea: re-translate only the missing lines, or split the chunk. The diagnostics now show `problems=` (kind + line number only).

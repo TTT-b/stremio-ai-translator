@@ -7,7 +7,9 @@ import { applyRtlFix } from '../src/subtitles/rtl';
 import { serializeSubtitle } from '../src/subtitles/serialize';
 import {
   assertSameStructure,
+  findBrokenWords,
   findChunkProblems,
+  findDriftedLines,
   findSuspiciousLines,
   stripForeignScripts,
 } from '../src/subtitles/validate';
@@ -110,6 +112,46 @@ describe('suspicious Latin leftovers', () => {
   });
   it('does not check languages written in Latin', () => {
     expect(check('hola lad', 'es')).toEqual([]);
+  });
+});
+
+describe('broken Hebrew words', () => {
+  const HE = 'שלום';
+  it('flags a lone Hebrew letter standing between spaces', () => {
+    const t = [
+      { id: '1', text: `${HE} ה ${HE}` },
+      { id: '2', text: `${HE} ${HE}` },
+      { id: '3', text: `${HE} ו` },
+    ];
+    expect(findBrokenWords(t, 'he')).toEqual(['1', '3']);
+  });
+  it('does not check other languages', () => {
+    expect(findBrokenWords([{ id: '1', text: 'a b c' }], 'es')).toEqual([]);
+  });
+});
+
+describe('drifted lines', () => {
+  const SRC = 'This is a normal line of dialogue';
+  const HE = 'זו שורה רגילה של דיאלוג כאן';
+  const cues = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ index: i + 1, startMs: i, endMs: i + 1, text: SRC }));
+  const reply = (n: number, texts: Record<number, string> = {}) =>
+    Array.from({ length: n }, (_, i) => ({ id: String(i + 1), text: texts[i + 1] ?? HE }));
+
+  it('finds nothing when every line is about as long as it should be', () => {
+    expect(findDriftedLines(cues(20), reply(20))).toEqual([]);
+  });
+  it('flags a run of lines far shorter than their source, with a few neighbours', () => {
+    const slid = findDriftedLines(cues(20), reply(20, { 10: 'כן', 11: 'כן', 12: 'כן' }));
+    expect(slid).toEqual(expect.arrayContaining(['10', '11', '12']));
+    expect(slid).toContain('8');
+    expect(slid).not.toContain('1');
+  });
+  it('ignores one or two odd lines', () => {
+    expect(findDriftedLines(cues(20), reply(20, { 5: 'כן', 6: 'כן' }))).toEqual([]);
+  });
+  it('does not judge tiny chunks', () => {
+    expect(findDriftedLines(cues(5), reply(5, { 1: 'כן', 2: 'כן', 3: 'כן' }))).toEqual([]);
   });
 });
 

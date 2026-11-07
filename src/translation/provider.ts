@@ -10,6 +10,8 @@ export interface TranslateChunkRequest {
   context: ChunkCue[];
   /** Source lines that follow the chunk, for reference only (gender / scene context). */
   upcoming?: ChunkCue[];
+  /** Characters whose gender the source makes clear ("Nisha: female"), for the whole file. */
+  cast?: string[];
 }
 
 export interface TokenUsage {

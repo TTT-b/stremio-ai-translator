@@ -1,3 +1,4 @@
+import { createSyncProgress } from './progress';
 import { spawn } from 'node:child_process';
 import { defaultExec, listTextTracks, rankTracks, type Exec } from '../sources/embedded';
 import { parseSubtitle } from '../subtitles/parse';
@@ -43,8 +44,11 @@ export interface CueFitOptions {
   /** Language of the subtitle that is being checked; the track in this language is the reference. */
   language: string;
   signal: AbortSignal;
-  /** Share of the reading done, 0..100. */
-  onProgress?: (percent: number) => void;
+  /**
+   * Share of the reading done, 0..100. `estimated` is true when the number only moved because time
+   * passed (nothing arrived from the video yet).
+   */
+  onProgress?: (percent: number, estimated?: boolean) => void;
   /** One line per step for the log: codes and numbers only. */
   log?: (info: Record<string, unknown>) => void;
   /** Replaced in tests. */
@@ -141,65 +145,71 @@ export async function fitSubtitleToEmbeddedCues(
   });
   if (!track) return undefined;
   opts.onProgress?.(3);
-
-  const taken: { from: number; to: number }[] = [];
-  const matches: WindowMatch[] = [];
-  let done = 0;
-  const total = FIRST_SHARES.length + RESCUE_SHARES.length;
-  const readRound = async (shares: readonly number[]): Promise<void> => {
-    for (const fromSec of pickWindows(opts.cues, shares, WINDOW_SEC, lengthSec, taken)) {
-      let raw = '';
-      const pieceStart = Date.now();
-      try {
-        raw = await read({
-          ffmpeg: opts.ffmpeg,
-          url: opts.url,
-          streamIndex: track.index,
-          fromSec,
-          toSec: fromSec + WINDOW_SEC,
-          signal: opts.signal,
+  const progress = createSyncProgress((p, estimated) => opts.onProgress?.(p, estimated));
+  // A piece gives no sign of life until it is done, so the bar is moved by the time it has been running.
+  const clock = setInterval(() => progress.tick(), 1000);
+  try {
+    const taken: { from: number; to: number }[] = [];
+    const matches: WindowMatch[] = [];
+    const readRound = async (shares: readonly number[]): Promise<void> => {
+      for (const fromSec of pickWindows(opts.cues, shares, WINDOW_SEC, lengthSec, taken)) {
+        let raw = '';
+        const pieceStart = Date.now();
+        progress.begin();
+        try {
+          raw = await read({
+            ffmpeg: opts.ffmpeg,
+            url: opts.url,
+            streamIndex: track.index,
+            fromSec,
+            toSec: fromSec + WINDOW_SEC,
+            signal: opts.signal,
+          });
+        } catch {
+          if (opts.signal.aborted) throw new Error('stopped');
+        }
+        progress.finish();
+        const ref = raw ? parseSubtitle(raw, 'srt').cues : [];
+        const hit = alignWindow(opts.cues, ref);
+        opts.log?.({
+          cue: 'piece',
+          fromSec: Math.round(fromSec),
+          ms: Date.now() - pieceStart,
+          lines: ref.length,
+          ...(hit
+            ? { matched: hit.matched, usable: hit.usable, offsetMs: hit.offsetMs }
+            : { unsure: true }),
         });
-      } catch {
-        if (opts.signal.aborted) throw new Error('stopped');
+        if (hit) matches.push(hit);
       }
-      done++;
-      opts.onProgress?.(Math.round((done / total) * 100));
-      const ref = raw ? parseSubtitle(raw, 'srt').cues : [];
-      const hit = alignWindow(opts.cues, ref);
-      opts.log?.({
-        cue: 'piece',
-        fromSec: Math.round(fromSec),
-        ms: Date.now() - pieceStart,
-        lines: ref.length,
-        ...(hit
-          ? { matched: hit.matched, usable: hit.usable, offsetMs: hit.offsetMs }
-          : { unsure: true }),
-      });
-      if (hit) matches.push(hit);
-    }
-  };
+    };
 
-  await readRound(FIRST_SHARES);
-  for (const share of RESCUE_SHARES) {
-    if (matches.length >= 2) break;
-    await readRound([share]);
-  }
-  if (matches.length < 2) return undefined;
-  for (let extra = 0; extra < MAX_EXTRA_PIECES; extra++) {
-    const sorted = [...matches].sort((p, q) => p.atMs - q.atMs);
-    let widest: { mid: number; gap: number } | undefined;
-    for (let i = 1; i < sorted.length; i++) {
-      const a = sorted[i - 1] as WindowMatch;
-      const b = sorted[i] as WindowMatch;
-      const differ = Math.abs(b.offsetMs - a.offsetMs);
-      if (differ > SAME_SHIFT_MS && (!widest || differ > widest.gap)) {
-        widest = { mid: (a.atMs + b.atMs) / 2, gap: differ };
-      }
+    await readRound(FIRST_SHARES);
+    for (const share of RESCUE_SHARES) {
+      if (matches.length >= 2) break;
+      progress.needMore(1);
+      await readRound([share]);
     }
-    if (!widest) break;
-    const before = matches.length;
-    await readRound([widest.mid / 1000 / lengthSec]);
-    if (matches.length === before) break;
+    if (matches.length < 2) return undefined;
+    for (let extra = 0; extra < MAX_EXTRA_PIECES; extra++) {
+      const sorted = [...matches].sort((p, q) => p.atMs - q.atMs);
+      let widest: { mid: number; gap: number } | undefined;
+      for (let i = 1; i < sorted.length; i++) {
+        const a = sorted[i - 1] as WindowMatch;
+        const b = sorted[i] as WindowMatch;
+        const differ = Math.abs(b.offsetMs - a.offsetMs);
+        if (differ > SAME_SHIFT_MS && (!widest || differ > widest.gap)) {
+          widest = { mid: (a.atMs + b.atMs) / 2, gap: differ };
+        }
+      }
+      if (!widest) break;
+      const before = matches.length;
+      progress.needMore(1);
+      await readRound([widest.mid / 1000 / lengthSec]);
+      if (matches.length === before) break;
+    }
+    return buildCueFit(matches);
+  } finally {
+    clearInterval(clock);
   }
-  return buildCueFit(matches);
 }

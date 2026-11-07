@@ -81,25 +81,55 @@ $('st-upgrade-close').addEventListener('click', dismissSyncNotices);
 $('st-sync-ok').addEventListener('click', dismissSyncNotices);
 // Cancel (and Skip, when a step can be skipped) sit with the other buttons and show only while there is a job.
 let stopJob = '';
-const renderStop = (items) => {
+let stopSkippable = false;
+let backgroundOn = false; // after the job finished, the search inside the video or the sound check still goes on
+let searchOn = false;
+const renderStop = (items, searching, listening) => {
   const it = items.find((x) => x.state === 'running') || items.find((x) => x.state === 'pending');
   stopJob = it ? it.id : '';
-  $('st-cancel-btn').classList.toggle('hidden', !it);
-  $('st-skip-btn').classList.toggle('hidden', !(it && it.skippable));
+  stopSkippable = !!(it && it.skippable);
+  searchOn = !!searching;
+  backgroundOn = !!searching || !!listening;
+  $('st-cancel-btn').classList.toggle('hidden', !(it || backgroundOn));
+  $('st-skip-btn').classList.toggle('hidden', !(it || searchOn));
 };
-$('st-cancel-btn').addEventListener('click', () => { if (stopJob) queueAct(stopJob, 'cancel'); });
-$('st-skip-btn').addEventListener('click', () => { if (stopJob) queueAct(stopJob, 'skip'); });
+// The big "what is happening now" lines, and the one waiting after it.
+const epText = (x) => x && x.season !== undefined && x.episode !== undefined ? f(T.qSeasonEp, {s: x.season, e: x.episode}) : '';
+const renderNow = (items, bs, exact, dl) => {
+  const cur = items.find((x) => x.state === 'running') || items.find((x) => x.state === 'pending');
+  const who = cur || bs || exact || dl;
+  $('st-now').classList.toggle('hidden', !who);
+  $('st-now').classList.toggle('flex', !!who);
+  if (who) { $('st-now-title').textContent = who.title; $('st-now-ep').textContent = epText(who); }
+  const next = items.find((x) => x !== cur && (x.state === 'queued' || x.state === 'pending'));
+  $('st-next').classList.toggle('hidden', !next);
+  $('st-next').classList.toggle('flex', !!next);
+  if (next) $('st-next-text').textContent = next.title + (epText(next) ? ' · ' + epText(next) : '');
+  // When nothing is running, the name is already in the big lines.
+  $('st-delivered').classList.toggle('hidden', !dl || !!who);
+};
+const backgroundAct = async (action) => { try { await post('/api/background/' + action); } catch { /* shown on the next refresh */ } refreshStatus(); };
+// Cancel stops everything: the job, the search inside the video and the sound check.
+$('st-cancel-btn').addEventListener('click', () => {
+  if (backgroundOn) backgroundAct('stop');
+  if (stopJob) queueAct(stopJob, 'cancel');
+});
+// Skip ends the current step (the search inside the video, the sound check); with no step left to skip,
+// the last Skip cancels the episode, so the queue moves on to the next one.
+$('st-skip-btn').addEventListener('click', () => {
+  if (stopJob && stopSkippable) queueAct(stopJob, 'skip');
+  else if (searchOn) backgroundAct('skip');
+  else if (stopJob) queueAct(stopJob, 'cancel');
+});
 const refreshStatus = async () => {
   try {
     const r = await (await fetch('/api/status')).json();
     const st = STATES[r.state] || STATES.waiting;
     // After a failure, say why (quota, key, rate limit...) instead of the general advice.
-    $('st-state').textContent = (r.paused && r.running > 0 && T.stPaused) || (r.state === 'error' && r.lastError && ERRORS[r.lastError]) || st[0];
+    const fmtWait = (s) => s >= 3600 ? Math.floor(s / 3600) + ':' + String(Math.floor((s % 3600) / 60)).padStart(2, '0') + (UI === 'he' ? ' שע׳' : ' h') : s >= 60 ? Math.ceil(s / 60) + (UI === 'he' ? ' דק׳' : ' min') : s + (UI === 'he' ? ' שנ׳' : ' s');
+    const autoWait = r.running === 0 && r.autoRetryInSec !== null && r.autoRetryInSec !== undefined ? f(T.stAutoRetry, {t: fmtWait(r.autoRetryInSec)}) : '';
+    $('st-state').textContent = autoWait || (r.paused && r.running > 0 && T.stPaused) || (r.state === 'error' && r.lastError && ERRORS[r.lastError]) || st[0];
     $('st-dot').className = 'h-2.5 w-2.5 rounded-full ' + st[1] + (r.running > 0 ? ' animate-pulse' : '');
-    // Gemini auto-switch: say so while a fallback model is doing the work.
-    const ms = r.modelSwitch;
-    $('st-model-switch').classList.toggle('hidden', !ms);
-    if (ms) $('st-model-switch').textContent = f(T.modelSwitched, {from: ms.from, to: ms.to});
     $('st-lines').textContent = String(r.linesTranslated);
     const kb = r.bytesTranslated / 1024;
     $('st-size').textContent = kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : Math.round(kb) + ' KB';
@@ -117,8 +147,10 @@ const refreshStatus = async () => {
     const dl = r.lastDelivered;
     $('st-delivered').classList.toggle('hidden', !dl);
     if (dl) $('st-delivered').textContent = f(T.deliveredText, {name: nameOf(dl)});
-    // Sync to sound only makes sense once Stremio has taken a subtitle.
-    $('sync-now-btn').classList.toggle('hidden', !dl);
+    // Sync to sound is offered once Stremio has taken a subtitle, unless the sound is being checked
+    // now or the check already confirmed the timing of that subtitle.
+    const timingConfirmed = !!ls && !!dl && ls.at >= dl.at && (ls.outcome === 'moved' || ls.outcome === 'inSync');
+    $('sync-now-btn').classList.toggle('hidden', !dl || !!bs || timingConfirmed);
     // Chips: who gave the source subtitle, and whether it came from the cache or was translated now.
     const SVG = (d) => '<svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
     const ICON_WORLD = SVG('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>');
@@ -183,7 +215,8 @@ const refreshStatus = async () => {
     }
     $('resume-btn').classList.toggle('hidden', !r.resumable);
     renderQueue(r.queue || []);
-    renderStop(r.queue || []);
+    renderStop(r.queue || [], r.exactComing, bs);
+    renderNow(r.queue || [], bs, r.exactComing, dl);
   } catch { /* the app may be restarting */ }
 };
 refreshStatus();

@@ -79,6 +79,7 @@ export interface ServerDeps {
   /** Ask mode: a new request is waiting for the user's OK (the desktop app shows a notification). */
   onPending?: JobManagerDeps['onPending'];
   onUpgraded?: JobManagerDeps['onUpgraded'];
+  onFinished?: JobManagerDeps['onFinished'];
   onFailed?: JobManagerDeps['onFailed'];
   /** Where cache and job files live. Defaults to ./data */
   dataDir?: string;
@@ -251,6 +252,7 @@ export function createApp(deps: ServerDeps): express.Express {
     ...(deps.loadEmbedded ? { loadEmbedded: deps.loadEmbedded } : {}),
     ...(deps.onPending ? { onPending: deps.onPending } : {}),
     ...(deps.onUpgraded ? { onUpgraded: deps.onUpgraded } : {}),
+    ...(deps.onFinished ? { onFinished: deps.onFinished } : {}),
     ...(deps.onFailed ? { onFailed: deps.onFailed } : {}),
     ...(deps.limits ? { limits: deps.limits } : {}),
     ...(deps.cancelCooldownMs !== undefined ? { cancelCooldownMs: deps.cancelCooldownMs } : {}),
@@ -534,6 +536,20 @@ export function createApp(deps: ServerDeps): express.Express {
   app.post('/api/sync-stop', (_req, res) => {
     const stopped = jobs.stopSync();
     logger.info({ stage: 'API', stopped }, 'sync stop');
+    res.json({ ok: stopped });
+  });
+
+  // Skip / Cancel after the subtitle was delivered: Skip ends only the search inside the video,
+  // Cancel ends that and the sound check too.
+  app.post('/api/background/skip', (_req, res) => {
+    const skipped = jobs.skipBackgroundSearch();
+    logger.info({ stage: 'API', skipped }, 'background skip');
+    res.json({ ok: skipped });
+  });
+
+  app.post('/api/background/stop', (_req, res) => {
+    const stopped = jobs.stopBackground();
+    logger.info({ stage: 'API', stopped }, 'background stop');
     res.json({ ok: stopped });
   });
 

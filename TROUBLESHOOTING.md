@@ -131,6 +131,10 @@ Translation model, press **Refresh list** and pick another model (a "lite" or ol
 less busy). For Gemini, leave "Switch model automatically when it is busy" on. If the refresh says
 the key was refused, check the key in Accounts and keys.
 
+## The AI is not available right now (automatic wait)
+
+When Gemini says its daily limit is used up, the main screen shows "The AI is not available right now. Continuing by itself in ...". Nothing needs to be pressed: the app continues when the quota resets (about 10:00 Israel time) and Windows tells you when the subtitle is ready. For overload or timeouts it retries after 1, 5 and 15 minutes. Press Cancel to stop the waiting.
+
 ## "No suitable source subtitle" for anime
 
 1. Open `http://127.0.0.1:7000/dev/source-search?type=series&id=kitsu:<id>:<episode>` (use the id

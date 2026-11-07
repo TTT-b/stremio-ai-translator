@@ -1,5 +1,6 @@
 import type { Cue } from '../subtitles/types';
 import { FRAME_MS, applyFit, type TimingFit } from './fit';
+import { createSyncProgress } from './progress';
 import { detectSpeech, fitAcrossLevels } from './speech';
 
 /**
@@ -104,21 +105,25 @@ export async function fitSubtitleToVideo(opts: VideoFitOptions): Promise<TimingF
   const taken: Span[] = [];
   const heard: { startSec: number; frames: number }[] = [];
 
-  /** Listens to one round of pieces; the progress bar covers [low, high] of 0..1. */
-  const listen = async (shares: readonly number[], low: number, high: number): Promise<void> => {
+  // The bar counts pieces (two are planned, as most checks need no more), so an early answer does
+  // not make it stand at a third and then jump to the end.
+  const progress = createSyncProgress((p) => opts.onProgress?.(p));
+
+  /** Listens to one round of pieces. */
+  const listen = async (shares: readonly number[], round: number): Promise<void> => {
     const starts = pickWindows(opts.cues, shares, windowSec, lengthSec, taken);
-    let done = 0;
+    if (round > 0) progress.needMore(starts.length);
     for (const startSec of starts) {
-      const scan = await detect(
-        opts.ffmpeg,
-        opts.url,
-        opts.signal,
-        (sec) => {
-          const part = (done + Math.min(1, sec / windowSec)) / starts.length;
-          opts.onProgress?.(Math.round((low + (high - low) * part) * 100));
-        },
-        { startSec, durationSec: windowSec },
-      );
+      progress.begin();
+      let scan: Awaited<ReturnType<typeof detect>>;
+      try {
+        scan = await detect(opts.ffmpeg, opts.url, opts.signal, () => progress.tick(), {
+          startSec,
+          durationSec: windowSec,
+        });
+      } finally {
+        progress.finish();
+      }
       const first = Math.round((startSec * 1000) / FRAME_MS);
       heard.push({ startSec, frames: scan.loudness.length });
       scan.loudness.forEach((v, i) => {
@@ -127,7 +132,6 @@ export async function fitSubtitleToVideo(opts: VideoFitOptions): Promise<TimingF
           mask[first + i] = 1;
         }
       });
-      done++;
     }
   };
 
@@ -163,7 +167,7 @@ export async function fitSubtitleToVideo(opts: VideoFitOptions): Promise<TimingF
   // Two short pieces first; more only while the answer is missing or the pieces disagree.
   let last: TimingFit | undefined;
   for (const [i, shares] of ROUNDS.entries()) {
-    await listen(shares, i / ROUNDS.length, (i + 1) / ROUNDS.length);
+    await listen(shares, i);
     last = withParts(fitAcrossLevels(opts.cues, loudness, mask));
     if (last && clear(last)) return last;
   }
