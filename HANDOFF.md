@@ -1,8 +1,15 @@
 # HANDOFF - where the work stands (2026-11-08, branch refactor/split-manager-html)
 
+## Folders and branches (tidied 2026-11-08)
+
+- `D:TTT Sub 1.9.1` = the real 2.0 work, branch `refactor/split-manager-html` (a linked worktree of the same repo). Work here.
+- `D:TTT Sub` = the main checkout of the same repo, parked on `feat/model-picker` (the OLD 1.8-era model picker, kept only as a backup: 2.0 already has a newer picker in src/web/ui/modelPicker.ts, so do NOT merge it).
+- Other branches are old backups (`feat/mp4-save`, `work/main-1.7.0`, `backup/old-local-main`, `fix/save-opensubtitles-quota`); local `main` is stale, `origin/main` is 1.8.0. After the 2.0 release: merge the refactor branch into main, then remove the 1.9.1 worktree and move on in `D:TTT Sub`.
+- The user-facing "Copy diagnostics" button STAYS (users send it as feedback). The creator-only titles button was already removed (commit a248082).
+
 ## v2.0.0 status (2026-11-08)
 
-Version bumped to 2.0.0 and committed on this branch. Done since the notes below: 429 daily/per-minute classification, pacing, auto-retry (src/jobs/autoRetry.ts), one "ready" toast that waits for the sound check (max 10 min), sound-check bar uses createSyncProgress, library layout wraps. NOT done: merge to main, remove creator-only diagnostics, release (needs the user's OK), user must enter the new OpenSubtitles account and rotate the second Gemini key. The installer is blocked by Windows Application Control when run silently: the user installs by double-click.
+Version bumped to 2.0.0 and committed on this branch. Done since the notes below: 429 daily/per-minute classification, pacing, auto-retry (src/jobs/autoRetry.ts), one "ready" toast that waits for the sound check (max 10 min), sound-check bar uses createSyncProgress, library layout wraps. NOT done: merge to main, release (needs the user's OK), user must enter the new OpenSubtitles account and rotate the second Gemini key. The installer is blocked by Windows Application Control when run silently: the user installs by double-click.
 
 ## START HERE TOMORROW (2026-11-08)
 
@@ -183,9 +190,7 @@ Pushed to origin. Commits so far: dead-code cleanup, H1, M1, merge of main 1.8.0
   clearer dialog title when the video must be picked.
 - **Diagnostics**: "Copy diagnostics" = table of the last 5 videos (codes and numbers only, no titles) +
   latest video's log lines; `?scope=all` shows all.
-- **Creator-only titles button** ("Copy diagnostics + titles", only with `CREATOR_DIAGNOSTICS=1`).
-  **REMOVE BEFORE MERGING TO MAIN**: `src/web/creatorDiagnostics.ts`, `tests/creatorDiagnostics.test.ts`,
-  and the lines marked `creator only` in `src/web/server.ts` and `src/web/html.ts` (commit 2c2401a).
+- (The creator-only titles button was removed in commit a248082; nothing to remove.)
 
 ## Real results so far (real Stremio, laptop)
 
