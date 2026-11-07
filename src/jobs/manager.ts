@@ -143,6 +143,9 @@ export class JobManager {
     }
   >();
 
+  /** Source downloads in progress, by source cache key, so one file is downloaded once. */
+  private readonly downloading = new Map<string, Promise<string>>();
+
   constructor(private readonly deps: JobManagerDeps) {
     this.now = deps.now ?? Date.now;
     mkdirSync(deps.jobsDir, { recursive: true });
@@ -1767,12 +1770,20 @@ export class JobManager {
       });
       const known = cache.get(key)?.content;
       if (known !== undefined) return known;
-      const dl = await source.download(c);
-      if (c.provider === 'subdl') this.subdlDownloads++;
-      this.downloadsLeft = dl.remaining ?? this.downloadsLeft;
-      if (this.quota && dl.remaining !== undefined) this.quota.left = dl.remaining;
-      this.safeSet(key, 'source', dl.content, 0, log);
-      return dl.content;
+      // Stremio asks twice at once (with and without the video hash): the second request waits
+      // for the first download instead of spending another one of the daily quota.
+      const running = this.downloading.get(key);
+      if (running) return running;
+      const download = (async () => {
+        const dl = await source.download(c);
+        if (c.provider === 'subdl') this.subdlDownloads++;
+        this.downloadsLeft = dl.remaining ?? this.downloadsLeft;
+        if (this.quota && dl.remaining !== undefined) this.quota.left = dl.remaining;
+        this.safeSet(key, 'source', dl.content, 0, log);
+        return dl.content;
+      })().finally(() => this.downloading.delete(key));
+      this.downloading.set(key, download);
+      return download;
     };
 
     // 3a. No hash match means the timing may belong to another release of the video. Compare a

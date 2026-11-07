@@ -82,6 +82,8 @@ async function start(opts: {
   gate?: Promise<void>;
   subWaitMs?: number;
   dataDir?: string;
+  /** Every download waits for this first (two requests can then ask for the same file at once). */
+  downloadGate?: Promise<void>;
   /** A download of this candidate fails with the returned error. */
   downloadError?: (c: SubtitleCandidate) => AppError | undefined;
   /** The candidates for one search (instead of the same ones every time). */
@@ -128,6 +130,7 @@ async function start(opts: {
     },
     download: async (c) => {
       const failure = opts.downloadError?.(c);
+      await opts.downloadGate;
       if (failure) throw failure;
       h.downloads++;
       return { content: opts.contentFor?.(c) ?? opts.content ?? SRC, fileName: 'a.srt' };
@@ -638,6 +641,72 @@ describe('subtitle request flow', () => {
     expect(status.progress).toMatchObject({ done: 3, total: 3, percent: 100 });
     expect(status.linesTranslated).toBe(3); // counted once, not once per request
     expect(status.bytesTranslated).toBeGreaterThan(50);
+  });
+
+  it('two requests that start together download the same file only once', async () => {
+    let release!: () => void;
+    const downloadGate = new Promise<void>((r) => (release = r));
+    let asked = 0;
+    current = await start({
+      downloadGate,
+      subWaitMs: 50,
+      downloadError: () => {
+        asked++;
+        return undefined;
+      },
+    });
+    const urls: string[] = [];
+    for (const hash of ['8e245d9679d31e12', '1111111111111111']) {
+      const res = await current.get(`/subtitles/movie/tt0111161/videoHash=${hash}.json`);
+      urls.push(((await res.json()) as SubsResponse).subtitles[0]!.url);
+    }
+    expect(urls[0]).not.toBe(urls[1]); // two different job ids
+    // Both jobs have searched and the first one is waiting on the download.
+    await pollUntil(() => current!.searches >= 2 && asked >= 1);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(asked).toBe(1);
+    release();
+    for (const url of urls) {
+      let text = '';
+      for (let i = 0; i < 40 && !text.includes('HE:'); i++) {
+        await new Promise((r) => setTimeout(r, 25));
+        text = await (await current.get(new URL(url).pathname)).text();
+      }
+      expect(text).toContain('HE:Hello there.');
+    }
+    expect(current.downloads).toBe(1); // one file, one download (one use of the daily quota)
+    expect(current.translator.calls).toBe(2); // and still translated once
+  });
+
+  it('a failed shared download fails both requests and is asked for only once', async () => {
+    let release!: () => void;
+    const downloadGate = new Promise<void>((r) => (release = r));
+    let asked = 0;
+    current = await start({
+      downloadGate,
+      subWaitMs: 50,
+      downloadError: () => {
+        asked++;
+        return new AppError('SOURCE_QUOTA_EXCEEDED');
+      },
+    });
+    const urls: string[] = [];
+    for (const hash of ['8e245d9679d31e12', '1111111111111111']) {
+      const res = await current.get(`/subtitles/movie/tt0111161/videoHash=${hash}.json`);
+      urls.push(((await res.json()) as SubsResponse).subtitles[0]!.url);
+    }
+    await pollUntil(() => current!.searches >= 2);
+    release();
+    for (const url of urls) {
+      let text = '';
+      for (let i = 0; i < 40 && !text.includes('TTT Sub:'); i++) {
+        await new Promise((r) => setTimeout(r, 25));
+        text = await (await current.get(new URL(url).pathname)).text();
+      }
+      expect(text).toContain('TTT Sub: משהו השתבש');
+    }
+    expect(asked).toBe(1); // the second request did not spend another download
+    expect(current.downloads).toBe(0);
   });
 
   it('replay is served from the cache with no network calls, even after a restart', async () => {
