@@ -72,12 +72,88 @@ const toast = (ok, msg) => {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { t.classList.remove('translate-y-0', 'opacity-100'); t.classList.add('translate-y-8', 'opacity-0'); }, 3500);
 };
+// Connection-check rows on the main screen: a state (icon and text) per row, an overall chip and a last-checked line.
+const CK_PATHS = {ok:'<path d="M5 12.5l4.5 4.5L19 7.5"/>', fail:'<path d="M7 7l10 10M17 7 7 17"/>', warn:'<path d="M12 6.5v7"/><path d="M12 17.5h.01"/>', idle:'<circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/>', nokey:'<path d="M7 12h10"/>'};
+CK_PATHS.out = CK_PATHS.warn;
+const ckIcon = (s) => s === 'checking'
+  ? '<span class="inline-block h-[11px] w-[11px] animate-spin rounded-full border-[1.5px] border-current border-e-transparent" aria-hidden="true"></span>'
+  : '<svg viewBox="0 0 24 24" class="h-3 w-3 flex-none" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + CK_PATHS[s] + '</svg>';
+const CK = {
+  idle: [T.checksNotChecked, 'text-warm-mu'],
+  checking: [T.testing, 'text-warm-ac'],
+  ok: [T.checksOk, 'text-warm-ok'],
+  fail: [T.checksFailed, 'text-rose-300'],
+  warn: [T.checksQuotaLow, 'text-amber-300'],
+  out: [T.checksQuotaOut, 'text-rose-300'],
+  nokey: [T.checksNotSetUp, 'text-warm-mu']
+};
+const CK_PILL = {
+  idle: 'border-warm-ln text-warm-mu',
+  checking: 'border-warm-ac/45 text-warm-ac',
+  ok: 'border-warm-ok/40 text-warm-ok',
+  fail: 'border-rose-400/45 text-rose-300',
+  out: 'border-rose-400/45 text-rose-300',
+  warn: 'border-amber-400/45 text-amber-300'
+};
+const ckRows = () => [...document.querySelectorAll('[data-check-row][data-base]')];
+// A low or used-up quota shows on the row even when it was not tested yet.
+const ckState = (row) => {
+  const b = row.dataset.base;
+  if (b === 'ok' || b === 'idle') { if (row.dataset.quota === 'out') return 'out'; if (row.dataset.quota === 'low') return 'warn'; }
+  return b;
+};
+let ckAt = 0;
+const paintLast = () => {
+  const box = $('checks-last');
+  if (!box) return;
+  const m = Math.floor((Date.now() - ckAt) / 60000);
+  box.textContent = !ckAt ? T.checksNever : m < 1 ? T.checksJustNow : f(T.checksMinAgo, {n: m});
+};
+const paintChecks = () => {
+  const pill = $('checks-pill');
+  if (!pill) return;
+  const es = ckRows().filter((r) => r.dataset.base !== 'nokey').map(ckState);
+  const bad = es.filter((e) => e === 'fail' || e === 'out').length;
+  const a = es.includes('checking') ? 'checking' : es.includes('fail') ? 'fail' : es.includes('out') ? 'out' : es.includes('idle') ? 'idle' : es.includes('warn') ? 'warn' : 'ok';
+  const label = a === 'ok' ? T.checksAllOk : a === 'fail' ? (bad === 1 ? T.checksOneProblem : f(T.checksProblems, {n: bad})) : CK[a][0];
+  pill.className = 'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-px text-xs font-bold ' + CK_PILL[a];
+  pill.innerHTML = ckIcon(a) + '<span></span>';
+  pill.lastChild.textContent = label;
+  paintLast();
+};
+const paintRow = (row) => {
+  const s = ckState(row);
+  row.dataset.state = s;
+  const st = row.querySelector('[data-st]');
+  st.className = 'inline-flex items-center gap-1 whitespace-nowrap text-xs font-bold ' + CK[s][1];
+  st.innerHTML = ckIcon(s) + '<span></span>';
+  st.lastChild.textContent = CK[s][0];
+  row.querySelector('[data-msg]').classList.toggle('hidden', s === 'checking');
+  paintChecks();
+};
+// A key was just saved for SubDL or Jimaku: its row becomes a normal, testable row.
+const ckKeyAdded = (name) => {
+  const row = document.querySelector('[data-check-row="' + name + '"][data-base]');
+  if (!row) return;
+  if (row.dataset.base === 'nokey') { row.dataset.base = 'idle'; row.querySelector('[data-msg]').textContent = ''; }
+  if (name === 'jimaku') { $('jk-desc').classList.remove('hidden'); $('jk-nokey').classList.add('hidden'); }
+  paintRow(row);
+};
+document.querySelectorAll('[data-open-settings]').forEach((b) => b.addEventListener('click', () => $('open-settings').click()));
+setInterval(paintLast, 30000);
 const show = (id, ok, msg) => {
   const el = $(id);
   const base = el.className.split(' ').filter(c => !Object.values(TONE).includes(c)).join(' ');
   el.textContent = msg ? (ok === null ? '' : ok ? '\\u2714\\uFE0E ' : '\\u2716\\uFE0E ') + msg : '';
   el.className = base + ' ' + (ok === null ? TONE.info : ok ? TONE.ok : TONE.bad);
+  const row = el.closest('[data-check-row][data-base]');
+  if (row && msg) {
+    row.dataset.base = ok === null ? (msg === T.testing ? 'checking' : 'nokey') : ok ? 'ok' : 'fail';
+    if (ok !== null) ckAt = Date.now();
+    paintRow(row);
+  }
 };
+ckRows().forEach(paintRow);
 const STEPS = ${JSON.stringify(STEPS)};
 const ARROW = ${JSON.stringify(arrow === '&larr;' ? '←' : '→')};
 // Booleans only: which keys the server already has. Updated as the wizard saves keys.
@@ -114,6 +190,7 @@ const saveKeys = async (body, resultId) => {
     }
     if (r.ok && body.jimakuApiKey) jimakuOn = true;
     for (const name of ['subdl', 'jimaku']) if (r.ok && body[name + 'ApiKey']) document.querySelectorAll('[data-check-row="' + name + '"]').forEach((row) => row.classList.remove('hidden'));
+    for (const name of ['subdl', 'jimaku']) if (r.ok && body[name + 'ApiKey']) ckKeyAdded(name);
     return r.ok;
   } catch { show(resultId, false, FAILED); toast(false, FAILED); return false; }
 };

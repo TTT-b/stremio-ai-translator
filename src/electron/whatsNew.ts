@@ -26,6 +26,18 @@ export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
         title: 'Steadier progress and layout',
         text: 'The sound-check bar no longer jumps from a third to the end, and My subtitles fits narrow windows.',
       },
+      {
+        title: 'New look',
+        text: 'Settings, My subtitles and the setup wizard now match the home screen. The connection checks are grouped into rows with a clear status for each service, and the SubDL key is optional and collapsed in setup.',
+      },
+      {
+        title: 'Choose your model',
+        text: 'Pick the translation model (Gemini, Claude, OpenAI). If a Gemini model is busy the app switches to another by itself, and names are written in Hebrew letters.',
+      },
+      {
+        title: 'More reliable sources',
+        text: 'If the OpenSubtitles quota is used up the app falls back to another source, two requests for the same file share one download, and the 1-second sync fix reaches the twin job too.',
+      },
     ],
     he: [
       {
@@ -39,6 +51,18 @@ export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
       {
         title: 'התקדמות והתאמה למסך',
         text: 'פס בדיקת הסאונד כבר לא קופץ משליש לסוף, והספרייה מתאימה את עצמה לחלונות צרים.',
+      },
+      {
+        title: 'מראה חדש',
+        text: 'ההגדרות, הכתוביות שלי והאשף תואמים עכשיו למסך הבית. בדיקות החיבור מסודרות בשורות עם סטטוס ברור לכל שירות, ומפתח SubDL אופציונלי וסגור באשף.',
+      },
+      {
+        title: 'בוחרים מודל',
+        text: 'אפשר לבחור את מודל התרגום (Gemini, Claude, OpenAI). אם מודל Gemini עמוס האפליקציה עוברת לאחר לבד, ושמות נכתבים באותיות עבריות.',
+      },
+      {
+        title: 'מקורות יציבים יותר',
+        text: 'כשמכסת OpenSubtitles נגמרת האפליקציה עוברת למקור אחר, שתי בקשות לאותו קובץ חולקות הורדה אחת, ותיקון הסנכרון של שנייה מגיע גם לבקשה התאומה.',
       },
     ],
   },

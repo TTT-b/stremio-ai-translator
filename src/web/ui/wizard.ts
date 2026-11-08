@@ -34,13 +34,17 @@ export function renderWizard(c: UiCtx): string {
     : `<p class="text-sm text-warm-mu">${tt('installNotReady')}
        <code dir="ltr" class="rounded bg-warm-bg px-1.5 py-0.5">${escapeHtml(d.installUrl)}</code></p>`;
 
-  return `<div id="wizard" class="${startStep ? 'flex' : 'hidden'} w-full max-w-[520px] flex-col items-center">
+  return `<div id="wizard" class="${startStep ? 'flex' : 'hidden'} w-full max-w-[560px] flex-col items-center">
 <div class="mb-3 flex w-full items-center justify-end gap-2"><button type="button" class="js-news ${btn} relative !px-3 !py-2 !border-transparent" aria-label="${tt('newsBell')}" title="${tt('newsBell')}"><span class="text-base leading-none" aria-hidden="true">&#128276;</span><span class="js-news-badge absolute -top-1 -end-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-warm-ac px-1 text-[10px] font-bold text-warm-on"></span></button>${langMenu()}</div>
 <ol id="w-bars" class="mb-7 flex w-full gap-1.5" aria-label="${tt('setupProgress')}">${STEPS.map(
     (s, i) =>
-      `<li class="h-[5px] flex-1 rounded-full bg-warm-ln transition-colors" data-bar="${i + 1}" title="${escapeHtml(s[0])}"><span class="sr-only">${escapeHtml(s[0])}</span></li>`,
+      `<li class="h-[5px] flex-1 rounded-full bg-warm-ln transition-colors duration-300" data-bar="${i + 1}" title="${escapeHtml(s[0])}"><span class="sr-only">${escapeHtml(s[0])}</span></li>`,
   ).join('')}</ol>
-<section class="flex min-h-[540px] w-full flex-col gap-5 rounded-[22px] border border-warm-ln bg-warm-sf p-8" aria-live="polite">
+<ol id="w-chips" class="mb-4 flex w-full flex-wrap gap-1.5" aria-hidden="true">${STEPS.map(
+    (s, i) =>
+      `<li class="rounded-full border border-warm-ln px-2.5 py-0.5 text-xs font-semibold text-warm-mu transition-colors duration-300" data-chip="${i + 1}">${escapeHtml(s[0])}</li>`,
+  ).join('')}</ol>
+<section class="flex min-h-[600px] w-full flex-col gap-5 rounded-[22px] border border-warm-ln bg-warm-sf p-8" aria-live="polite">
 <div><div id="w-stepof" class="mb-2 text-xs font-semibold tracking-wide text-warm-ac">${tt('stepOf', { n: 1, total: STEPS.length })}</div><h2 id="w-title" class="text-[26px] font-bold leading-tight text-warm-tx">${escapeHtml(STEPS[0]?.[1] ?? '')}</h2><p id="w-sub" class="mt-2 text-sm leading-relaxed text-warm-mu">${escapeHtml(STEPS[0]?.[2] ?? '')}</p></div>
 
 <div data-pane="1" class="flex flex-col gap-2">
@@ -60,10 +64,11 @@ export function renderWizard(c: UiCtx): string {
 ${passwordField('k-pass', d.openSubtitlesLoginConfigured ? tt('savedPh') : tt('osPassPh'))}</div>
 </div>
 <div class="flex flex-wrap gap-2">${keyLink('https://www.opensubtitles.com/en/users/sign_up', t(lang, 'createOsAccount'), true)}${keyLink('https://www.opensubtitles.com/consumers', t(lang, 'getOsKey'), true)}</div>
-<div class="mt-1 border-t border-warm-ln pt-3.5"><label class="${labelCls}" for="k-subdl">${tt('subdlKeyLabel')}</label>
+<details class="group mt-1 rounded-xl border border-warm-ln bg-warm-bg/40 open:bg-transparent"><summary class="flex cursor-pointer list-none items-center justify-between gap-2 px-3.5 py-3 text-sm font-semibold text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac [&::-webkit-details-marker]:hidden"><span>${tt('subdlOptionalRow')}</span><span class="text-warm-mu transition-transform group-open:rotate-180" aria-hidden="true">&#9662;</span></summary>
+<div class="border-t border-warm-ln px-3.5 pb-3.5 pt-3"><label class="${labelCls}" for="k-subdl">${tt('subdlKeyLabel')}</label>
 <input class="${field}" id="k-subdl" type="password" autocomplete="off" placeholder="${keyPh(d.subdlKeyConfigured ?? false)}">
 <p class="mt-1 mb-2 text-xs text-warm-mu">${tt('subdlHint')}</p>
-<div class="flex flex-wrap gap-2">${keyLink('https://subdl.com/panel/api', t(lang, 'getSubdlKey'), true)}</div></div>
+<div class="flex flex-wrap gap-2">${keyLink('https://subdl.com/panel/api', t(lang, 'getSubdlKey'), true)}</div></div></details>
 </div>
 
 <div data-pane="3" class="hidden flex-col gap-4">
@@ -80,7 +85,7 @@ ${checks('r-', 'sample', 'sample-out')}
 ${d.desktop ? `<div data-pane="6" class="hidden flex-col gap-3">${toggle('w-startup', true, 'startupLabel', 'startupHint')}${toggle('w-minimized', true, 'minimizedLabelWizard', 'minimizedHint')}</div>` : ''}
 
 <div class="mt-auto"><span class="${result} mb-2 text-center" id="w-result"></span>
-<div class="flex items-center justify-between gap-3"><button type="button" id="w-back" class="invisible rounded-2xl border border-warm-ln px-5 py-3 text-sm font-semibold text-warm-tx transition hover:border-warm-mu hover:bg-warm-sf focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${tt('back')}</button><button type="button" id="w-next" class="${btnPrimary} min-w-[150px] text-center">${tt('next')} ${arrow}</button></div></div>
+<div class="grid grid-cols-2 gap-3"><button type="button" id="w-back" class="invisible h-12 w-full whitespace-nowrap rounded-2xl border border-warm-ln px-4 text-center text-sm font-semibold text-warm-tx transition hover:border-warm-mu hover:bg-warm-sf focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${tt('back')}</button><button type="button" id="w-next" class="${btnPrimary} h-12 w-full whitespace-nowrap !px-4 text-center">${tt('next')} ${arrow}</button></div></div>
 </section>
 </div>`;
 }

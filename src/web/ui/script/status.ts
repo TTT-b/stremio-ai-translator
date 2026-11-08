@@ -201,7 +201,10 @@ const refreshStatus = async () => {
       $('st-quota-bar').className = 'h-full rounded-full transition-[width] duration-500 ' + (share >= 90 ? 'bg-rose-400' : share >= 70 ? 'bg-amber-400' : 'bg-warm-ok');
       const hint = $('st-quota-hint');
       hint.textContent = q.left === 0 ? T.stQuotaOut : q.left < 10 ? f(T.stQuotaLow, {n: q.left}) : '';
-      hint.classList.toggle('hidden', !hint.textContent);
+      hint.className = 'mt-1 text-xs ' + (q.left === 0 ? 'text-rose-300' : q.left < 10 ? 'text-amber-300' : 'text-warm-mu') + (hint.textContent ? '' : ' hidden');
+      const osRow = document.querySelector('[data-check-row="opensubtitles"][data-base]');
+      const level = q.left === 0 ? 'out' : q.left < 10 ? 'low' : '';
+      if (osRow && osRow.dataset.quota !== level) { osRow.dataset.quota = level; paintRow(osRow); }
     }
     if (subdlOn) $('st-subdl-text').textContent = f(T.stSubdlCount, {n: r.subdlDownloads || 0});
     // Continue shows only when there is something it can do.

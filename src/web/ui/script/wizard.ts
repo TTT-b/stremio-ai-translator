@@ -21,6 +21,12 @@ const render = () => {
   $('w-sub').textContent = STEPS[step - 1][2];
   document.querySelectorAll('[data-pane]').forEach(p => { const on = Number(p.dataset.pane) === step; p.classList.toggle('hidden', !on); p.classList.toggle('flex', on); });
   document.querySelectorAll('[data-bar]').forEach(b => { const on = Number(b.dataset.bar) <= step; b.classList.toggle('bg-warm-ac', on); b.classList.toggle('bg-warm-ln', !on); });
+  document.querySelectorAll('[data-chip]').forEach(c => {
+    const n = Number(c.dataset.chip);
+    c.classList.toggle('border-warm-ac', n === step); c.classList.toggle('text-warm-ac', n === step);
+    c.classList.toggle('border-warm-ln', n !== step); c.classList.toggle('text-warm-mu', n !== step);
+    c.classList.toggle('text-warm-tx', false);
+  });
   // Step 1 has nothing to go back to, unless the wizard was opened from the main screen: then it cancels.
   back.classList.toggle('invisible', step === 1 && !fromDash);
   back.textContent = step === 1 ? T.leaveWizard : T.back;

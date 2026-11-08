@@ -1,4 +1,4 @@
-import { btn, escapeHtml, field, result, tile } from './components';
+import { btn, btnPrimary, escapeHtml, field, tile } from './components';
 import { t } from '../i18n';
 import type { UiCtx } from './context';
 import { prettyModel } from './provider';
@@ -9,17 +9,34 @@ export function renderDashboard(c: UiCtx): string {
   /** Short install box for the main screen, so the link is at hand without reopening the wizard. */
   /** Small, even buttons for the cards on this screen. */
   const cb = `${btn} !rounded-lg !px-3 !py-1.5 !text-[13px] whitespace-nowrap`;
-  const plainLink = (href: string, label: string) =>
-    `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="${btn} block w-full !rounded-lg !px-2 !py-1.5 text-center !text-xs leading-snug">${escapeHtml(label)}</a>`;
   const installCompact = d.stremioReady
     ? `<section class="${tile} flex flex-col gap-2.5"><h2 class="text-sm font-bold text-warm-tx">${tt('installTitle')}</h2>
 <div class="grid grid-cols-2 gap-2 sm:grid-cols-4"><a id="install-d" class="${cb} flex-1 text-center" href="${escapeHtml(d.installUrl)}" target="_blank" rel="noopener noreferrer">${tt('installBtn')}</a><button type="button" id="open-stremio" class="${cb} flex-1">${tt('openStremio')}</button></div>
 <div class="flex gap-2"><input id="manifest-d" readonly dir="ltr" class="${field} min-w-0 flex-1 font-mono text-[13px]" value="${escapeHtml(d.manifestUrl)}" aria-label="${tt('manifestAria')}"><button type="button" id="copy-d" class="${cb}">${tt('copy')}</button></div></section>`
     : '';
 
-  /** One equal-size check tile: name, result of the last test, details, test button at the bottom. */
-  const svcTile = (name: string, title: string, body: string): string =>
-    `<div data-check-row="${name}" class="flex min-h-[96px] flex-col gap-1.5 rounded-2xl border border-warm-ln bg-warm-bg/40 p-3.5"><div class="text-sm font-bold text-warm-tx">${title}</div><div class="flex flex-1 flex-col gap-1.5">${body}<span class="${result} !text-xs text-warm-mu" id="dr-${name}"></span></div><button type="button" class="${cb} w-full" data-test="${name}" data-rp="dr-">${tt('testBtn')}</button></div>`;
+  /** Plain text link (dotted underline), for hints that should not look like buttons. */
+  const textLink = (href: string, label: string) =>
+    `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs text-warm-mu underline decoration-dotted underline-offset-[3px] transition hover:text-warm-ac focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${escapeHtml(label)}</a>`;
+  /** The row colours follow data-state, which the script sets (idle, checking, ok, fail, warn, out, nokey). */
+  const ROW_STATE =
+    'data-[state=fail]:border-rose-400/50 data-[state=fail]:bg-rose-400/5 data-[state=out]:border-rose-400/50 data-[state=out]:bg-rose-400/5 data-[state=warn]:border-amber-400/45 data-[state=warn]:bg-amber-400/5 data-[state=nokey]:border-dashed data-[state=nokey]:bg-transparent';
+  const refreshIcon =
+    '<svg viewBox="0 0 24 24" class="h-[15px] w-[15px]" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>';
+  /** One check row: brand colour and name, details, status (icon and text), test button, last message. */
+  const checkRow = (opts: {
+    name: string;
+    title: string;
+    brand: string;
+    base: 'idle' | 'nokey';
+    extraL1?: string;
+    details?: string;
+    quota?: string;
+  }): string =>
+    `<div data-check-row="${opts.name}" data-base="${opts.base}" data-state="${opts.base}" class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 rounded-xl border border-warm-ln bg-warm-bg/40 px-3 py-2.5 transition ${ROW_STATE}"><div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><span class="h-[9px] w-[9px] flex-none rounded-[3px] ${opts.brand}" aria-hidden="true"></span><span class="text-sm font-bold text-warm-tx">${opts.title}</span>${opts.extraL1 ?? ''}</div>${opts.details ? `<div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-warm-mu">${opts.details}</div>` : ''}</div><div class="flex items-center gap-2.5"><span data-st class="inline-flex items-center gap-1 whitespace-nowrap text-xs font-bold text-warm-mu"></span><button type="button" class="inline-grid h-8 w-8 flex-none place-items-center rounded-lg border border-warm-ln bg-transparent text-warm-mu transition hover:border-warm-ac/60 hover:bg-warm-bg hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac" data-test="${opts.name}" data-rp="dr-" aria-label="${tt('testBtn')}: ${opts.title}" title="${tt('testBtn')}">${refreshIcon}</button></div>${opts.quota ?? ''}<span data-msg class="col-span-full break-words text-xs text-warm-mu empty:hidden" id="dr-${opts.name}"></span></div>`;
+  const groupLabel = (label: string) =>
+    `<div class="flex items-center gap-2 text-[11px] font-bold text-warm-mu after:h-px after:flex-1 after:bg-warm-ln after:content-['']">${label}</div>`;
+  const pill = `<span id="checks-pill" role="status" class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-warm-ln px-2.5 py-px text-xs font-bold text-warm-mu"></span>`;
 
   return `<div id="dash" class="${startStep ? 'hidden' : 'flex'} w-full max-w-[560px] flex-col gap-[18px] mx-auto lg:max-w-[1040px] xl:max-w-[1280px]">
 <div class="flex flex-wrap items-center justify-between gap-3"><div><h1 class="text-[26px] font-extrabold text-warm-tx"><span class="text-warm-ac">TTT</span> Sub</h1>${d.testMode ? `<div class="mt-1.5 inline-block rounded-full bg-amber-400/15 px-2.5 py-0.5 text-xs font-bold text-amber-300">${tt('testBanner')}</div>` : ''}</div>
@@ -41,13 +58,14 @@ export function renderDashboard(c: UiCtx): string {
 <section id="st-queue" class="${tile} hidden flex-col gap-2.5"><h2 class="text-sm font-bold text-warm-tx">${tt('qTitle')}</h2><ul id="st-queue-list" class="flex flex-col gap-2"></ul></section>
 <div class="${tile} flex items-center justify-between gap-3"><div class="min-w-0 flex-1"><label class="text-xs text-warm-mu" for="q-lang">${tt('stTarget')}</label><select class="${field} mt-1" id="q-lang">${langOptions}</select></div><label class="flex shrink-0 cursor-pointer flex-col items-center gap-1.5"><span class="text-xs text-warm-mu">${tt('stDual')}</span><input type="checkbox" id="q-dual" class="peer sr-only"${d.dualSubtitles ? ' checked' : ''}><span class="relative h-[23px] w-10 shrink-0 rounded-full bg-warm-ln transition peer-checked:bg-warm-ac peer-focus-visible:ring-2 peer-focus-visible:ring-warm-ac/60 after:absolute after:start-[3px] after:top-[3px] after:h-[17px] after:w-[17px] after:rounded-full after:bg-white after:transition rtl:peer-checked:after:-translate-x-[17px] ltr:peer-checked:after:translate-x-[17px]"></span></label></div>
 </div><div class="flex flex-col gap-[18px]">
-<section class="${tile} flex flex-col gap-3"><div class="flex items-center justify-between gap-3"><div><div class="text-sm font-bold text-warm-tx">${tt('checksTitle')}</div><div class="mt-0.5 text-xs text-warm-mu">${tt('checksSub')}</div></div><button type="button" id="checks-all" class="${cb} shrink-0">${tt('testAllBtn')}</button></div>
-<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-${svcTile('ai', tt('aiProviderTitle'), `<div class="text-xs text-warm-mu" dir="ltr">${d.aiConfigured ? escapeHtml(prettyModel(d.aiModel)) : tt('noKeyYet')}</div>`)}
-${svcTile('opensubtitles', 'OpenSubtitles', `<div id="st-quota" class="hidden"><div id="st-quota-text" class="text-sm font-bold" dir="ltr"></div><div class="mt-1.5 h-2 overflow-hidden rounded-full bg-warm-bg" role="progressbar" aria-label="${tt('stQuota')}" aria-valuemin="0" aria-valuemax="100"><div id="st-quota-bar" class="h-full w-0 rounded-full bg-warm-ok transition-[width] duration-500"></div></div><div id="st-quota-hint" class="mt-1 hidden text-xs text-warm-mu"></div></div>`)}
-${svcTile('subdl', 'SubDL', `<div id="st-subdl" class="flex flex-col gap-1"><div id="st-subdl-text" class="text-sm font-bold ${d.subdlKeyConfigured ? '' : 'text-warm-mu'}" dir="auto">${d.subdlKeyConfigured ? '0' : tt('stSubdlNoKey')}</div><div id="st-subdl-nokey" class="text-xs text-warm-mu ${d.subdlKeyConfigured ? 'hidden' : ''}">${plainLink('https://subdl.com/panel/api', t(lang, 'getSubdlKey'))}</div><div id="st-subdl-info" class="text-xs text-warm-mu ${d.subdlKeyConfigured ? '' : 'hidden'}">${plainLink('https://subdl.com/panel/api', t(lang, 'stSubdlPanel'))}</div></div>`)}
-${svcTile('jimaku', 'Jimaku', '')}
-</div>
+<section class="${tile} flex flex-col gap-3"><div class="flex items-start justify-between gap-3"><div><div class="text-sm font-bold text-warm-tx">${tt('checksTitle')}</div><div class="mt-0.5 text-xs text-warm-mu">${tt('checksSub')}</div></div>${pill}</div>
+<div class="flex flex-col gap-1.5">${groupLabel(tt('checksGroupAi'))}
+${checkRow({ name: 'ai', title: tt('aiProviderTitle'), brand: 'bg-warm-ac', base: 'idle', extraL1: `<span class="rounded-lg border border-warm-ln bg-warm-bg px-2 text-xs font-semibold text-warm-tx" dir="ltr" title="${tt('checksModelCap')}">${d.aiConfigured ? escapeHtml(prettyModel(d.aiModel)) : tt('noKeyYet')}</span>` })}</div>
+<div class="flex flex-col gap-1.5">${groupLabel(tt('checksGroupSources'))}
+${checkRow({ name: 'opensubtitles', title: 'OpenSubtitles', brand: 'bg-sky-400', base: 'idle', quota: `<div id="st-quota" class="col-span-full hidden"><div class="flex items-center gap-2.5 text-xs text-warm-mu"><div class="h-1.5 min-w-10 flex-1 overflow-hidden rounded-full bg-warm-ln" role="progressbar" aria-label="${tt('stQuota')}" aria-valuemin="0" aria-valuemax="100"><div id="st-quota-bar" class="h-full w-0 rounded-full bg-warm-ok transition-[width] duration-500"></div></div><span class="whitespace-nowrap"><span id="st-quota-text" class="font-bold text-warm-tx" dir="ltr"></span> ${tt('checksDownloadsToday')}</span></div><div id="st-quota-hint" class="mt-1 hidden text-xs text-warm-mu"></div></div>` })}
+${checkRow({ name: 'subdl', title: 'SubDL', brand: 'bg-violet-400', base: d.subdlKeyConfigured ? 'idle' : 'nokey', details: `<div id="st-subdl" class="flex flex-wrap items-center gap-x-3 gap-y-0.5"><span id="st-subdl-text" class="${d.subdlKeyConfigured ? '' : 'text-warm-mu'}" dir="auto">${d.subdlKeyConfigured ? '0' : tt('stSubdlNoKey')}</span><span id="st-subdl-nokey" class="${d.subdlKeyConfigured ? 'hidden' : ''}">${textLink('https://subdl.com/panel/api', t(lang, 'getSubdlKey'))}</span><span id="st-subdl-info" class="${d.subdlKeyConfigured ? '' : 'hidden'}">${textLink('https://subdl.com/panel/api', t(lang, 'stSubdlPanel'))}</span></div>` })}
+${checkRow({ name: 'jimaku', title: 'Jimaku', brand: 'bg-pink-400', base: d.jimakuKeyConfigured ? 'idle' : 'nokey', extraL1: `<span class="rounded-full border border-warm-ln px-2 text-[11px] font-semibold text-warm-mu">${tt('checksOptional')}</span>`, details: `<span id="jk-desc" class="${d.jimakuKeyConfigured ? '' : 'hidden'}">${tt('checksAnime')}</span><span id="jk-nokey" class="${d.jimakuKeyConfigured ? 'hidden' : ''}">${tt('stSubdlNoKey')} · <button type="button" data-open-settings class="text-xs text-warm-mu underline decoration-dotted underline-offset-[3px] transition hover:text-warm-ac focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${tt('checksAddInSettings')}</button></span>` })}</div>
+<div class="flex items-center justify-between gap-3 border-t border-warm-ln pt-3 max-[440px]:flex-col-reverse max-[440px]:items-stretch max-[440px]:text-center"><span id="checks-last" class="text-xs text-warm-mu"></span><button type="button" id="checks-all" class="${btnPrimary} shrink-0 !rounded-xl !px-4 !py-2 !text-[13px]">${tt('testAllBtn')}</button></div>
 </section>
 ${installCompact}
 </div></div>
