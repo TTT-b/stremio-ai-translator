@@ -1,11 +1,10 @@
 # HANDOFF - where the work stands (2026-11-08, branch refactor/split-manager-html)
 
-## Folders and branches (tidied 2026-11-08)
+## Folders and branches (one folder since 2026-11-08)
 
-- `D:TTT Sub 1.9.1` = the real 2.0 work, branch `refactor/split-manager-html` (a linked worktree of the same repo). Work here.
-- `D:TTT Sub` = the main checkout of the same repo, parked on `feat/model-picker` (the OLD 1.8-era model picker, kept only as a backup: 2.0 already has a newer picker in src/web/ui/modelPicker.ts, so do NOT merge it).
-- Other branches are old backups (`feat/mp4-save`, `work/main-1.7.0`, `backup/old-local-main`, `fix/save-opensubtitles-quota`); local `main` is stale, `origin/main` is 1.8.0. After the 2.0 release: merge the refactor branch into main, then remove the 1.9.1 worktree and move on in `D:TTT Sub`.
-- The user-facing "Copy diagnostics" button STAYS (users send it as feedback). The creator-only titles button was already removed (commit a248082).
+- ONE project folder: `D:TTT Sub`, branch `main` (local, 2.0 work merged; NOT pushed; origin/main is still 1.8.0). The old `D:TTT Sub 1.9.1` worktree was removed.
+- Old backups kept until the user decides: `feat/model-picker` (old picker, 2.0 has a newer one), `backup/old-local-main` and `fix/save-opensubtitles-quota` (an old rewritten history; features checked and already in 2.0), `refactor/split-manager-html` (same commits as main).
+- The user-facing "Copy diagnostics" button STAYS (feedback from users). Creator-only titles button was removed (a248082).
 
 ## v2.0.0 status (2026-11-08)
 
