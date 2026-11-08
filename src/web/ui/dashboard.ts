@@ -11,7 +11,7 @@ export function renderDashboard(c: UiCtx): string {
   const cb = `${btn} !rounded-lg !px-3 !py-1.5 !text-[13px] whitespace-nowrap`;
   const installCompact = d.stremioReady
     ? `<section class="${tile} flex flex-col gap-2.5"><h2 class="text-sm font-bold text-warm-tx">${tt('installTitle')}</h2>
-<div class="grid grid-cols-2 gap-2 sm:grid-cols-4"><a id="install-d" class="${cb} flex-1 text-center" href="${escapeHtml(d.installUrl)}" target="_blank" rel="noopener noreferrer">${tt('installBtn')}</a><button type="button" id="open-stremio" class="${cb} flex-1">${tt('openStremio')}</button></div>
+<div class="grid grid-cols-2 gap-2"><a id="install-d" class="${cb} w-full !py-2.5 text-center" href="${escapeHtml(d.installUrl)}" target="_blank" rel="noopener noreferrer">${tt('installBtn')}</a><button type="button" id="open-stremio" class="${cb} w-full !py-2.5 text-center">${tt('openStremio')}</button></div>
 <div class="flex gap-2"><input id="manifest-d" readonly dir="ltr" class="${field} min-w-0 flex-1 font-mono text-[13px]" value="${escapeHtml(d.manifestUrl)}" aria-label="${tt('manifestAria')}"><button type="button" id="copy-d" class="${cb}">${tt('copy')}</button></div></section>`
     : '';
 

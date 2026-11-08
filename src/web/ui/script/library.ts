@@ -274,12 +274,12 @@ const loadLib = async () => {
     const r = await (await fetch('/api/library')).json();
     libItems = r.ok ? r.items : [];
     show('lib-result', null, '');
-    if (libItems.length <= 3) for (const e of libItems) openGroups.add(e.kind === 'movie' ? 'm:' + e.titleKey : e.titleKey);
   } catch { libItems = []; show('lib-result', false, T.libLoadFail); }
   for (const id of [...picked]) if (!libItems.some(e => e.id === id)) picked.delete(id);
   drawLib();
 };
-$('open-library').addEventListener('click', () => setView('lib'));
+// Every series starts closed each time the screen is opened; the user opens the one they want.
+$('open-library').addEventListener('click', () => { openGroups.clear(); setView('lib'); });
 $('lib-back').addEventListener('click', () => setView('dash'));
 $('lib-all').addEventListener('click', () => {
   const every = libItems.length > 0 && libItems.every(e => picked.has(e.id));
