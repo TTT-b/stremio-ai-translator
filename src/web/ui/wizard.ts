@@ -80,7 +80,7 @@ ${checks('r-', 'sample', 'sample-out')}
 ${d.desktop ? `<div data-pane="6" class="hidden flex-col gap-3">${toggle('w-startup', true, 'startupLabel', 'startupHint')}${toggle('w-minimized', true, 'minimizedLabelWizard', 'minimizedHint')}</div>` : ''}
 
 <div class="mt-auto"><span class="${result} mb-2 text-center" id="w-result"></span>
-<div class="flex items-center justify-between gap-3"><button type="button" id="w-back" class="invisible rounded-lg py-2.5 text-sm font-semibold text-warm-mu transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${tt('back')}</button><button type="button" id="w-next" class="${btnPrimary} min-w-[150px] text-center">${tt('next')} ${arrow}</button></div></div>
+<div class="flex items-center justify-between gap-3"><button type="button" id="w-back" class="invisible rounded-2xl border border-warm-ln px-5 py-3 text-sm font-semibold text-warm-tx transition hover:border-warm-mu hover:bg-warm-sf focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${tt('back')}</button><button type="button" id="w-next" class="${btnPrimary} min-w-[150px] text-center">${tt('next')} ${arrow}</button></div></div>
 </section>
 </div>`;
 }
