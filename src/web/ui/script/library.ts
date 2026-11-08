@@ -19,7 +19,7 @@ const checkbox = (checked, indeterminate, label, onChange) => {
 const setPicked = (ids, on) => { for (const id of ids) { if (on) picked.add(id); else picked.delete(id); } drawLib(); };
 const groupState = (ids) => { const n = ids.filter(id => picked.has(id)).length; return {checked: n > 0 && n === ids.length, partial: n > 0 && n < ids.length}; };
 const episodeRow = (e) => {
-  const row = el('div', 'flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-2 py-1.5 text-sm transition hover:bg-warm-bg');
+  const row = el('div', 'flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-2 py-1.5 text-sm transition hover:bg-warm-bg' + (picked.has(e.id) ? ' bg-warm-ac/[0.07]' : ''));
   const pick = el('label', 'flex min-w-[8rem] flex-1 cursor-pointer items-center gap-3');
   pick.append(checkbox(picked.has(e.id), false, e.title, (on) => setPicked([e.id], on)));
   const name = e.kind === 'series' ? f(T.libEpisode, {n: e.episode ?? '?'}) : (e.label || T.libSubtitle);
@@ -204,14 +204,17 @@ const episodeRow = (e) => {
   return row;
 };
 const section = (key, title, count, items, body) => {
-  const d = el('details', 'rounded-2xl border border-warm-ln bg-warm-sf');
+  const d = el('details', 'group rounded-2xl border border-warm-ln bg-warm-sf');
   d.open = openGroups.has(key);
   d.addEventListener('toggle', () => { if (d.open) openGroups.add(key); else openGroups.delete(key); });
-  const s = el('summary', 'flex cursor-pointer list-none items-center gap-3 p-3.5');
+  const s = el('summary', 'flex cursor-pointer list-none items-center gap-3 rounded-2xl p-3.5 transition hover:bg-warm-bg/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac [&::-webkit-details-marker]:hidden');
   const ids = items.map(e => e.id), st = groupState(ids);
   s.append(checkbox(st.checked, st.partial, title, (on) => setPicked(ids, on)));
   s.append(el('span', 'min-w-0 flex-1 truncate text-sm font-bold text-warm-tx', title));
   s.append(el('span', 'shrink-0 text-xs text-warm-mu', count));
+  const chev = el('span', 'inline-block text-warm-ac transition-transform duration-200 group-open:rotate-180', '▾');
+  chev.setAttribute('aria-hidden', 'true');
+  s.append(chev);
   d.append(s, body);
   return d;
 };
