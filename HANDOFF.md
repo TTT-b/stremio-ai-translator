@@ -10,6 +10,12 @@
 
 Version bumped to 2.0.0 and committed on this branch. Done since the notes below: 429 daily/per-minute classification, pacing, auto-retry (src/jobs/autoRetry.ts), one "ready" toast that waits for the sound check (max 10 min), sound-check bar uses createSyncProgress, library layout wraps. NOT done: merge to main, release (needs the user's OK), user must enter the new OpenSubtitles account and rotate the second Gemini key. The installer is blocked by Windows Application Control when run silently: the user installs by double-click.
 
+## UI bugs to fix later (reported by the user, 2026-11-08, after v2.0.0)
+
+- Wizard step 5 ("Install in Stremio", `install` block in `src/web/ui/wizard.ts`): the two buttons "Install in Stremio" and "Open Stremio" are not aligned and do not fill the row/column evenly (they sit offset from each other and from the manifest-URL row below). Make them the same width/height in one tidy row or a 2-column grid; check at narrow widths and in both languages (he/en). Look for the same "buttons escape the row" problem on the main screen's install card (`dashboard.ts`).
+- Model picker: a model chosen in Settings is saved only when the main "Save" button is pressed (then the page reloads). Make the choice save immediately with a "model saved" toast so the connection-checks chip updates (`src/web/ui/script/drawer.ts`, `saveModel`).
+- Updater (decided to keep): the update downloads automatically and installs only when the user clicks the install button. Maybe make that button more prominent and add a small toast when an update is ready.
+
 ## START HERE TOMORROW (2026-11-08)
 
 State: v1.9.1 released; everything below is UNCOMMITTED in `D:\TTT Sub 1.9.1` (do not touch `D:\TTT Sub`).
