@@ -3,7 +3,7 @@
 ## Folders and branches (one folder since 2026-11-08)
 
 - ONE project folder: `D:TTT Sub`, branch `main` (local, 2.0 work merged; NOT pushed; origin/main is still 1.8.0). The old `D:TTT Sub 1.9.1` worktree was removed.
-- Old backups kept until the user decides: `feat/model-picker` (old picker, 2.0 has a newer one), `backup/old-local-main` and `fix/save-opensubtitles-quota` (an old rewritten history; features checked and already in 2.0), `refactor/split-manager-html` (same commits as main).
+- Old local branches were deleted on 2026-11-08 (only `main` is left). The old 1.8-era work is also saved in `D:mp4-save-uncommitted.patch`.
 - The user-facing "Copy diagnostics" button STAYS (feedback from users). Creator-only titles button was removed (a248082).
 
 ## v2.0.0 status (2026-11-08)
