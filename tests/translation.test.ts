@@ -442,6 +442,32 @@ describe('translateSubtitle', () => {
     expect(provider.calls).toBe(2);
   });
 
+  it('keeps the source text of a few lines the AI keeps skipping instead of failing the episode', async () => {
+    const many = {
+      ...source,
+      cues: Array.from({ length: 30 }, (_, i) => ({
+        index: i + 1,
+        startMs: i * 1000,
+        endMs: i * 1000 + 800,
+        text: `Line ${i + 1}`,
+      })),
+    };
+    // The AI never returns line 7, in any attempt.
+    const provider = new FakeProvider((req) => ({
+      translations: req.cues
+        .filter((c) => c.id !== '7')
+        .map((c) => ({ id: c.id, text: `ok:${c.text}` })),
+    }));
+    const r = await translateSubtitle(
+      many,
+      provider,
+      opts({ chunkSize: 30, maxValidationRetries: 2 }),
+    );
+    expect(r.file.cues).toHaveLength(30);
+    expect(r.file.cues[6]?.text).toBe('Line 7');
+    expect(r.file.cues[0]?.text).toBe('ok:Line 1');
+  });
+
   it('retries transient errors but not invalid-key errors', async () => {
     const flaky = new FakeProvider((req, n) => {
       if (n < 3) throw new AppError('PROVIDER_RATE_LIMITED');

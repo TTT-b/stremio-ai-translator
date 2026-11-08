@@ -332,6 +332,9 @@ async function repairSuspiciousLines(
   }
 }
 
+/** Largest share of a chunk's lines that may stay untranslated when the AI keeps skipping them. */
+const MAX_SKIPPED_SHARE = 0.1;
+
 async function translateOneChunkNow(
   chunk: Chunk,
   total: number,
@@ -489,6 +492,21 @@ async function translateOneChunkNow(
       }
       throw err;
     }
+  }
+  // The AI keeps skipping a few lines: keep their original text rather than lose the whole episode.
+  const skipped = source.filter((c) => !have.has(c.id));
+  const onlyMissing = lastProblems.every((p) => p.startsWith('missing id '));
+  if (
+    skipped.length > 0 &&
+    onlyMissing &&
+    skipped.length <= Math.floor(source.length * MAX_SKIPPED_SHARE)
+  ) {
+    log.warn(
+      { stage: 'VALIDATION', skipped: skipped.length, ids: skipped.map((c) => c.id).slice(0, 10) },
+      'AI kept skipping some lines, keeping their original text',
+    );
+    const filled: ChunkCue[] = source.map((c) => ({ id: c.id, text: have.get(c.id) ?? c.text }));
+    return { translations: filled, usage };
   }
   throw new AppError('TRANSLATION_VALIDATION_FAILED', `chunk ${chunk.number + 1}/${total}`, {
     problems: lastProblems.slice(0, 10),
