@@ -165,7 +165,9 @@ the English meaning. Every release adds its What's new notes in both languages
   from the video itself, or a file-hash match) or **estimated** (an OpenSubtitles subtitle that may
   belong to another version of the video: if it is off, try another stream or shift it in Stremio's
   player). The list stores titles and numbers only
-  (`data/library.json`), never subtitle text.
+  (`data/library.json`), never subtitle text. Saved subtitles are deleted automatically 90 days
+  after they were made (checked at start and once a day); they are simply translated again if you
+  play them later.
 - **Settings** (button on the dashboard) opens a side drawer: key status (configured/missing, never
   the values), fields to replace keys, language, dual subtitles, **Clear Translation Cache**
   (deletes saved translations; downloaded sources are kept), **Run setup again**, and (desktop app)
