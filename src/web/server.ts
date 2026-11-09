@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { rmSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { FileCache } from '../cache/fileCache';
+import { RETENTION_CHECK_INTERVAL_MS, purgeExpiredSubtitles } from '../cache/retention';
 import { Library, srtFileName } from '../jobs/library';
 import { RELEASE_NOTES } from '../electron/whatsNew';
 import { describeStats, recentLogLines, videoTable } from '../logging/diagnostics';
@@ -268,6 +269,12 @@ export function createApp(deps: ServerDeps): express.Express {
     makeQuotaSource: (c, l) => makeSource(c, l),
     ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
   });
+  // Saved subtitles are deleted 90 days after they were made: at start, then once a day.
+  const purgeOld = (): void => {
+    purgeExpiredSubtitles({ library, cache, jobsDir: join(dataDir, 'jobs'), logger });
+  };
+  purgeOld();
+  setInterval(purgeOld, RETENTION_CHECK_INTERVAL_MS).unref();
   deps.onReady?.({ jobs, cache });
 
   const allowedHosts = new Set([`127.0.0.1:${envConfig.port}`, `localhost:${envConfig.port}`]);
