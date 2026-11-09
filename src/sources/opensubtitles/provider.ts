@@ -313,7 +313,14 @@ export class OpenSubtitlesProvider implements SourceSubtitleProvider {
         if (anyUrl) results = await this.searchOnce(anyUrl);
         log.info({ strategy: 'id-any-language', results: results.length }, 'search');
       }
-      if (results.length > 0) return results;
+      // Only other languages (e.g. Japanese for an anime) were found: look by title for English too.
+      const wanted = new Set(query.languages.map((l) => l.split('-')[0]!.toLowerCase()));
+      const hasWanted = results.some((c) => wanted.has(c.language.split('-')[0]!.toLowerCase()));
+      if (results.length > 0 && (hasWanted || wanted.size === 0)) return results;
+      if (results.length > 0) {
+        const byTitle = await this.searchByText(query, log).catch(() => []);
+        return [...results, ...byTitle];
+      }
     } else {
       log.info({ strategy: 'id' }, 'no usable id for this video, using text search');
     }
