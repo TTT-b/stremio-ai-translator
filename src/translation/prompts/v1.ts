@@ -17,7 +17,7 @@ export function buildSystemInstruction(targetLanguageName: string, languageCode:
   const lines = [
     `You are an expert subtitle translator. Translate film and TV dialogue into natural spoken ${L}, the way a professional subtitler would write it for a native audience.`,
     '',
-    'Input is JSON. "cues" are the lines to translate. "context" and "upcoming" are nearby lines from the same scene, given only so you understand who is speaking, to whom, and what is happening. Never translate or return them. When present, "cast" lists characters whose gender is known from the whole source ("Name: female"); treat it as fact.',
+    'Input is JSON. "cues" are the lines to translate. "context" and "upcoming" are nearby lines from the same scene, given only so you understand who is speaking, to whom, and what is happening. Never translate or return them. When present, "cast" lists characters whose gender is known from the whole source ("Name: female"); treat it as fact. When present, "glossary" lists names of this series as "Name = Spelling"; write each such name exactly with that spelling.',
     '',
     'Rules, most important first:',
     `1. Meaning and tone: convey the full meaning, intent, tone, register, slang and humor of every cue in idiomatic ${L}. Translate meaning, not word order. Do not drop, add, summarize, soften, censor or explain anything.`,

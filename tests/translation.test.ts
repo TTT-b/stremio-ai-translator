@@ -42,6 +42,25 @@ describe('translateSubtitle', () => {
     vi.useRealTimers();
   });
 
+  it('sends the series glossary, only the names present in the request', async () => {
+    const seen: (string[] | undefined)[] = [];
+    const spy = new FakeProvider((req) => {
+      seen.push(req.glossary);
+      return { translations: req.cues.map((c) => ({ id: c.id, text: 'x' })) };
+    });
+    const withName = {
+      ...source,
+      cues: source.cues.map((c, i) => (i === 0 ? { ...c, text: 'Hi, Naruto.' } : c)),
+    };
+    await translateSubtitle(
+      withName,
+      spy,
+      opts({ chunkSize: 1, glossary: { Naruto: 'נארוטו', Sasuke: 'סאסקה' } }),
+    );
+    expect(seen[0]).toEqual(['Naruto = נארוטו']);
+    expect(seen.flat().some((g) => g?.startsWith('Sasuke'))).toBe(false);
+  });
+
   it('translates all cues and keeps timestamps and count', async () => {
     const provider = new FakeProvider();
     const r = await translateSubtitle(source, provider, opts());

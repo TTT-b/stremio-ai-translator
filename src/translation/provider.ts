@@ -12,6 +12,8 @@ export interface TranslateChunkRequest {
   upcoming?: ChunkCue[];
   /** Characters whose gender the source makes clear ("Nisha: female"), for the whole file. */
   cast?: string[];
+  /** Fixed spellings for this series ("Name = Spelling"), only those that occur in the request. */
+  glossary?: string[];
 }
 
 export interface TokenUsage {
