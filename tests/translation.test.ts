@@ -494,6 +494,40 @@ describe('translateSubtitle', () => {
     expect(r.file.cues[0]?.text).toBe('ok:Line 1');
   });
 
+  it('remembers a chunk that kept some original lines, so a second run asks the AI nothing', async () => {
+    const many = {
+      ...source,
+      cues: Array.from({ length: 30 }, (_, i) => ({
+        index: i + 1,
+        startMs: i * 1000,
+        endMs: i * 1000 + 800,
+        text: `Line ${i + 1}`,
+      })),
+    };
+    const store = new Map<string, { id: string; text: string }[]>();
+    const chunkStore = {
+      keyFor: (c: { cues: { index: number }[] }) => c.cues.map((x) => x.index).join(','),
+      get: (k: string) => store.get(k),
+      set: (k: string, v: { id: string; text: string }[]) => void store.set(k, v),
+    };
+    const stubborn = new FakeProvider((req) => ({
+      translations: req.cues
+        .filter((c) => c.id !== '7')
+        .map((c) => ({ id: c.id, text: `ok:${c.text}` })),
+    }));
+    await translateSubtitle(
+      many,
+      stubborn,
+      opts({ chunkSize: 30, maxValidationRetries: 2, chunkStore }),
+    );
+    expect(store.size).toBe(1);
+
+    const second = new FakeProvider();
+    const r = await translateSubtitle(many, second, opts({ chunkSize: 30, chunkStore }));
+    expect(second.calls).toBe(0);
+    expect(r.file.cues[6]?.text).toBe('Line 7');
+  });
+
   it('still keeps the source text when about a sixth of a chunk is skipped (real case: 14 of 80)', async () => {
     const many = {
       ...source,

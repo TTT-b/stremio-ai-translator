@@ -199,6 +199,11 @@ const S = {
     he: 'המכסה היומית נגמרה. כתוביות חדשות יחכו למחר.',
     en: 'Daily limit reached. New subtitles will wait until tomorrow.',
   },
+  stQuotaInfo: {
+    he: 'הספירה היא של המחשב הזה בלבד ולא מסונכרנת עם מכשירים אחרים שמחוברים לאותו חשבון OpenSubtitles.',
+    en: 'This count is for this computer only and is not synced with other devices using the same OpenSubtitles account.',
+  },
+  stQuotaAck: { he: 'הבנתי', en: 'Got it' },
   stTarget: { he: 'שפת יעד', en: 'Target language' },
   stDual: { he: 'כתוביות כפולות', en: 'Dual subtitles' },
   on: { he: 'פעיל', en: 'On' },

@@ -384,6 +384,30 @@ describe('a video that is still loading', () => {
     expect(calls).toBe(1); // only the one probe
   });
 
+  it('stops waiting when the video disappears from the server (the user left it)', async () => {
+    let reads = 0;
+    let statsCalls = 0;
+    const out = await loadEmbeddedSubtitle(
+      query,
+      deps({
+        budgetMs: 2000,
+        retryBudgetMs: 60_000,
+        retryGapMs: 0,
+        sleep: async () => undefined,
+        // First look: the video is there. Every later look: gone.
+        fetchImpl: (async () =>
+          new Response(stats(++statsCalls === 1 ? paths : []))) as typeof fetch,
+        exec: async (cmd) => {
+          if (/ffprobe/i.test(cmd)) return Buffer.from(probe);
+          reads++;
+          throw new Error('not downloaded yet');
+        },
+      }),
+    );
+    expect(out).toBeUndefined();
+    expect(reads).toBe(1); // no second try after the video was gone
+  });
+
   it('stops trying when the user cancels', async () => {
     let reads = 0;
     let stop = false;

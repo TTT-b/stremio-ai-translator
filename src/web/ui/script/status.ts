@@ -121,6 +121,8 @@ $('st-skip-btn').addEventListener('click', () => {
   else if (searchOn) backgroundAct('skip');
   else if (stopJob) queueAct(stopJob, 'cancel');
 });
+let quotaAcked = '';
+if ($('st-quota-ack')) $('st-quota-ack').onclick = () => { quotaAcked = $('st-quota-hint').dataset.level || ''; $('st-quota-hint').classList.replace('flex', 'hidden'); };
 const refreshStatus = async () => {
   try {
     const r = await (await fetch('/api/status')).json();
@@ -205,8 +207,13 @@ const refreshStatus = async () => {
       $('st-quota-bar').style.width = share + '%';
       $('st-quota-bar').className = 'h-full rounded-full transition-[width] duration-500 ' + (share >= 90 ? 'bg-rose-400' : share >= 70 ? 'bg-amber-400' : 'bg-warm-ok');
       const hint = $('st-quota-hint');
-      hint.textContent = q.left === 0 ? T.stQuotaOut : q.left < 10 ? f(T.stQuotaLow, {n: q.left}) : '';
-      hint.className = 'mt-1 text-xs ' + (q.left === 0 ? 'text-rose-300' : q.left < 10 ? 'text-amber-300' : 'text-warm-mu') + (hint.textContent ? '' : ' hidden');
+      const level0 = q.left === 0 ? 'out' : q.left < 10 ? 'low' : '';
+      // The warning shows once per app start; the OK button hides it until the level changes.
+      const msg = level0 === 'out' ? T.stQuotaOut : level0 === 'low' ? f(T.stQuotaLow, {n: q.left}) : '';
+      const show = !!msg && quotaAcked !== level0;
+      $('st-quota-hint-text').textContent = msg;
+      hint.dataset.level = level0;
+      hint.className = 'mt-1 items-center justify-between gap-2 text-xs ' + (level0 === 'out' ? 'text-rose-300' : 'text-amber-300') + (show ? ' flex' : ' hidden');
       const osRow = document.querySelector('[data-check-row="opensubtitles"][data-base]');
       const level = q.left === 0 ? 'out' : q.left < 10 ? 'low' : '';
       if (osRow && osRow.dataset.quota !== level) { osRow.dataset.quota = level; paintRow(osRow); }

@@ -629,10 +629,9 @@ async function translateOneChunkNow(
       source.map((c) => ({ id: c.id, text: have.get(c.id) as string })),
     ).length === 0
   ) {
-    return {
-      translations: source.map((c) => ({ id: c.id, text: have.get(c.id) as string })),
-      usage,
-    };
+    const rescued = source.map((c) => ({ id: c.id, text: have.get(c.id) as string }));
+    saveChunk(opts, storeKey, rescued);
+    return { translations: rescued, usage };
   }
   if (
     skipped.length > 0 &&
@@ -644,11 +643,23 @@ async function translateOneChunkNow(
       'AI kept skipping some lines, keeping their original text',
     );
     const filled: ChunkCue[] = source.map((c) => ({ id: c.id, text: have.get(c.id) ?? c.text }));
+    // Remembered, so a retry of the episode does not pay again for the same stubborn lines.
+    saveChunk(opts, storeKey, filled);
     return { translations: filled, usage };
   }
   throw new AppError('TRANSLATION_VALIDATION_FAILED', `chunk ${chunk.number + 1}/${total}`, {
     problems: lastProblems.slice(0, 10),
   });
+}
+
+/** Remember a finished chunk; a cache problem must never fail the translation. */
+function saveChunk(opts: PipelineOptions, key: string | undefined, cues: ChunkCue[]): void {
+  if (!opts.chunkStore || !key) return;
+  try {
+    opts.chunkStore.set(key, cues);
+  } catch {
+    /* ignore */
+  }
 }
 
 async function translateOneChunk(

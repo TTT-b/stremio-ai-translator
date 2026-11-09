@@ -568,6 +568,14 @@ export async function loadEmbeddedSubtitle(
     ) {
       await sleep(retryGap);
       if (deps.shouldStop?.()) break;
+      // The user left the video: Stremio's server no longer lists it, so waiting is pointless.
+      const stillThere = await findStream(deps.serverUrl, query.filename, deps.fetchImpl).catch(
+        () => found,
+      );
+      if (!stillThere) {
+        log.info({ embedded: 'left-video' }, 'the video is no longer playing; stopped waiting');
+        break;
+      }
       if (probeFailed) {
         tracks = undefined;
         probeFailed = false;

@@ -12,6 +12,30 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '2.0.2': {
+    en: [
+      {
+        title: 'Quieter quota card',
+        text: 'The low-quota warning shows once each time the app opens, with a small button to dismiss it. A small i icon explains that the count is only for this computer and is not synced with other devices.',
+      },
+      {
+        title: 'Waiting for the video stops when you leave',
+        text: 'If you leave the video while the app waits for its own subtitle, the wait ends instead of running to the end.',
+      },
+      'Chunks that kept some original lines are remembered, so a retry does not pay for the same lines again. The README is much shorter.',
+    ],
+    he: [
+      {
+        title: 'כרטיס מכסה פחות מציק',
+        text: 'אזהרת המכסה הנמוכה מופיעה פעם אחת בכל פתיחה של האפליקציה, עם כפתור קטן לסגירה. אייקון i קטן מסביר שהמספר הוא של המחשב הזה בלבד ולא מסונכרן עם מכשירים אחרים.',
+      },
+      {
+        title: 'ההמתנה לסרט נעצרת כשיוצאים ממנו',
+        text: 'אם יוצאים מהסרט בזמן שהאפליקציה מחכה לכתובית שבתוכו, ההמתנה מסתיימת במקום להימשך עד הסוף.',
+      },
+      'קטעים ששמרו חלק מהשורות המקוריות נזכרים, כך שניסיון חוזר לא משלם שוב על אותן שורות. ה-README קצר בהרבה.',
+    ],
+  },
   '2.0.1': {
     en: [
       {
