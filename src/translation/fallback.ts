@@ -61,6 +61,11 @@ export class ModelFallbackProvider implements TranslationProvider {
     return this.first().normalizeError(err);
   }
 
+  /** The last model of the list (the strongest one), unless it is the only model. */
+  rescueProvider(): TranslationProvider | undefined {
+    return this.providers.length > 1 ? this.providers[this.providers.length - 1] : undefined;
+  }
+
   async translateChunk(
     request: TranslateChunkRequest,
     signal?: AbortSignal,

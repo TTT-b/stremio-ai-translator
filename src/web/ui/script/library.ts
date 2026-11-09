@@ -10,6 +10,25 @@ const dateText = (ms) => new Date(ms).toLocaleDateString(UI === 'he' ? 'he-IL' :
 let libItems = [];
 const picked = new Set();
 const openGroups = new Set();
+const closedSeasons = new Set();
+const AVATAR_COLORS = ['#e8b25c', '#5aa9f0', '#4cc38a', '#c58be8'];
+const initials = (title) => (title.split(/[^\\p{L}\\p{N}]+/u).filter(Boolean).slice(0, 2).map(w => w[0]).join('') || '?').toUpperCase();
+// The "episode is not open in Stremio" dialog: resolves true when the user will pick a file instead.
+const askNoStream = () => new Promise((resolve) => {
+  const modal = $('nostream-modal');
+  const setOpen = (open) => { modal.classList.toggle('hidden', !open); modal.classList.toggle('flex', open); };
+  const finish = (useFile) => { setOpen(false); resolve(useFile); };
+  $('nostream-open').onclick = async () => {
+    try {
+      const r = await post('/api/open-stremio', {});
+      toast(r.ok, r.ok ? T.openStremioOk : r.code === 'NOT_INSTALLED' ? T.openStremioMissing : FAILED);
+    } catch { toast(false, FAILED); }
+  };
+  $('nostream-file').onclick = () => finish(true);
+  $('nostream-cancel').onclick = () => finish(false);
+  modal.onclick = (ev) => { if (ev.target === modal) finish(false); };
+  setOpen(true);
+});
 const checkbox = (checked, indeterminate, label, onChange) => {
   const c = el('input', 'h-4 w-4 shrink-0 cursor-pointer accent-warm-ac');
   c.type = 'checkbox'; c.checked = checked; c.indeterminate = indeterminate; c.setAttribute('aria-label', label);
@@ -72,6 +91,12 @@ const episodeRow = (e) => {
   const actions = el('span', 'flex shrink-0 flex-wrap items-center gap-2');
   actions.append(dl);
   row.append(actions);
+  const del = el('button', btnCls + ' !px-2');
+  del.type = 'button';
+  del.title = T.libDeleteOne; del.setAttribute('aria-label', T.libDeleteOne);
+  del.append(icon('<path d="M6 6l12 12M18 6L6 18"/>'));
+  del.addEventListener('click', () => askDelete(false, [e.id]));
+  row.append(del);
   if (window.desktop && window.desktop.pickVideo) {
     const wrap = el('span', '');
     wrap.style.position = 'relative';
@@ -173,6 +198,8 @@ const episodeRow = (e) => {
             payload = {stremio: true, output: out};
           }
         } catch { payload = null; }
+        // Stremio does not hold the episode: explain how to open it, or take a file from the computer.
+        if (!payload && !(await askNoStream())) return;
         const video = payload ? 'stremio' : await window.desktop.pickVideo(name);
         if (!video) return;
         const task = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -203,18 +230,77 @@ const episodeRow = (e) => {
   }
   return row;
 };
-const section = (key, title, count, items, body) => {
+const makeAvatar = (title, colorIndex) => {
+  const a = el('span', 'grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[13px] font-black text-warm-bg', initials(title));
+  a.style.background = AVATAR_COLORS[colorIndex % AVATAR_COLORS.length];
+  a.setAttribute('aria-hidden', 'true');
+  return a;
+};
+const section = (key, title, count, items, body, colorIndex) => {
   const d = el('details', 'group rounded-2xl border border-warm-ln bg-warm-sf');
   d.open = openGroups.has(key);
   d.addEventListener('toggle', () => { if (d.open) openGroups.add(key); else openGroups.delete(key); });
   const s = el('summary', 'flex cursor-pointer list-none items-center gap-3 rounded-2xl p-3.5 transition hover:bg-warm-bg/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac [&::-webkit-details-marker]:hidden');
   const ids = items.map(e => e.id), st = groupState(ids);
   s.append(checkbox(st.checked, st.partial, title, (on) => setPicked(ids, on)));
-  s.append(el('span', 'min-w-0 flex-1 truncate text-sm font-bold text-warm-tx', title));
-  s.append(el('span', 'shrink-0 text-xs text-warm-mu', count));
+  const name = el('b', 'block truncate text-sm font-bold text-warm-tx', title);
+  name.dir = 'ltr'; name.style.textAlign = UI === 'he' ? 'right' : 'left';
+  const text = el('span', 'min-w-0 flex-1');
+  text.append(name, el('span', 'block text-xs text-warm-mu', count));
+  s.append(makeAvatar(title, colorIndex), text);
   const chev = el('span', 'inline-block text-warm-ac transition-transform duration-200 group-open:rotate-180', '▾');
   chev.setAttribute('aria-hidden', 'true');
   s.append(chev);
+  d.append(s, body);
+  return d;
+};
+const chevron = (cls) => { const c = el('span', cls, '▾'); c.setAttribute('aria-hidden', 'true'); return c; };
+const seasonBlock = (key, s, eps) => {
+  const sKey = 's:' + key + ':' + s;
+  const d = el('details', 'rounded-xl border-s-2 border-warm-ac bg-warm-bg/50');
+  d.open = !closedSeasons.has(sKey);
+  const chev = chevron('inline-block text-warm-ac transition-transform duration-200');
+  const turn = () => { chev.style.transform = d.open ? 'rotate(180deg)' : ''; };
+  d.addEventListener('toggle', () => { if (d.open) closedSeasons.delete(sKey); else closedSeasons.add(sKey); turn(); });
+  turn();
+  const ids = eps.map(e => e.id), st = groupState(ids);
+  const head = el('summary', 'flex cursor-pointer list-none items-center gap-2 rounded-xl px-2.5 py-2 text-[13px] font-bold text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac [&::-webkit-details-marker]:hidden');
+  const title = f(T.libSeason, {n: s});
+  head.append(checkbox(st.checked, st.partial, title, (on) => setPicked(ids, on)), el('span', 'flex-1', title), el('span', 'rounded-full border border-warm-ln px-2 py-0.5 text-[11px] font-semibold text-warm-mu', f(T.libEpisodes, {n: eps.length})), chev);
+  const body = el('div', 'flex flex-col gap-0.5 px-1 pb-2');
+  for (const e of eps) body.append(episodeRow(e));
+  d.append(head, body);
+  return d;
+};
+// Layout "C": series > season > episodes, a round initials avatar on every series.
+const seriesGroup = (key, g, colorIndex) => {
+  const bySeason = new Map();
+  for (const e of g.items) { const s = e.season ?? 1; if (!bySeason.has(s)) bySeason.set(s, []); bySeason.get(s).push(e); }
+  const d = el('details', 'rounded-2xl border border-warm-ln bg-warm-sf');
+  d.open = openGroups.has(key);
+  const chev = chevron('inline-block text-warm-ac transition-transform duration-200');
+  const turn = () => { chev.style.transform = d.open ? 'rotate(180deg)' : ''; };
+  d.addEventListener('toggle', () => { if (d.open) openGroups.add(key); else openGroups.delete(key); turn(); });
+  turn();
+  const ids = g.items.map(e => e.id), st = groupState(ids);
+  const s = el('summary', 'flex cursor-pointer list-none items-center gap-3 rounded-2xl p-3.5 transition hover:bg-warm-bg/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac [&::-webkit-details-marker]:hidden');
+  const avatar = makeAvatar(g.title, colorIndex);
+  const name = el('b', 'block truncate text-sm font-bold text-warm-tx', g.title);
+  name.dir = 'ltr'; name.style.textAlign = UI === 'he' ? 'right' : 'left';
+  const seasons = bySeason.size === 1 ? T.libOneSeason : f(T.libSeasons, {n: bySeason.size});
+  const episodes = g.items.length === 1 ? T.libOneEpisode : f(T.libEpisodes, {n: g.items.length});
+  const size = el('span', '', sizeText(g.items.reduce((n, e) => n + e.bytes, 0)));
+  size.dir = 'ltr';
+  const meta = el('span', 'block text-xs text-warm-mu');
+  meta.append(seasons + ' · ' + episodes + ' · ', size);
+  const text = el('span', 'min-w-0 flex-1');
+  text.append(name, meta);
+  s.append(checkbox(st.checked, st.partial, g.title, (on) => setPicked(ids, on)), avatar, text, chev);
+  const body = el('div', 'flex flex-col gap-2 px-3 pb-3');
+  for (const [n, eps] of [...bySeason.entries()].sort((a, b) => a[0] - b[0])) {
+    eps.sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0));
+    body.append(seasonBlock(key, n, eps));
+  }
   d.append(s, body);
   return d;
 };
@@ -235,25 +321,15 @@ const drawLib = () => {
     ...[...films.entries()].map(([key, g]) => ['m:' + key, g, true]),
     ...[...shows.entries()].map(([key, g]) => [key, g, false]),
   ].sort((a, b) => a[1].title.localeCompare(b[1].title));
+  let avatarIndex = 0;
   for (const [key, g, isFilm] of groups) {
     if (isFilm) {
       const body = el('div', 'flex flex-col gap-0.5 px-3 pb-3');
       g.items.forEach((e, i) => { e.label = g.items.length > 1 ? f(T.libSubtitleN, {n: i + 1}) : ''; body.append(episodeRow(e)); });
-      list.append(section(key, g.title, f(T.libSubtitleCount, {n: g.items.length}), g.items, body));
+      list.append(section(key, g.title, f(T.libSubtitleCount, {n: g.items.length}), g.items, body, avatarIndex++));
       continue;
     }
-    const bySeason = new Map();
-    for (const e of g.items) { const s = e.season ?? 1; if (!bySeason.has(s)) bySeason.set(s, []); bySeason.get(s).push(e); }
-    const body = el('div', 'flex flex-col gap-2 px-3 pb-3');
-    for (const [s, eps] of [...bySeason.entries()].sort((a, b) => a[0] - b[0])) {
-      eps.sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0));
-      const ids = eps.map(e => e.id), st = groupState(ids);
-      const head = el('label', 'flex cursor-pointer items-center gap-3 px-2 pt-1 text-xs font-bold uppercase tracking-wide text-warm-ac');
-      head.append(checkbox(st.checked, st.partial, f(T.libSeason, {n: s}), (on) => setPicked(ids, on)), el('span', '', f(T.libSeason, {n: s})));
-      body.append(head);
-      for (const e of eps) body.append(episodeRow(e));
-    }
-    list.append(section(key, g.title, f(T.libEpisodes, {n: g.items.length}), g.items, body));
+    list.append(seriesGroup(key, g, avatarIndex++));
   }
   $('lib-empty').hidden = libItems.length > 0;
   const total = libItems.reduce((n, e) => n + e.bytes, 0);
@@ -262,12 +338,10 @@ const drawLib = () => {
   const everyPicked = libItems.length > 0 && libItems.every(e => picked.has(e.id));
   $('lib-all').textContent = everyPicked ? T.libSelectNone : T.libSelectAll;
   $('lib-all').hidden = libItems.length === 0;
-  const sel = $('lib-del-sel');
-  sel.disabled = picked.size === 0;
-  $('lib-sel-count').textContent = f(T.libSelectedCount, {n: picked.size});
-  $('lib-sel-bar').classList.toggle('hidden', picked.size === 0);
-  $('lib-sel-bar').classList.toggle('flex', picked.size > 0);
+  // One delete button at the bottom: "delete all", or "delete selected (n)" with a "clear" button.
+  $('lib-del-all').textContent = picked.size ? f(T.libDeleteSel, {n: picked.size}) : T.libDeleteAll;
   $('lib-del-all').disabled = libItems.length === 0;
+  $('lib-none').classList.toggle('hidden', picked.size === 0);
 };
 const loadLib = async () => {
   try {
@@ -279,7 +353,7 @@ const loadLib = async () => {
   drawLib();
 };
 // Every series starts closed each time the screen is opened; the user opens the one they want.
-$('open-library').addEventListener('click', () => { openGroups.clear(); setView('lib'); });
+$('open-library').addEventListener('click', () => { openGroups.clear(); closedSeasons.clear(); setView('lib'); });
 $('lib-back').addEventListener('click', () => setView('dash'));
 $('lib-all').addEventListener('click', () => {
   const every = libItems.length > 0 && libItems.every(e => picked.has(e.id));
@@ -289,13 +363,13 @@ $('lib-none').addEventListener('click', () => setPicked([...picked], false));
 const delModal = $('del-modal');
 let pendingDelete = null;
 const setDelModal = (open) => { delModal.classList.toggle('hidden', !open); delModal.classList.toggle('flex', open); };
-const askDelete = (all) => {
-  pendingDelete = all ? {all: true} : {ids: [...picked]};
-  $('del-title').textContent = all ? T.libConfirmAll : f(T.libConfirmSel, {n: picked.size});
+const askDelete = (all, ids) => {
+  const list = ids || [...picked];
+  pendingDelete = all ? {all: true} : {ids: list};
+  $('del-title').textContent = all ? T.libConfirmAll : list.length === 1 ? T.libConfirmOne : f(T.libConfirmSel, {n: list.length});
   setDelModal(true);
 };
-$('lib-del-sel').addEventListener('click', () => { if (picked.size) askDelete(false); });
-$('lib-del-all').addEventListener('click', () => askDelete(true));
+$('lib-del-all').addEventListener('click', () => askDelete(picked.size === 0));
 $('del-no').addEventListener('click', () => setDelModal(false));
 delModal.addEventListener('click', (e) => { if (e.target === delModal) setDelModal(false); });
 $('del-yes').addEventListener('click', async () => {
@@ -309,7 +383,6 @@ $('del-yes').addEventListener('click', async () => {
       if (!r.ok) throw new Error();
       removed += r.removed;
     }
-    picked.clear();
     toast(true, f(T.libDeleted, {n: removed}));
   } catch { toast(false, T.libDeleteFail); }
   loadLib();

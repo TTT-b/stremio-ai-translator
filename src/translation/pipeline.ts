@@ -11,7 +11,7 @@ import {
   findSuspiciousLines,
   stripForeignScripts,
 } from '../subtitles/validate';
-import type { TokenUsage, TranslationProvider } from './provider';
+import type { TokenUsage, TranslateChunkResult, TranslationProvider } from './provider';
 import { withRetry } from './retry';
 
 /** Persists validated chunk translations so a failed job resumes instead of restarting. */
@@ -332,8 +332,139 @@ async function repairSuspiciousLines(
   }
 }
 
+/** Lines per request on the last attempt, when the AI keeps failing the same way on a bigger one. */
+const LAST_TRY_GROUP = 8;
+
+/** A 4xx answer (a bad request) will not change by asking again. */
+const isClientError = (err: AppError): boolean => {
+  const status = err.details['status'];
+  return typeof status === 'number' && status >= 400 && status < 500;
+};
+
+/** The lines cut into `n` runs of nearly equal size (one run when n <= 1). */
+export function splitGroups<T>(items: T[], n: number): T[][] {
+  const parts = Math.max(1, Math.min(n, items.length));
+  const size = Math.ceil(items.length / parts);
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out.length > 0 ? out : [items];
+}
+
 /** Largest share of a chunk's lines that may stay untranslated when the AI keeps skipping them. */
-const MAX_SKIPPED_SHARE = 0.1;
+const MAX_SKIPPED_SHARE = 0.25;
+
+/** One request to one model, with the rate-limit wait and the transient-error retries around it. */
+function askModel(
+  model: TranslationProvider,
+  sub: ChunkCue[],
+  context: ChunkCue[],
+  chunk: Chunk,
+  opts: PipelineOptions,
+  throttle: Throttle,
+  log: Logger,
+): Promise<TranslateChunkResult> {
+  return withRetry(
+    async () =>
+      waitOutRateLimits(
+        async () => {
+          await throttle.pace();
+          const reply = await withKick(
+            model.translateChunk({
+              targetLanguage: opts.targetLanguageName,
+              targetLanguageCode: opts.targetLanguageCode,
+              cues: sub,
+              context,
+              upcoming: chunk.upcoming,
+              ...(opts.cast?.length ? { cast: opts.cast } : {}),
+            }),
+            opts,
+          );
+          throttle.onSuccess();
+          return reply;
+        },
+        opts,
+        log,
+        throttle,
+      ),
+    {
+      maxAttempts: opts.maxTransientAttempts ?? 4,
+      // Overload / rate limits were already waited out above; do not wait them out again.
+      // A malformed answer is asked again by the attempt loop (smaller, not identical).
+      shouldRetry: (e) =>
+        !isBackoffError(e) && !(isAppError(e) && e.code === 'PROVIDER_RESPONSE_INVALID'),
+      baseDelayMs: opts.retryBaseDelayMs ?? 1000,
+      maxDelayMs: opts.retryMaxDelayMs ?? 30_000,
+      ...(opts.sleep ? { sleep: opts.sleep } : {}),
+      onRetry: ({ attempt: a, delayMs, error }) =>
+        log.warn(
+          {
+            stage: 'API',
+            attempt: a,
+            delayMs,
+            errorCode: isAppError(error) ? error.code : 'UNKNOWN',
+          },
+          'transient provider error, retrying',
+        ),
+    },
+  );
+}
+
+/**
+ * Last help before a skipped line would stay in the source language: the stronger model (when
+ * there is one) gets the missing lines in small groups, then every line still missing alone.
+ * Whatever it returns is added to `have`; a failure here only means the line is not rescued.
+ */
+async function rescueSkipped(
+  chunk: Chunk,
+  source: ChunkCue[],
+  have: Map<string, string>,
+  provider: TranslationProvider,
+  opts: PipelineOptions,
+  throttle: Throttle,
+  log: Logger,
+): Promise<void> {
+  const rescuer = provider.rescueProvider?.() ?? provider;
+  const accept = (reply: TranslateChunkResult, asked: ChunkCue[]): void => {
+    const wanted = new Set(asked.map((c) => c.id));
+    for (const t of reply.translations) {
+      if (typeof t?.id !== 'string' || typeof t.text !== 'string') continue;
+      if (!wanted.has(t.id) || have.has(t.id) || /```/.test(t.text) || t.text.trim() === '') {
+        continue;
+      }
+      have.set(t.id, t.text);
+    }
+  };
+  const run = async (asked: ChunkCue[]): Promise<void> => {
+    if (opts.isCancelled?.()) throw new CancelledError();
+    const nearby = source.filter(
+      (c, i) =>
+        have.has(c.id) && [-2, -1, 1, 2].some((k) => asked.some((a) => a.id === source[i + k]?.id)),
+    );
+    try {
+      accept(
+        await askModel(rescuer, asked, [...chunk.context, ...nearby], chunk, opts, throttle, log),
+        asked,
+      );
+    } catch (err) {
+      if (err instanceof CancelledError) throw err;
+      log.warn(
+        {
+          stage: 'VALIDATION',
+          lines: asked.length,
+          errorCode: isAppError(err) ? err.code : 'UNKNOWN',
+        },
+        'rescue request failed',
+      );
+    }
+  };
+  for (const group of splitGroups(
+    source.filter((c) => !have.has(c.id)),
+    Math.ceil(source.filter((c) => !have.has(c.id)).length / LAST_TRY_GROUP),
+  )) {
+    if (group.length > 0) await run(group);
+  }
+  for (const line of source.filter((c) => !have.has(c.id))) await run([line]);
+}
 
 async function translateOneChunkNow(
   chunk: Chunk,
@@ -347,6 +478,8 @@ async function translateOneChunkNow(
   const source: ChunkCue[] = chunk.cues.map((c) => ({ id: String(c.index), text: c.text }));
   const attempts = opts.maxValidationRetries + 1;
   let lastProblems: string[] = [];
+  /** How many requests the lines still to do are split into (grows after a cut-off or a failure). */
+  let splitInto = 1;
 
   if (opts.isCancelled?.()) throw new CancelledError();
   const storeKey = opts.chunkStore?.keyFor(chunk);
@@ -377,50 +510,20 @@ async function translateOneChunkNow(
         !todoIds.has(c.id) && [-2, -1, 1, 2].some((k) => todoIds.has(source[i + k]?.id ?? '')),
     );
     try {
-      const result = await withRetry(
-        async () =>
-          waitOutRateLimits(
-            async () => {
-              await throttle.pace();
-              const reply = await withKick(
-                provider.translateChunk({
-                  targetLanguage: opts.targetLanguageName,
-                  targetLanguageCode: opts.targetLanguageCode,
-                  cues: todo,
-                  context: [...chunk.context, ...nearbyDone],
-                  upcoming: chunk.upcoming,
-                  ...(opts.cast?.length ? { cast: opts.cast } : {}),
-                }),
-                opts,
-              );
-              throttle.onSuccess();
-              return reply;
-            },
-            opts,
-            log,
-            throttle,
-          ),
-        {
-          maxAttempts: opts.maxTransientAttempts ?? 4,
-          // Overload / rate limits were already waited out above; do not wait them out again.
-          shouldRetry: (e) => !isBackoffError(e),
-          baseDelayMs: opts.retryBaseDelayMs ?? 1000,
-          maxDelayMs: opts.retryMaxDelayMs ?? 30_000,
-          ...(opts.sleep ? { sleep: opts.sleep } : {}),
-          onRetry: ({ attempt: a, delayMs, error }) =>
-            log.warn(
-              {
-                stage: 'API',
-                attempt: a,
-                delayMs,
-                errorCode: isAppError(error) ? error.code : 'UNKNOWN',
-              },
-              'transient provider error, retrying',
-            ),
+      const groups = splitGroups(todo, splitInto);
+      const ask = (sub: ChunkCue[]): Promise<TranslateChunkResult> =>
+        askModel(provider, sub, [...chunk.context, ...nearbyDone], chunk, opts, throttle, log);
+      const replies: TranslateChunkResult[] = [];
+      for (const group of groups) replies.push(await ask(group));
+      const result: Required<TranslateChunkResult> = {
+        translations: replies.flatMap((r) => r.translations),
+        usage: {
+          inputTokens: replies.reduce((n, r) => n + (r.usage?.inputTokens ?? 0), 0),
+          outputTokens: replies.reduce((n, r) => n + (r.usage?.outputTokens ?? 0), 0),
         },
-      );
-      usage.inputTokens += result.usage?.inputTokens ?? 0;
-      usage.outputTokens += result.usage?.outputTokens ?? 0;
+      };
+      usage.inputTokens += result.usage.inputTokens;
+      usage.outputTokens += result.usage.outputTokens;
 
       // Stray foreign-alphabet letters are removed, not retried (a retry of a big chunk is costly).
       const cleaned = stripForeignScripts(chunk.cues, result.translations, opts.targetLanguageCode);
@@ -471,6 +574,10 @@ async function translateOneChunkNow(
         return { translations: repaired, usage };
       }
       lastProblems = problems;
+      // An identical request fails identically: the last attempt asks for the missing lines in small groups.
+      if (attempt + 1 === attempts) {
+        splitInto = Math.max(splitInto, Math.ceil(todo.length / LAST_TRY_GROUP));
+      }
       log.warn(
         {
           stage: 'VALIDATION',
@@ -482,8 +589,17 @@ async function translateOneChunkNow(
       );
     } catch (err) {
       // Malformed provider output is worth another attempt; anything else is final.
-      if (isAppError(err) && err.code === 'PROVIDER_RESPONSE_INVALID' && attempt < attempts) {
+      if (
+        isAppError(err) &&
+        err.code === 'PROVIDER_RESPONSE_INVALID' &&
+        attempt < attempts &&
+        !isClientError(err)
+      ) {
         lastProblems = [err.message];
+        // The answer was cut off at the output limit: ask again for half as many lines per request.
+        if (err.details['truncated'] === true) {
+          splitInto = Math.min(todo.length, Math.max(2, splitInto * 2));
+        }
         log.warn(
           { stage: 'VALIDATION', attempt, errorCode: err.code },
           'malformed response, retrying',
@@ -493,9 +609,31 @@ async function translateOneChunkNow(
       throw err;
     }
   }
-  // The AI keeps skipping a few lines: keep their original text rather than lose the whole episode.
-  const skipped = source.filter((c) => !have.has(c.id));
+  // The AI keeps skipping some lines: a stronger model, then one line at a time, gets them first.
   const onlyMissing = lastProblems.every((p) => p.startsWith('missing id '));
+  if (onlyMissing && have.size < source.length) {
+    const before = source.length - have.size;
+    await rescueSkipped(chunk, source, have, provider, opts, throttle, log);
+    log.info(
+      { stage: 'VALIDATION', skipped: before, rescued: before - (source.length - have.size) },
+      'lines the AI skipped were asked again one by one',
+    );
+  }
+  // Still missing: keep their original text rather than lose the whole episode.
+  const skipped = source.filter((c) => !have.has(c.id));
+  if (
+    onlyMissing &&
+    skipped.length === 0 &&
+    findChunkProblems(
+      chunk.cues,
+      source.map((c) => ({ id: c.id, text: have.get(c.id) as string })),
+    ).length === 0
+  ) {
+    return {
+      translations: source.map((c) => ({ id: c.id, text: have.get(c.id) as string })),
+      usage,
+    };
+  }
   if (
     skipped.length > 0 &&
     onlyMissing &&

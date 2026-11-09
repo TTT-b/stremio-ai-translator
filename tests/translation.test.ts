@@ -112,6 +112,31 @@ describe('translateSubtitle', () => {
     expect(r.file.cues[0]?.text).toBe(`${HEB} lad`);
   });
 
+  it('asks again in smaller groups when the answer is cut off, not the same request', async () => {
+    const sizes: number[] = [];
+    const cutOff = new FakeProvider((req) => {
+      sizes.push(req.cues.length);
+      if (req.cues.length > 1) {
+        throw new AppError('PROVIDER_RESPONSE_INVALID', 'cut', { truncated: true });
+      }
+      return { translations: req.cues.map((c) => ({ id: c.id, text: `T:${c.text}` })) };
+    });
+    const r = await translateSubtitle(source, cutOff, opts({ chunkSize: 10 }));
+    expect(r.file.cues).toHaveLength(3);
+    expect(sizes.slice(0, 2)).toEqual([3, 2]);
+    expect(Math.max(...sizes.slice(2))).toBe(1);
+  });
+
+  it('does not repeat a request the provider rejected as a bad request (4xx)', async () => {
+    const bad = new FakeProvider(() => {
+      throw new AppError('PROVIDER_RESPONSE_INVALID', 'bad', { status: 400 });
+    });
+    await expect(translateSubtitle(source, bad, opts({ chunkSize: 10 }))).rejects.toMatchObject({
+      code: 'PROVIDER_RESPONSE_INVALID',
+    });
+    expect(bad.calls).toBe(1);
+  });
+
   it('dual mode keeps the original on top and the translation directly below', async () => {
     const r = await translateSubtitle(source, new FakeProvider(), opts({ dualSubtitles: true }));
     expect(r.file.cues[0]?.text).toBe('Hello there.\nT:Hello there.');
@@ -439,7 +464,8 @@ describe('translateSubtitle', () => {
     ).rejects.toMatchObject({
       code: 'TRANSLATION_VALIDATION_FAILED',
     });
-    expect(provider.calls).toBe(2);
+    // Two normal attempts, then the rescue (small groups, then single lines) before giving up.
+    expect(provider.calls).toBeGreaterThan(2);
   });
 
   it('keeps the source text of a few lines the AI keeps skipping instead of failing the episode', async () => {
@@ -466,6 +492,120 @@ describe('translateSubtitle', () => {
     expect(r.file.cues).toHaveLength(30);
     expect(r.file.cues[6]?.text).toBe('Line 7');
     expect(r.file.cues[0]?.text).toBe('ok:Line 1');
+  });
+
+  it('still keeps the source text when about a sixth of a chunk is skipped (real case: 14 of 80)', async () => {
+    const many = {
+      ...source,
+      cues: Array.from({ length: 80 }, (_, i) => ({
+        index: i + 1,
+        startMs: i * 1000,
+        endMs: i * 1000 + 800,
+        text: `Line ${i + 1}`,
+      })),
+    };
+    const skipped = new Set(Array.from({ length: 14 }, (_, i) => String(i * 5 + 1)));
+    const provider = new FakeProvider((req) => ({
+      translations: req.cues
+        .filter((c) => !skipped.has(c.id))
+        .map((c) => ({ id: c.id, text: `ok:${c.text}` })),
+    }));
+    const r = await translateSubtitle(
+      many,
+      provider,
+      opts({ chunkSize: 80, maxValidationRetries: 2 }),
+    );
+    expect(r.file.cues).toHaveLength(80);
+    expect(r.file.cues[0]?.text).toBe('Line 1');
+    expect(r.file.cues[1]?.text).toBe('ok:Line 2');
+  });
+
+  describe('rescue of lines the AI keeps skipping', () => {
+    const eighty = {
+      ...source,
+      cues: Array.from({ length: 80 }, (_, i) => ({
+        index: i + 1,
+        startMs: i * 1000,
+        endMs: i * 1000 + 800,
+        text: `Line ${i + 1}`,
+      })),
+    };
+    const skipped = new Set(Array.from({ length: 14 }, (_, i) => String(i * 5 + 1)));
+    /** A small model that never returns the skipped lines, however it is asked. */
+    const weakProvider = () =>
+      new FakeProvider((req) => ({
+        translations: req.cues
+          .filter((c) => !skipped.has(c.id))
+          .map((c) => ({ id: c.id, text: `weak:${c.text}` })),
+      }));
+
+    it('asks a stronger model for the missing lines only, so none stay in the source language', async () => {
+      const strong = new FakeProvider((req) => ({
+        translations: req.cues.map((c) => ({ id: c.id, text: `strong:${c.text}` })),
+      }));
+      const weak = Object.assign(weakProvider(), { rescueProvider: () => strong });
+      const r = await translateSubtitle(
+        eighty,
+        weak,
+        opts({ chunkSize: 80, maxValidationRetries: 2 }),
+      );
+      expect(r.file.cues).toHaveLength(80);
+      expect(r.file.cues[0]?.text).toBe('strong:Line 1');
+      expect(r.file.cues[1]?.text).toBe('weak:Line 2');
+      expect(r.file.cues.some((c) => /^Line \d+$/.test(c.text))).toBe(false);
+      const asked = strong.calls;
+      expect(asked).toBeGreaterThan(0);
+      expect(asked).toBeLessThanOrEqual(3); // 14 lines in groups of 8
+    });
+
+    it('goes line by line when a group is still skipped, and never keeps the source text', async () => {
+      // The strong model drops lines when asked for several, but answers a single line.
+      const strong = new FakeProvider((req) => ({
+        translations: req.cues
+          .filter(() => req.cues.length === 1)
+          .map((c) => ({ id: c.id, text: `strong:${c.text}` })),
+      }));
+      const weak = Object.assign(weakProvider(), { rescueProvider: () => strong });
+      const r = await translateSubtitle(
+        eighty,
+        weak,
+        opts({ chunkSize: 80, maxValidationRetries: 2 }),
+      );
+      expect(r.file.cues[0]?.text).toBe('strong:Line 1');
+      expect(r.file.cues.some((c) => /^Line \d+$/.test(c.text))).toBe(false);
+    });
+
+    it('works line by line on the same model when there is no stronger one', async () => {
+      const only = new FakeProvider((req) => ({
+        translations: req.cues
+          .filter((c) => req.cues.length === 1 || !skipped.has(c.id))
+          .map((c) => ({ id: c.id, text: `ok:${c.text}` })),
+      }));
+      const r = await translateSubtitle(
+        eighty,
+        only,
+        opts({ chunkSize: 80, maxValidationRetries: 2 }),
+      );
+      expect(r.file.cues.every((c) => c.text.startsWith('ok:'))).toBe(true);
+    });
+
+    it('reports the lines it could not rescue by number only', async () => {
+      const lines: Record<string, unknown>[] = [];
+      const logger = silentLogger();
+      const spy = vi.spyOn(logger, 'child').mockReturnValue({
+        ...logger,
+        info: () => undefined,
+        warn: (o: Record<string, unknown>) => void lines.push(o),
+        debug: () => undefined,
+        error: () => undefined,
+        child: () => logger,
+      } as never);
+      await translateSubtitle(eighty, weakProvider(), opts({ chunkSize: 80, logger }));
+      spy.mockRestore();
+      const kept = lines.find((l) => 'rescued' in l || 'skipped' in l);
+      expect(kept).toBeDefined();
+      expect(JSON.stringify(kept)).not.toContain('Line ');
+    });
   });
 
   it('retries transient errors but not invalid-key errors', async () => {
@@ -723,6 +863,25 @@ describe('GeminiProvider', () => {
         context: [],
       }),
     ).rejects.toMatchObject({ code: 'PROVIDER_RESPONSE_INVALID' });
+  });
+
+  it('a model that stopped at its output limit is reported as cut off', async () => {
+    const p = providerWith({
+      models: {
+        generateContent: async () => ({
+          text: '{"translations":[',
+          candidates: [{ finishReason: 'MAX_TOKENS' }],
+        }),
+      },
+    });
+    await expect(
+      p.translateChunk({
+        targetLanguage: 'Hebrew',
+        targetLanguageCode: 'he',
+        cues: [],
+        context: [],
+      }),
+    ).rejects.toMatchObject({ code: 'PROVIDER_RESPONSE_INVALID', details: { truncated: true } });
   });
 
   it('parse helpers', () => {

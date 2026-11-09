@@ -35,7 +35,41 @@ document.addEventListener('click', async (ev) => {
 const drawerEls = () => [...drawer.querySelectorAll('input, select')].filter((el) => !devGroupEl.contains(el) && el.id !== 'd-src');
 const elValue = (el) => el.type === 'checkbox' ? el.checked : el.value;
 let drawerSnap = new Map();
-const takeSnap = () => { drawerSnap = new Map(drawerEls().map((el) => [el, elValue(el)])); };
+const takeSnap = () => { drawerSnap = new Map(drawerEls().map((el) => [el, elValue(el)])); renderUnsaved(); };
+// A service row opens to show its fields; its button says Change or Close.
+document.querySelectorAll('details[data-svc]').forEach((row) => row.addEventListener('toggle', () => {
+  row.querySelector('[data-svc-btn]').textContent = row.open ? T.setClose : T.setChange;
+}));
+// Summary of what changed (old -> new). Keys and passwords are never shown, only that they changed.
+const SECRET_IDS = new Set(['d-ai', 'd-os', 'd-pass', 'd-subdl', 'd-jimaku']);
+const labelOf = (el) => {
+  const l = document.querySelector('label[for="' + el.id + '"]');
+  if (l) return l.textContent.trim();
+  const w = el.closest('label'), s = w && w.querySelector('.font-semibold');
+  return s ? s.textContent.trim() : el.id;
+};
+const shownValue = (el, v) => {
+  if (el.type === 'checkbox') return v ? T.unsavedOn : T.unsavedOff;
+  if (el.tagName === 'SELECT') { const o = [...el.options].find((x) => x.value === v); return o ? o.textContent.trim() : v; }
+  return v;
+};
+const unsavedBox = $('unsaved-summary');
+const renderUnsaved = () => {
+  const list = $('unsaved-list');
+  list.textContent = '';
+  const dirty = drawerEls().filter((el) => drawerSnap.get(el) !== elValue(el));
+  unsavedBox.classList.toggle('hidden', dirty.length === 0);
+  if (!dirty.length) { unsavedBox.open = false; return; }
+  $('unsaved-count').textContent = f(T.unsavedCount, {n: dirty.length});
+  for (const el of dirty) {
+    const li = document.createElement('li');
+    const what = SECRET_IDS.has(el.id) ? T.unsavedKeyChanged : el.type === 'text' ? T.unsavedChanged : shownValue(el, drawerSnap.get(el)) + ' → ' + shownValue(el, elValue(el));
+    li.textContent = labelOf(el) + ': ' + what;
+    list.appendChild(li);
+  }
+};
+drawer.addEventListener('input', renderUnsaved);
+drawer.addEventListener('change', renderUnsaved);
 const drawerDirty = () => drawerEls().some((el) => drawerSnap.get(el) !== elValue(el));
 const setDrawer = (open) => {
   drawer.classList.toggle('hidden', !open); drawer.classList.toggle('flex', open);
@@ -56,6 +90,7 @@ $('unsaved-save').addEventListener('click', () => { showUnsaved(false); $('save'
 $('unsaved-discard').addEventListener('click', () => {
   for (const el of drawerEls()) { const v = drawerSnap.get(el); if (el.type === 'checkbox') el.checked = v; else el.value = v; }
   if (startupRefresh['d-startup']) startupRefresh['d-startup']();
+  renderUnsaved();
   showUnsaved(false); setDrawer(false);
 });
 const quickSave = async () => {

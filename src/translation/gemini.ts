@@ -20,6 +20,7 @@ export interface GeminiClientLike {
       config?: Record<string, unknown>;
     }): Promise<{
       text?: string;
+      candidates?: { finishReason?: string }[];
       usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
     }>;
   };
@@ -56,6 +57,11 @@ export interface GeminiOptions {
   model: string;
   timeoutMs: number;
   client?: GeminiClientLike;
+}
+
+/** The model stopped at its output limit; asking the same thing again would be cut off again. */
+export function cutOffError(): AppError {
+  return new AppError('PROVIDER_RESPONSE_INVALID', 'answer was cut off', { truncated: true });
 }
 
 /** Best-effort parse of "retry in 12.3s" / "retryDelay":"12s" hints in an error message. */
@@ -149,6 +155,7 @@ export class GeminiProvider implements TranslationProvider {
       throw this.normalizeError(err);
     }
 
+    if (response.candidates?.[0]?.finishReason === 'MAX_TOKENS') throw cutOffError();
     const parsed = parseModelJson(response.text ?? '');
     const usage: TokenUsage | undefined = response.usageMetadata
       ? {

@@ -27,6 +27,7 @@ import { type ConsensusItem, pickByConsensus } from '../subtitles/consensus';
 import { buildCast } from '../subtitles/cast';
 import { cleanSubtitle, cleanTranslated } from '../subtitles/clean';
 import { parseSubtitle } from '../subtitles/parse';
+import { applyRtlFix, stripDialogueDashes, unflipPunctuation } from '../subtitles/rtl';
 import { serializeSubtitle } from '../subtitles/serialize';
 import type { ChunkCue } from '../subtitles/chunk';
 import { stripForeignScripts } from '../subtitles/validate';
@@ -80,6 +81,15 @@ export type {
 } from './jobTypes';
 
 /** The fit would leave the subtitle where it is (no stretch, under 0.1 s): nothing to move. */
+/** A ready-made subtitle for a right-to-left language: punctuation put in order, then the RTL marks. */
+function fixDirectCues(cues: readonly Cue[]): Cue[] {
+  const texts = unflipPunctuation(cues.map((c) => c.text));
+  return cues.map((c, i) => ({
+    ...c,
+    text: applyRtlFix(stripDialogueDashes(texts[i] ?? c.text)),
+  }));
+}
+
 function isNoShift(fit: TimingFit): boolean {
   return fit.scale === 1 && Math.abs(fit.offsetMs) < 100 && !fit.parts?.length;
 }
@@ -136,6 +146,8 @@ export class JobManager {
     via: string;
     /** Who gave the source subtitle (OpenSubtitles, SubDL, Jimaku), when known. */
     source?: string;
+    /** How exact the timing of the delivered subtitle is. */
+    timing?: 'exact' | 'speech' | 'estimated';
     at: number;
   } | null = null;
   /** Episodes (with language) whose lines were already counted in `linesTranslated` this session. */
@@ -956,6 +968,11 @@ export class JobManager {
       job.result = result;
       job.finishedAt = this.now();
       void this.record(job, result, log);
+      // The sound check answer ("not sure") was about the first, guessed version: it no longer applies.
+      const sv = job.spec.video;
+      if (this.lastSync?.season === sv.season && this.lastSync?.episode === sv.episode) {
+        this.lastSync = null;
+      }
       log.info(
         { stage: 'ASSEMBLY', upgrade: 'done', via: result.via, cues: result.cues },
         'subtitle upgraded to the exact timing',
@@ -1003,8 +1020,9 @@ export class JobManager {
     };
     // One notice per episode: Stremio's two requests finish together, and a later step (video
     // subtitle, sound check) must not nag again. Only the user's own "Sync to sound" always tells.
-    if (!force && this.alreadyToldAbout(notice)) return;
+    // The main screen always shows the latest news; only the desktop toast is held back.
     this.lastUpgrade = { ...notice, at: this.now() };
+    if (!force && this.alreadyToldAbout(notice)) return;
     this.lastToldAbout = { ...notice, at: this.now() };
     this.deps.onUpgraded?.(notice);
   }
@@ -1177,6 +1195,7 @@ export class JobManager {
       ...(v.episode !== undefined ? { episode: v.episode } : {}),
       via: job.result.via,
       ...(job.result.source ? { source: job.result.source.provider } : {}),
+      ...(job.result.timing ? { timing: job.result.timing } : {}),
       at: this.now(),
     };
   }
@@ -1454,7 +1473,9 @@ export class JobManager {
 
     // 4a. Already in the target language: serve as SRT, no translation.
     if (chosen.kind === 'direct') {
-      const content = serializeSubtitle({ format: 'srt', cues: parsed.cues });
+      // A ready-made subtitle needs the same right-to-left punctuation fix as a translated one.
+      const cues = rtl ? fixDirectCues(parsed.cues) : parsed.cues;
+      const content = serializeSubtitle({ format: 'srt', cues });
       this.safeSet(outKey, 'translation', content, parsed.cues.length, log);
       job.progress = { done: parsed.cues.length, total: parsed.cues.length };
       return {
@@ -1868,6 +1889,37 @@ export class JobManager {
         ...(this.deps.fetchImpl ? { fetchImpl: this.deps.fetchImpl } : {}),
       }),
     });
+    // The search above costs nothing, a download spends the daily quota: so the check of the
+    // subtitle inside the video (still running after its short soft wait) is waited for first. If
+    // it finds one, nothing is downloaded at all. Skipping the search or cancelling ends it early.
+    const inVideo = job.lateEmbedded;
+    if (inVideo && !forceLanguage) {
+      const stageBefore = job.stage;
+      job.stage = 'local';
+      const exact = await new Promise<ChosenSource | undefined>((resolve) => {
+        // The Skip button of the main screen works during this wait too.
+        job.skipNow = () => {
+          job.searchSkipped = true;
+          resolve(undefined);
+        };
+        const stop = () =>
+          job.searchSkipped ||
+          job.cancelled ||
+          this.skipped.get(videoKey(job.spec))?.has('local') === true;
+        if (stop()) resolve(undefined);
+        const poll = setInterval(() => {
+          if (stop()) resolve(undefined);
+        }, 100);
+        inVideo.then(resolve, () => resolve(undefined)).finally(() => clearInterval(poll));
+      });
+      delete job.skipNow;
+      this.stopIfCancelled(job);
+      job.stage = stageBefore;
+      if (exact) {
+        log.info({ stage: 'SOURCE', embedded: 'late' }, 'subtitle inside the video, no download');
+        return exact;
+      }
+    }
     // A developer redo takes the subtitle from one source only.
     const only = job.spec.onlyProvider;
     // Developer option: translate from English even when a ready subtitle in the language exists.

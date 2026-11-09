@@ -1,5 +1,5 @@
 import { AppError, isAppError } from '../errors';
-import { parseModelJson, parseRetryAfterMs } from './gemini';
+import { cutOffError, parseModelJson, parseRetryAfterMs } from './gemini';
 import { buildSystemInstruction } from './prompts/v1';
 import type {
   ConnectionTestResult,
@@ -20,6 +20,8 @@ interface Reply {
   text: string;
   inputTokens: number;
   outputTokens: number;
+  /** The model stopped at its output limit, so the answer is cut off. */
+  truncated?: boolean;
 }
 
 /** Map an HTTP failure to an AppError. The response body is read only for quota wording. */
@@ -112,6 +114,7 @@ abstract class HttpProvider implements TranslationProvider {
     } catch (err) {
       throw this.normalizeError(err);
     }
+    if (reply.truncated) throw cutOffError();
     const parsed = parseModelJson(reply.text);
     return {
       translations: parsed.translations.map((t) => ({ id: String(t.id), text: t.text })),
@@ -170,7 +173,7 @@ abstract class HttpProvider implements TranslationProvider {
 const OPENAI_FIXED_TEMPERATURE = /^(o\d|gpt-5)/;
 
 interface OpenAiResponse {
-  choices?: { message?: { content?: string } }[];
+  choices?: { message?: { content?: string }; finish_reason?: string }[];
   usage?: { prompt_tokens?: number; completion_tokens?: number };
 }
 
@@ -197,12 +200,14 @@ export class OpenAiProvider extends HttpProvider {
       text: data.choices?.[0]?.message?.content ?? '',
       inputTokens: data.usage?.prompt_tokens ?? 0,
       outputTokens: data.usage?.completion_tokens ?? 0,
+      truncated: data.choices?.[0]?.finish_reason === 'length',
     };
   }
 }
 
 interface AnthropicResponse {
   content?: { type?: string; text?: string }[];
+  stop_reason?: string;
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
@@ -229,6 +234,7 @@ export class AnthropicProvider extends HttpProvider {
         .join(''),
       inputTokens: data.usage?.input_tokens ?? 0,
       outputTokens: data.usage?.output_tokens ?? 0,
+      truncated: data.stop_reason === 'max_tokens',
     };
   }
 }

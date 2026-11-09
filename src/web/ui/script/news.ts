@@ -118,8 +118,7 @@ if (window.desktop) {
   modal.addEventListener('click', (e) => { if (e.target === modal) setModal(false); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setModal(false); });
 
-  // Updates: top-bar button only when an update is downloaded; manual check lives in Settings.
-  const updateBtn = $('update-btn');
+  // Updates: a bar under the title bar (available, downloading, ready, failed); the manual check lives in Settings.
   const checkBtn = $('check-update');
   const UPDATE_TEXT = {
     checking: [true, T.updChecking],
@@ -127,11 +126,36 @@ if (window.desktop) {
     unavailable: [true, T.updUnavailable],
     error: [false, T.updError]
   };
-  // The button's own display class would override the hidden attribute, so toggle classes instead.
-  const showUpdateBtn = (on) => { updateBtn.classList.toggle('hidden', !on); updateBtn.classList.toggle('inline-flex', on); };
+  const updBar = $('update-bar'), updText = $('update-text'), updDot = $('update-dot');
+  const updWhy = $('update-why');
+  const WHY_TEXT = { offline: T.updWhyOffline, timeout: T.updWhyTimeout, disk: T.updWhyDisk, corrupt: T.updWhyCorrupt };
+  const updProg = $('update-progress'), updFill = $('update-progress-fill');
+  const updInstall = $('update-install'), updDismiss = $('update-dismiss');
+  const busyModal = $('update-busy-modal');
+  let updErrTimer, idleTimer;
+  // The bar's own display class would override the hidden attribute, so toggle classes instead.
+  const setShown = (el, on, cls) => { el.classList.toggle('hidden', !on); el.classList.toggle(cls, on); };
+  const applyBar = (s) => {
+    clearTimeout(updErrTimer);
+    const failed = s.status === 'error', ready = s.status === 'downloaded', loading = s.status === 'downloading';
+    setShown(updBar, failed || ready || loading, 'flex');
+    if (!(failed || ready || loading)) return;
+    const pct = loading && typeof s.percent === 'number' ? Math.max(0, Math.min(100, Math.round(s.percent))) : null;
+    updText.textContent = failed ? T.updBarFailed : ready ? f(T.updBarReady, {v: s.version}) : pct === null ? f(T.updBarNew, {v: s.version}) : f(T.updBarDownloading, {v: s.version, p: pct});
+    const why = failed ? WHY_TEXT[s.reason] : undefined;
+    updWhy.textContent = why || '';
+    setShown(updWhy, !!why, 'inline');
+    updDot.classList.toggle('bg-warm-ac', !failed);
+    updDot.classList.toggle('bg-rose-400', failed);
+    setShown(updProg, pct !== null, 'block');
+    updFill.style.width = (pct === null ? 0 : pct) + '%';
+    setShown(updInstall, ready, 'inline-flex');
+    setShown(updDismiss, failed, 'inline-flex');
+    // A failed update is not blocking: the message goes away by itself.
+    if (failed) updErrTimer = setTimeout(() => setShown(updBar, false, 'flex'), 10000);
+  };
   const applyUpdate = (s) => {
-    showUpdateBtn(s.status === 'downloaded');
-    if (s.status === 'downloaded') updateBtn.title = f(T.updateInstallV, {v: s.version});
+    applyBar(s);
     const out = $('update-result');
     if (!out) return;
     if (s.status === 'downloading') show('update-result', true, f(T.updDownloading, {v: s.version}));
@@ -140,9 +164,23 @@ if (window.desktop) {
     else out.textContent = '';
     checkBtn.disabled = s.status === 'checking';
   };
-  window.desktop.updater.state().then((s) => showUpdateBtn(s.status === 'downloaded'));
+  // Installing restarts the app, so a running translation is asked about first.
+  const jobRunning = async () => { try { return (await (await fetch('/api/status')).json()).running > 0; } catch { return false; } };
+  const setBusy = (on) => { setShown(busyModal, on, 'flex'); };
+  const installNow = () => { clearInterval(idleTimer); window.desktop.updater.install(); };
+  updInstall.addEventListener('click', async () => { if (await jobRunning()) setBusy(true); else installNow(); });
+  $('update-busy-now').addEventListener('click', () => { setBusy(false); installNow(); });
+  $('update-busy-wait').addEventListener('click', () => {
+    setBusy(false);
+    updInstall.disabled = true;
+    toast(true, T.updBusyWaiting);
+    idleTimer = setInterval(async () => { if (!(await jobRunning())) installNow(); }, 5000);
+  });
+  busyModal.addEventListener('click', (e) => { if (e.target === busyModal) setBusy(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setBusy(false); });
+  updDismiss.addEventListener('click', () => { clearTimeout(updErrTimer); setShown(updBar, false, 'flex'); });
+  window.desktop.updater.state().then(applyBar);
   window.desktop.updater.onState(applyUpdate);
-  updateBtn.addEventListener('click', () => window.desktop.updater.install());
   checkBtn.addEventListener('click', () => window.desktop.updater.check().then(applyUpdate));
   window.desktop.version().then((v) => { $('app-version').textContent = v; });
 

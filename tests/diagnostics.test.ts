@@ -87,6 +87,46 @@ describe('videoTable', () => {
     expect(text).toMatch(/4\s+tt4:1:31\s+opensubtitles\s+estimated\s+unsure\s+96 s\s+389/);
   });
 
+  it('shows a first estimated subtitle replaced by the video subtitle, not a contradiction', () => {
+    const text = videoTable(
+      logWith([
+        {
+          videoId: 'tt8:1:5',
+          stage: 'SOURCE',
+          msg: 'subtitle selected',
+          decision: 'translate',
+          provider: 'opensubtitles',
+          hashMatch: false,
+        },
+        done('tt8:1:5', 'translated', 137, 8000),
+        { videoId: 'tt8:1:5', stage: 'SOURCE', msg: 'timing left as it was', sync: 'fit-unsure' },
+        {
+          videoId: 'tt8:1:5',
+          stage: 'ASSEMBLY',
+          msg: 'subtitle upgraded to the exact timing',
+          upgrade: 'done',
+          via: 'translated',
+          cues: 182,
+          time: 1792334560000,
+        },
+      ]),
+    ).join('\n');
+    expect(text).toMatch(/estimated -> exact \(video subtitle at \d\d:\d\d:\d\d UTC\)/);
+    expect(text).toContain('unsure (first version only)');
+    expect(text).toContain('137 -> 182');
+  });
+
+  it('keeps a sound-check upgrade as a plain speech/exact row', () => {
+    const text = videoTable(
+      logWith([
+        done('tt8', 'translated', 137, 8000),
+        { videoId: 'tt8', stage: 'ASSEMBLY', msg: 'moved', upgrade: 'done', via: 'sound' },
+      ]),
+    ).join('\n');
+    expect(text).not.toContain('first version only');
+    expect(text).not.toContain('->');
+  });
+
   it('shows a failed job and a "no data" sound check', () => {
     const text = videoTable(
       logWith([

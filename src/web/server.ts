@@ -4,7 +4,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { FileCache } from '../cache/fileCache';
 import { Library, srtFileName } from '../jobs/library';
 import { RELEASE_NOTES } from '../electron/whatsNew';
-import { recentLogLines, videoTable } from '../logging/diagnostics';
+import { describeStats, recentLogLines, videoTable } from '../logging/diagnostics';
 import { findStream, locateTools } from '../sources/embedded';
 import { compareVersionsDesc, NEWS_URL, NewsFeed } from '../news/news';
 import { isJobId, JobManager, type JobManagerDeps } from '../jobs/manager';
@@ -813,7 +813,7 @@ export function createApp(deps: ServerDeps): express.Express {
     const yes = (b: boolean) => (b ? 'yes' : 'no');
     const version = Object.keys(RELEASE_NOTES).sort(compareVersionsDesc)[0] ?? '?';
     const lines = [
-      'AI Subtitle Translator - diagnostics',
+      'TTT Sub - diagnostics',
       `version: ${version}`,
       `time: ${new Date().toISOString()}`,
       `system: ${process.platform} ${process.arch}, node ${process.versions.node}`,
@@ -826,10 +826,20 @@ export function createApp(deps: ServerDeps): express.Express {
       `target language: ${c.targetLanguage}, dual: ${yes(c.dualSubtitles)}, embedded subtitles: ${yes(c.embeddedSubtitles)}`,
       `Stremio server (${c.stremioServerUrl}): ${stremio}`,
       `ffmpeg found: ${yes(locateTools(c.ffmpegPath) !== undefined)}`,
-      // Counters only: no titles of what the user watches (the queue is reduced to its length).
-      `jobs: ${JSON.stringify({ ...jobs.stats(), queue: jobs.stats().queue.length })}`,
       '',
-      ...(deps.logDir ? [...videoTable(deps.logDir), ''] : []),
+      // Counters and codes only: no titles of what the user watches.
+      'state now:',
+      ...describeStats(jobs.stats(), Date.now()).map((l) => `  ${l}`),
+      '',
+      ...(deps.logDir
+        ? [
+            ...videoTable(deps.logDir),
+            'timing: "estimated -> exact" = a first subtitle with guessed timing was replaced by the',
+            "video's own subtitle. Sound check shows what happened to the first version only.",
+            'Times in this report are UTC.',
+            '',
+          ]
+        : []),
       req.query.scope === 'all' ? 'recent events:' : 'recent events (latest video and problems):',
       ...(deps.logDir
         ? recentLogLines(deps.logDir, 60, req.query.scope === 'all' ? 'all' : 'latest')

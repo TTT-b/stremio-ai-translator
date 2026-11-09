@@ -384,14 +384,12 @@ describe('an exact subtitle that arrives after the job finished', () => {
     for (let i = 0; i < 160 && !(await check()); i++) await new Promise((r) => setTimeout(r, 25));
   };
 
-  it('is translated in the background and replaces the shown subtitle, with no "translating" text in between', async () => {
+  it('waits for the subtitle inside the video before downloading, and uses it when it comes', async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
-    const upgraded: { season?: number; episode?: number }[] = [];
     current = await start({
       subWaitMs: 50,
       limits: { embeddedSoftMs: 30 },
-      onUpgraded: (item) => upgraded.push(item),
       loadEmbedded: (async () => {
         await gate;
         return { raw: own, language: 'en', source: 'track', cues: 25 };
@@ -399,45 +397,15 @@ describe('an exact subtitle that arrives after the job finished', () => {
     });
     const sub = ((await (await current.get(FILE)).json()) as SubsResponse).subtitles[0]!;
     const path = new URL(sub.url).pathname;
-    let first = '';
-    await until(async () => {
-      first = await (await current!.get(path)).text();
-      return first.includes('HE:');
-    });
-    expect(first).toContain('HE:Hello there.'); // the downloaded subtitle, translated
-    expect(first).not.toContain('OWN line');
-    // While the video's own subtitle is still on its way, the main screen says so.
-    const waiting = (await (await current.get('/api/status')).json()) as {
-      exactComing: { season?: number; episode?: number } | null;
-    };
-    expect(waiting.exactComing).toMatchObject({ season: 1, episode: 1 });
-
-    release(); // the video's own subtitle arrives after the job finished
+    await new Promise((r) => setTimeout(r, 400)); // well past the short wait
+    expect(await (await current.get(path)).text()).not.toContain('HE:'); // nothing downloaded yet
+    release();
     let text = '';
-    const seen: string[] = [];
     await until(async () => {
       text = await (await current!.get(path)).text();
-      seen.push(text);
       return text.includes('HE:OWN line 1');
     });
     expect(text).toContain('HE:OWN line 1');
-    expect(seen.every((t) => t.includes('HE:'))).toBe(true); // never a placeholder
-    let lib: { items: { timing?: string }[] } = { items: [] };
-    await until(async () => {
-      lib = (await (await current!.get('/api/library')).json()) as typeof lib;
-      return lib.items[0]?.timing === 'exact';
-    });
-    expect(lib.items[0]?.timing).toBe('exact');
-    // The main screen is told, once, so the user knows to select the subtitle again.
-    await until(async () => upgraded.length > 0);
-    expect(upgraded).toHaveLength(1);
-    expect(upgraded[0]).toMatchObject({ season: 1, episode: 1 });
-    const status = (await (await current.get('/api/status')).json()) as {
-      upgrade: { season?: number; episode?: number; at: number } | null;
-    };
-    expect(status.upgrade).toMatchObject({ season: 1, episode: 1 });
-    const after = (await (await current.get('/api/status')).json()) as { exactComing: unknown };
-    expect(after.exactComing).toBeNull();
   });
 
   it('changes nothing when the video never gives its own subtitle', async () => {
@@ -473,37 +441,26 @@ describe('an exact subtitle that arrives after the job finished', () => {
       }) as never;
       return { state, load };
     };
-    const exactComing = async (h: Harness) =>
-      ((await (await h.get('/api/status')).json()) as { exactComing: unknown }).exactComing;
-
-    for (const [button, route] of [
-      ['Skip', '/api/background/skip'],
-      ['Cancel', '/api/background/stop'],
-    ] as const) {
-      it(`${button} ends the search and the downloaded subtitle stays`, async () => {
-        const { state, load } = listening();
-        current = await start({
-          subWaitMs: 50,
-          limits: { embeddedSoftMs: 30 },
-          loadEmbedded: load,
-        });
-        const sub = ((await (await current.get(FILE)).json()) as SubsResponse).subtitles[0]!;
-        const path = new URL(sub.url).pathname;
-        let text = '';
-        await until(async () => {
-          text = await (await current!.get(path)).text();
-          return text.includes('HE:');
-        });
-        await until(async () => (await exactComing(current!)) !== null);
-        expect(await exactComing(current)).not.toBeNull(); // the search is still going on
-        const r = await postTo(current, route);
-        expect(((await r.json()) as { ok: boolean }).ok).toBe(true);
-        await until(async () => (await exactComing(current!)) === null);
-        expect(await exactComing(current)).toBeNull();
-        expect(state.told).toBe(true);
-        expect(await (await current.get(path)).text()).toBe(text);
+    it('Skip ends the wait for the video and the downloaded subtitle is used', async () => {
+      const { state, load } = listening();
+      current = await start({ subWaitMs: 50, limits: { embeddedSoftMs: 30 }, loadEmbedded: load });
+      const sub = ((await (await current.get(FILE)).json()) as SubsResponse).subtitles[0]!;
+      const path = new URL(sub.url).pathname;
+      await new Promise((r) => setTimeout(r, 400));
+      expect(await (await current.get(path)).text()).not.toContain('HE:');
+      const queue = (
+        (await (await current.get('/api/status')).json()) as { queue: { id: string }[] }
+      ).queue;
+      const r = await postTo(current, `/api/jobs/${queue[0]!.id}/skip`);
+      expect(r.ok).toBe(true);
+      let text = '';
+      await until(async () => {
+        text = await (await current!.get(path)).text();
+        return text.includes('HE:');
       });
-    }
+      expect(text).toContain('HE:Hello there.');
+      expect(state.told).toBe(true);
+    });
 
     it('says nothing was stopped when nothing is running', async () => {
       current = await start({});
@@ -657,6 +614,8 @@ describe('subtitle request flow', () => {
     const srt = await (await current.get(new URL(sub.url).pathname)).text();
     expect(srt).toContain('Hello there.');
     expect(srt).not.toContain('HE:');
+    // Right-to-left marks keep dashes and punctuation on the right side, like translated text.
+    expect(srt).toContain('‏Hello there.‏');
     expect(current.translator.calls).toBe(0);
   });
 
@@ -1436,7 +1395,7 @@ describe('diagnostics', () => {
     }
     const text = await (await current.get('/api/diagnostics')).text();
     expect(text).not.toContain('Test Show');
-    expect(text).toContain('"queue":1');
+    expect(text).toContain('waiting in queue: 1');
   });
 });
 
@@ -1877,7 +1836,7 @@ describe('ask mode (translate only after the user says yes)', () => {
       expect(text).toContain('HE:OWN line 1');
     });
 
-    it("does not wait long for the video's own subtitle: goes on with the download, and the own one still wins if it comes in time", async () => {
+    it("waits for the video's own subtitle instead of downloading, and uses it when it comes", async () => {
       const at = (s: number) =>
         '00:' +
         String(Math.floor(s / 60)).padStart(2, '0') +
@@ -1917,8 +1876,9 @@ describe('ask mode (translate only after the user says yes)', () => {
         }) as never,
       });
       const url = await requestFile(current, 'soft.mkv');
+      setTimeout(release, 200); // the video's own subtitle arrives after the short wait
       await done(current, url);
-      expect(searches).toBe(1); // the job did go on without waiting for the video
+      expect(searches).toBe(0); // nothing was downloaded and timing-checked
       expect(await (await current.get(new URL(url).pathname)).text()).toContain('HE:OWN line 1');
     });
 

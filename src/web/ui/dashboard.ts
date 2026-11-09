@@ -10,7 +10,7 @@ export function renderDashboard(c: UiCtx): string {
   /** Small, even buttons for the cards on this screen. */
   const cb = `${btn} !rounded-lg !px-3 !py-1.5 !text-[13px] whitespace-nowrap`;
   const installCompact = d.stremioReady
-    ? `<section class="${tile} flex flex-col gap-2.5"><h2 class="text-sm font-bold text-warm-tx">${tt('installTitle')}</h2>
+    ? `<section class="${tile} flex flex-col gap-2.5 lg:col-start-1 lg:row-start-2"><h2 class="text-sm font-bold text-warm-tx">${tt('installTitle')}</h2>
 <div class="grid grid-cols-2 gap-2"><a id="install-d" class="${cb} w-full !py-2.5 text-center" href="${escapeHtml(d.installUrl)}" target="_blank" rel="noopener noreferrer">${tt('installBtn')}</a><button type="button" id="open-stremio" class="${cb} w-full !py-2.5 text-center">${tt('openStremio')}</button></div>
 <div class="flex gap-2"><input id="manifest-d" readonly dir="ltr" class="${field} min-w-0 flex-1 font-mono text-[13px]" value="${escapeHtml(d.manifestUrl)}" aria-label="${tt('manifestAria')}"><button type="button" id="copy-d" class="${cb}">${tt('copy')}</button></div></section>`
     : '';
@@ -41,7 +41,7 @@ export function renderDashboard(c: UiCtx): string {
   return `<div id="dash" class="${startStep ? 'hidden' : 'flex'} w-full max-w-[560px] flex-col gap-[18px] mx-auto lg:max-w-[1040px] xl:max-w-[1280px]">
 <div class="flex flex-wrap items-center justify-between gap-3"><div><h1 class="text-[26px] font-extrabold text-warm-tx"><span class="text-warm-ac">TTT</span> Sub</h1>${d.testMode ? `<div class="mt-1.5 inline-block rounded-full bg-amber-400/15 px-2.5 py-0.5 text-xs font-bold text-amber-300">${tt('testBanner')}</div>` : ''}</div>
 <div class="flex flex-wrap items-center gap-2 max-sm:w-full sm:justify-end"><button type="button" id="open-library" class="${btn} flex items-center gap-2 !py-2"><span class="text-base leading-none" aria-hidden="true">&#127916;</span>${tt('mySubs')}</button><button type="button" id="open-settings" class="${btn} flex items-center gap-2 !py-2"><span class="text-base leading-none" aria-hidden="true">&#9881;&#65039;</span>${tt('settings')}</button><button type="button" class="js-news ${btn} relative !px-3 !py-2" aria-label="${tt('newsBell')}" title="${tt('newsBell')}"><span class="text-base leading-none" aria-hidden="true">&#128276;</span><span class="js-news-badge absolute -top-1 -end-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-warm-ac px-1 text-[10px] font-bold text-warm-on"></span></button>${langMenu()}</div></div>
-<div class="flex flex-col gap-[18px] lg:grid lg:grid-cols-2 lg:items-start lg:gap-5"><div class="flex flex-col gap-[18px]">
+<div class="flex flex-col gap-[18px] lg:grid lg:grid-cols-2 lg:grid-rows-[auto_1fr] lg:items-start lg:gap-5"><div class="flex flex-col gap-[18px]">
 <section id="st-upgrade" class="${tile} hidden flex-col gap-3 !border-warm-ac/60" role="status"><div><div class="text-sm font-bold text-warm-tx">${tt('upgradeTitle')}</div><div id="st-upgrade-text" class="mt-0.5 text-xs text-warm-mu"></div></div><div dir="ltr" class="flex justify-start"><button type="button" id="st-upgrade-close" class="${btn} !px-4 !py-1.5 !text-[13px]">${tt('toastOk')}</button></div></section>
 <section class="flex flex-col gap-3.5 rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-xl shadow-black/20">
 <div class="flex flex-wrap items-center justify-between gap-3"><div class="flex items-center gap-2.5 text-sm font-semibold"><span id="st-dot" class="h-2.5 w-2.5 rounded-full bg-warm-mu"></span><span id="st-state">${tt('stWaiting')}</span></div><div class="flex flex-wrap items-center gap-2"><button type="button" id="st-cancel-btn" class="${btn} hidden whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('qCancel')}</button><button type="button" id="st-skip-btn" class="${btn} hidden whitespace-nowrap !px-3 !py-1.5 !text-[13px]">${tt('qSkip')}</button><button type="button" id="resume-btn" class="${btn} hidden whitespace-nowrap !border-warm-ac !px-3 !py-1.5 !text-[13px] !text-warm-ac" title="${tt('resumeHint')}">${tt('resumeBtn')}</button><button type="button" id="sync-now-btn" class="${btn} hidden whitespace-nowrap !px-3 !py-1.5 !text-[13px]" title="${tt('syncNowHint')}">${tt('syncNowBtn')}</button></div></div>
@@ -57,8 +57,8 @@ export function renderDashboard(c: UiCtx): string {
 </section>
 <section id="st-queue" class="${tile} hidden flex-col gap-2.5"><h2 class="text-sm font-bold text-warm-tx">${tt('qTitle')}</h2><ul id="st-queue-list" class="flex flex-col gap-2"></ul></section>
 <div class="${tile} flex items-center justify-between gap-3"><div class="min-w-0 flex-1"><label class="text-xs text-warm-mu" for="q-lang">${tt('stTarget')}</label><select class="${field} mt-1" id="q-lang">${langOptions}</select></div><label class="flex shrink-0 cursor-pointer flex-col items-center gap-1.5"><span class="text-xs text-warm-mu">${tt('stDual')}</span><input type="checkbox" id="q-dual" class="peer sr-only"${d.dualSubtitles ? ' checked' : ''}><span class="relative h-[23px] w-10 shrink-0 rounded-full bg-warm-ln transition peer-checked:bg-warm-ac peer-focus-visible:ring-2 peer-focus-visible:ring-warm-ac/60 after:absolute after:start-[3px] after:top-[3px] after:h-[17px] after:w-[17px] after:rounded-full after:bg-white after:transition rtl:peer-checked:after:-translate-x-[17px] ltr:peer-checked:after:translate-x-[17px]"></span></label></div>
-</div><div class="flex flex-col gap-[18px]">
-<section class="${tile} flex flex-col gap-3"><div class="flex items-start justify-between gap-3"><div><div class="text-sm font-bold text-warm-tx">${tt('checksTitle')}</div><div class="mt-0.5 text-xs text-warm-mu">${tt('checksSub')}</div></div>${pill}</div>
+</div>
+<section class="${tile} flex flex-col gap-3 lg:col-start-2 lg:row-span-2 lg:row-start-1"><div class="flex items-start justify-between gap-3"><div><div class="text-sm font-bold text-warm-tx">${tt('checksTitle')}</div><div class="mt-0.5 text-xs text-warm-mu">${tt('checksSub')}</div></div>${pill}</div>
 <div class="flex flex-col gap-1.5">${groupLabel(tt('checksGroupAi'))}
 ${checkRow({ name: 'ai', title: tt('aiProviderTitle'), brand: 'bg-warm-ac', base: 'idle', extraL1: `<span class="rounded-lg border border-warm-ln bg-warm-bg px-2 text-xs font-semibold text-warm-tx" dir="ltr" title="${tt('checksModelCap')}">${d.aiConfigured ? escapeHtml(prettyModel(d.aiModel)) : tt('noKeyYet')}</span>` })}</div>
 <div class="flex flex-col gap-1.5">${groupLabel(tt('checksGroupSources'))}
@@ -68,6 +68,6 @@ ${checkRow({ name: 'jimaku', title: 'Jimaku', brand: 'bg-pink-400', base: d.jima
 <div class="flex items-center justify-between gap-3 border-t border-warm-ln pt-3 max-[440px]:flex-col-reverse max-[440px]:items-stretch max-[440px]:text-center"><span id="checks-last" class="text-xs text-warm-mu"></span><button type="button" id="checks-all" class="${btnPrimary} shrink-0 !rounded-xl !px-4 !py-2 !text-[13px]">${tt('testAllBtn')}</button></div>
 </section>
 ${installCompact}
-</div></div>
+</div>
 </div>`;
 }

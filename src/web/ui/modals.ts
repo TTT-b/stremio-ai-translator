@@ -13,6 +13,17 @@ export function renderConfirmModals(c: UiCtx): string {
 <button type="button" id="del-no" class="px-4 py-2 text-sm text-warm-mu transition hover:text-warm-tx focus:outline-none">${tt('cancel')}</button>
 </div></div></div>
 
+<div id="nostream-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="nostream-title">
+<div class="w-full max-w-sm rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
+<h2 id="nostream-title" class="text-lg font-bold text-warm-tx">${tt('libNoStreamTitle')}</h2>
+<p class="mt-1 text-sm text-warm-mu">${tt('libNoStreamBody')}</p>
+<ol class="mt-3 list-decimal space-y-1 ps-5 text-sm text-warm-tx"><li>${tt('libNoStreamStep1')}</li><li>${tt('libNoStreamStep2')}</li><li>${tt('libNoStreamStep3')}</li></ol>
+<div class="mt-5 grid gap-2">
+<button type="button" id="nostream-open" class="${btnPrimary}">${tt('openStremio')}</button>
+<button type="button" id="nostream-file" class="${btn}">${tt('libHaveFile')}</button>
+<button type="button" id="nostream-cancel" class="px-4 py-2 text-sm text-warm-mu transition hover:text-warm-tx focus:outline-none">${tt('cancel')}</button>
+</div></div></div>
+
 <div id="unsaved-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="unsaved-title">
 <div class="w-full max-w-sm rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
 <h2 id="unsaved-title" class="text-lg font-bold text-warm-tx">${tt('unsavedTitle')}</h2>

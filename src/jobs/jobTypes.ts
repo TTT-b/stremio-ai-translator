@@ -228,8 +228,11 @@ export interface ChosenSource {
  * 6: precise sync by speech is part of the key (turning it on makes subtitles again).
  * 7: lines placed on the speech stay on screen at least one second.
  * 8: stray letters of any foreign alphabet are removed, also from subtitles made before.
+ * 12: a ready-made Hebrew subtitle stored with its punctuation flipped is put back in order.
+ * 13: dialogue dashes at the start and end of a line are removed from ready-made subtitles.
+ * 14: music note symbols (♪) are removed from lines that also hold words.
  */
-export const SOURCE_LOGIC_VERSION = 11;
+export const SOURCE_LOGIC_VERSION = 14;
 
 /** A translation is shown in parts only for files with at least this many lines. */
 export const PARTIAL_MIN_TOTAL_CUES = 1000;

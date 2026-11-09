@@ -28,6 +28,83 @@ function fixLine(line: string): string {
   return out;
 }
 
+const LEADING_STOP = /^(-\s*)?([.!?,:;]+)\s*/;
+const TRAILING_DASH = /\s-$/;
+/** Share of lines that must start with a stop for a file to count as stored with flipped punctuation. */
+const FLIPPED_SHARE = 0.15;
+const FLIPPED_MIN_LINES = 3;
+
+function splitTags(line: string): { open: string; body: string; close: string } {
+  const m = /^((?:<[^>]+>)*)(.*?)((?:<\/[^>]+>)*)$/s.exec(line);
+  return { open: m?.[1] ?? '', body: m?.[2] ?? line, close: m?.[3] ?? '' };
+}
+
+function unflipLine(line: string): string {
+  if (line.trim() === '') return line;
+  const { open, body: raw, close } = splitTags(line);
+  let body = raw.trim();
+  if (TRAILING_DASH.test(body) && !body.startsWith('-')) {
+    body = `- ${body.slice(0, -2).trimEnd()}`;
+  }
+  const lead = LEADING_STOP.exec(body);
+  if (lead) {
+    const stops = [...(lead[2] ?? '')].reverse().join('');
+    body = `${lead[1] ?? ''}${body.slice(lead[0].length)}${stops}`;
+  }
+  return `${open}${body}${close}`;
+}
+
+/**
+ * Some ready-made Hebrew subtitles are stored in "visual" order: the full stop or question mark
+ * sits at the START of the line and a dialogue dash at the END (".שב", "?מה -"). Shown as is, or
+ * with the right-to-left fix, that puts them on the wrong side. When enough lines of the whole
+ * file start with such a mark, every line is put back in logical order ("שב.", "- מה?"). A file
+ * with normal punctuation is returned untouched.
+ */
+export function unflipPunctuation(texts: readonly string[]): string[] {
+  const lines = texts.flatMap((t) => t.split('\n')).filter((l) => l.trim() !== '');
+  const flipped = lines.filter((l) => LEADING_STOP.test(splitTags(l).body.trim())).length;
+  if (flipped < FLIPPED_MIN_LINES || flipped / lines.length < FLIPPED_SHARE) return [...texts];
+  return texts.map((t) => t.split('\n').map(unflipLine).join('\n'));
+}
+
+const LEADING_DASH = /^[-–—]+\s*/;
+const TRAILING_DASH_BEFORE_STOP = /\s*[-–—]+\s*([.!?,:;]*)$/;
+
+/**
+ * Removes the dialogue dash at the start of a line and any dash at its end (before a final stop
+ * too), the way ready-made subtitles mark a change of speaker. In right-to-left text they land
+ * on odd sides of the line and only get in the way.
+ */
+export function stripDialogueDashes(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      if (line.trim() === '') return line;
+      const { open, body, close } = splitTags(line);
+      const clean = body.trim().replace(LEADING_DASH, '').replace(TRAILING_DASH_BEFORE_STOP, '$1');
+      return `${open}${clean}${close}`;
+    })
+    .join('\n');
+}
+
+const MUSIC_NOTES = /[♪♫♬♩]+/g;
+
+/** Removes the music note symbols of a lyric line; a line that is only notes is left alone. */
+function stripMusicNotes(line: string): string {
+  if (!MUSIC_NOTES.test(line)) return line;
+  MUSIC_NOTES.lastIndex = 0;
+  const { open, body, close } = splitTags(line);
+  const clean = body
+    .replace(MUSIC_NOTES, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return /[\p{L}\p{N}]/u.test(clean) ? `${open}${clean}${close}` : line;
+}
+
 export function applyRtlFix(text: string): string {
-  return text.split('\n').map(fixLine).join('\n');
+  return text
+    .split('\n')
+    .map((line) => fixLine(stripMusicNotes(line)))
+    .join('\n');
 }

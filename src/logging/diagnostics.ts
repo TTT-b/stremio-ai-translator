@@ -1,5 +1,6 @@
 ﻿import { closeSync, openSync, readdirSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import type { JobStats } from '../jobs/jobStatus';
 
 /** Only these fields of a log line are copied into the diagnostics: numbers and short codes, no text. */
 const SAFE_FIELDS = [
@@ -173,6 +174,12 @@ interface VideoRow {
   score?: number;
   method?: string;
   upgraded: boolean;
+  /** The late upgrade came from the video's own subtitle (not from the sound check). */
+  upgradedByTrack: boolean;
+  /** Clock time (UTC, hh:mm:ss) of that upgrade. */
+  upgradedAt?: string;
+  /** Lines of the first subtitle, when a later one replaced it with another count. */
+  firstCues?: number;
   durationMs?: number;
   cues?: number;
   failed?: string;
@@ -198,6 +205,7 @@ function videoRows(lines: LogLine[]): VideoRow[] {
       hashMatch: false,
       translated: false,
       upgraded: false,
+      upgradedByTrack: false,
     };
     rows.delete(id); // re-inserted below, so the Map stays in "last seen" order
     if (line.embedded === 'used') row.embedded = true;
@@ -216,8 +224,23 @@ function videoRows(lines: LogLine[]): VideoRow[] {
       if (num(line.score) !== undefined) row.score = num(line.score);
       if (typeof line.parts === 'string') row.parts = text(line.parts, 60);
     }
-    if (line.upgrade === 'done') row.upgraded = true;
-    if (line.msg === 'job done') {
+    if (line.upgrade === 'done') {
+      row.upgraded = true;
+      const via = text(line.via);
+      // "sound" / "sound-now" moved the same lines; anything else is the video's own subtitle.
+      if (via !== 'sound' && via !== 'sound-now') {
+        row.upgradedByTrack = true;
+        if (typeof line.time === 'number') {
+          row.upgradedAt = new Date(line.time).toISOString().slice(11, 19);
+        }
+        const cues = num(line.cues);
+        if (cues !== undefined && cues !== row.cues) {
+          if (row.cues !== undefined) row.firstCues = row.cues;
+          row.cues = cues;
+        }
+      }
+    }
+    if (line.msg === 'job done' && !row.upgradedByTrack) {
       const cues = num(line.cues);
       const duration = num(line.durationMs);
       if (cues !== undefined) row.cues = cues;
@@ -234,8 +257,18 @@ function rowCells(r: VideoRow): string[] {
   const source = r.failed
     ? `failed: ${r.failed}`
     : `${r.embedded ? 'embedded' : r.provider}${r.hashMatch ? ', hash match' : ''}${r.translated ? ' (translated)' : ''}`;
-  const timing = r.failed ? '-' : exact ? 'exact' : r.sync === 'fitted' ? 'speech' : 'estimated';
-  const sound = r.failed
+  // A late upgrade from the video's own subtitle: the first version had a guessed timing, the final
+  // one is exact. Both are shown, so "exact" next to "unsure" is not a contradiction.
+  const timing = r.failed
+    ? '-'
+    : r.upgradedByTrack && !r.embedded && !r.hashMatch
+      ? `estimated -> exact (video subtitle${r.upgradedAt ? ` at ${r.upgradedAt} UTC` : ''})`
+      : exact
+        ? 'exact'
+        : r.sync === 'fitted'
+          ? 'speech'
+          : 'estimated';
+  const soundResult = r.failed
     ? '-'
     : r.sync === 'fitted' && r.offsetMs !== undefined && r.scale !== undefined
       ? `${r.method === 'cues' ? 'cue-match: ' : ''}moved ${(r.offsetMs / 1000).toFixed(1)} s, x${r.scale}${r.score === undefined ? '' : `, score ${r.score}`}`
@@ -246,15 +279,70 @@ function rowCells(r: VideoRow): string[] {
           : exact
             ? 'not needed'
             : '-';
+  const sound =
+    r.upgradedByTrack && r.sync !== undefined && !r.failed
+      ? `${soundResult} (first version only)`
+      : soundResult;
+  const lines =
+    r.cues === undefined
+      ? '-'
+      : r.firstCues === undefined
+        ? String(r.cues)
+        : `${r.firstCues} -> ${r.cues}`;
   return [
     r.videoId,
     source,
     timing,
     sound,
     r.durationMs === undefined ? '-' : `${Math.round(r.durationMs / 1000)} s`,
-    r.cues === undefined ? '-' : String(r.cues),
+    lines,
     r.parts ?? '-',
   ];
+}
+
+const ageText = (ms: number): string =>
+  ms < 60_000 ? `${Math.round(ms / 1000)} s ago` : `${Math.round(ms / 60_000)} min ago`;
+
+const episodeText = (season?: number, episode?: number): string =>
+  season !== undefined && episode !== undefined ? ` S${season}E${episode}` : '';
+
+/**
+ * The live state of the app as short readable lines (instead of one JSON line). No titles of what
+ * the user watches, only numbers and codes.
+ */
+export function describeStats(s: JobStats, now: number): string[] {
+  const out = [
+    `state: ${s.state}${s.paused ? ' (paused)' : ''}, running: ${s.running}, waiting in queue: ${s.queue.length}${s.stage ? `, stage: ${s.stage}` : ''}`,
+    `this session: ${s.linesTranslated} lines (${s.bytesTranslated} bytes) translated, SubDL downloads: ${s.subdlDownloads}`,
+    `OpenSubtitles downloads left today: ${s.quota ? `${s.quota.left} of ${s.quota.limit}` : 'not known'}`,
+  ];
+  if (s.progress) {
+    out.push(`progress: ${s.progress.done}/${s.progress.total} lines (${s.progress.percent}%)`);
+  }
+  if (s.lastError) out.push(`last error: ${s.lastError}`);
+  if (s.modelSwitch) out.push(`AI model switched: ${s.modelSwitch.from} -> ${s.modelSwitch.to}`);
+  const d = s.lastDelivered;
+  out.push(
+    d
+      ? `last subtitle Stremio took:${episodeText(d.season, d.episode)}, ${ageText(now - d.at)}, ${d.via}${d.source ? ` from ${d.source}` : ''}, timing ${d.timing ?? 'unknown'}`
+      : 'last subtitle Stremio took: none (in the last half hour)',
+  );
+  const u = s.upgrade;
+  out.push(
+    u
+      ? `better subtitle ready since ${ageText(now - u.at)}:${episodeText(u.season, u.episode)} (Stremio shows it only after the subtitle is selected again)`
+      : 'better subtitle waiting for a new selection: no',
+  );
+  const l = s.lastSync;
+  out.push(
+    l
+      ? `last background sound check:${episodeText(l.season, l.episode)}, ${l.outcome}${l.offsetMs !== undefined ? ` ${(l.offsetMs / 1000).toFixed(1)} s` : ''}, ${ageText(now - l.at)} (it checks the subtitle that was delivered then, not a later upgrade)`
+      : 'last background sound check: none (in the last half hour)',
+  );
+  if (s.backgroundSync) out.push(`sound check running: ${s.backgroundSync.percent}%`);
+  if (s.exactComing) out.push('the video’s own subtitle is still being read');
+  if (s.autoRetryInSec !== null) out.push(`automatic retry in ${s.autoRetryInSec} s`);
+  return out;
 }
 
 /**

@@ -56,6 +56,8 @@ export interface JobStats {
     via: string;
     /** Who gave the source subtitle (opensubtitles, subdl, jimaku), when known. */
     source?: string;
+    /** How exact the timing of the delivered subtitle is. */
+    timing?: 'exact' | 'speech' | 'estimated';
     at: number;
   } | null;
   /** How the latest background sound check ended, for half an hour. */

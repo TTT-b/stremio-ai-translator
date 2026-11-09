@@ -12,6 +12,46 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '2.0.1': {
+    en: [
+      {
+        title: 'Cleaner ready-made subtitles',
+        text: 'Ready-made Hebrew subtitles get correct right-to-left punctuation, even ones stored in reverse order. The dashes at the start and end of lines and the music note symbols are removed.',
+      },
+      {
+        title: 'Saves your OpenSubtitles quota',
+        text: 'The app now waits for the check of the subtitle inside the video before downloading anything, so nothing is downloaded when the video already has one. Skip ends the wait.',
+      },
+      {
+        title: 'My subtitles, simpler',
+        text: 'Films get the same coloured square as series, with the title next to it. Each episode has its own X, and one button at the bottom deletes everything, or only the selected ones.',
+      },
+      {
+        title: 'Fewer failed episodes',
+        text: 'When the AI keeps skipping a few lines, the app retries with a stronger model, then line by line, and finally keeps the original text instead of failing the episode.',
+      },
+      'The sync-to-sound button only appears when the sound check found a problem.',
+    ],
+    he: [
+      {
+        title: 'כתוביות מוכנות נקיות יותר',
+        text: 'כתוביות מוכנות בעברית מקבלות פיסוק תקין מימין לשמאל, גם כשהן שמורות בסדר הפוך. המקפים בתחילת השורה ובסופה וסימן ה-♪ מוסרים.',
+      },
+      {
+        title: 'חוסך מהמכסה של OpenSubtitles',
+        text: 'האפליקציה מחכה עכשיו לבדיקת הכתובית שבתוך הסרט לפני שהיא מורידה משהו, כך שלא יורד כלום כשכבר יש כתובית בסרט. "דלג" מסיים את ההמתנה.',
+      },
+      {
+        title: 'הכתוביות שלי, פשוט יותר',
+        text: 'לסרטים יש אותו ריבוע צבעוני כמו לסדרות, והשם לידו. לכל פרק יש X משלו, וכפתור אחד למטה מוחק הכל או רק את הנבחרות.',
+      },
+      {
+        title: 'פחות פרקים שנכשלים',
+        text: 'כשה-AI מדלג על כמה שורות, האפליקציה מנסה שוב עם מודל חזק יותר, אחר כך שורה אחר שורה, ולבסוף משאירה את הטקסט המקורי במקום להכשיל את הפרק.',
+      },
+      'כפתור הסנכרון לצליל מופיע רק כשבדיקת הצליל מצאה בעיה.',
+    ],
+  },
   '2.0.0': {
     en: [
       {

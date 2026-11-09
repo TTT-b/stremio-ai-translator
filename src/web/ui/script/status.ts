@@ -147,10 +147,15 @@ const refreshStatus = async () => {
     const dl = r.lastDelivered;
     $('st-delivered').classList.toggle('hidden', !dl);
     if (dl) $('st-delivered').textContent = f(T.deliveredText, {name: nameOf(dl)});
-    // Sync to sound is offered once Stremio has taken a subtitle, unless the sound is being checked
-    // now or the check already confirmed the timing of that subtitle.
-    const timingConfirmed = !!ls && !!dl && ls.at >= dl.at && (ls.outcome === 'moved' || ls.outcome === 'inSync');
-    $('sync-now-btn').classList.toggle('hidden', !dl || !!bs || timingConfirmed);
+    // Sync to sound is offered only when there is a problem: the last sound check of this subtitle
+    // failed. Hidden after a successful check, for a newer exact subtitle, or while one runs.
+    const checkedThis = !!ls && !!dl && ls.at >= dl.at;
+    const checkFailed = checkedThis && (ls.outcome === 'kept' || ls.outcome === 'unavailable');
+    const checkOk = checkedThis && (ls.outcome === 'moved' || ls.outcome === 'inSync');
+    // A better (exact) subtitle that is newer than the delivered one is already waiting: nothing to sync.
+    const upgradedSince = !!r.upgrade && r.upgrade.at >= dl?.at;
+    const needsSync = !!dl && !checkOk && !upgradedSince && checkFailed;
+    $('sync-now-btn').classList.toggle('hidden', !needsSync || !!bs);
     // Chips: who gave the source subtitle, and whether it came from the cache or was translated now.
     const SVG = (d) => '<svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
     const ICON_WORLD = SVG('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>');

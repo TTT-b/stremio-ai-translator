@@ -49,4 +49,9 @@ export interface TranslationProvider {
   getProviderName(): string;
   getModelInformation(): ModelInformation;
   normalizeError(err: unknown): AppError;
+  /**
+   * A stronger model of the same provider, asked only for lines the chosen model keeps skipping.
+   * Absent (or undefined) when there is none: the chosen model is then asked line by line.
+   */
+  rescueProvider?(): TranslationProvider | undefined;
 }

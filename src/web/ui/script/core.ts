@@ -3,8 +3,6 @@ import type { UiCtx } from '../context';
 
 /** Texts used only by the desktop title bar and its dialogs (not sent to the script). */
 const TITLE_BAR_KEYS = new Set<string>([
-  'update',
-  'updateTitle',
   'minimize',
   'maximize',
   'close',
@@ -141,7 +139,8 @@ const ckKeyAdded = (name) => {
 };
 document.querySelectorAll('[data-open-settings]').forEach((b) => b.addEventListener('click', () => $('open-settings').click()));
 setInterval(paintLast, 30000);
-const show = (id, ok, msg) => {
+const msgTimers = new Map();
+const show =(id, ok, msg) => {
   const el = $(id);
   const base = el.className.split(' ').filter(c => !Object.values(TONE).includes(c)).join(' ');
   el.textContent = msg ? (ok === null ? '' : ok ? '\\u2714\\uFE0E ' : '\\u2716\\uFE0E ') + msg : '';
@@ -151,6 +150,13 @@ const show = (id, ok, msg) => {
     row.dataset.base = ok === null ? (msg === T.testing ? 'checking' : 'nokey') : ok ? 'ok' : 'fail';
     if (ok !== null) ckAt = Date.now();
     paintRow(row);
+    // A success message goes away after a few seconds; the state and the "checked" line stay.
+    // A failure message stays, because it says what to fix.
+    clearTimeout(msgTimers.get(el));
+    if (ok === true) {
+      const text = el.textContent;
+      msgTimers.set(el, setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 5000));
+    }
   }
 };
 ckRows().forEach(paintRow);

@@ -20,6 +20,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
 import { isAppError } from '../errors';
+import { classifyUpdateError, type UpdateFailReason } from './updateReason';
 import { startAddon, type RunningAddon } from '../startup';
 import { zoomFor } from './zoom';
 import { ICON_PNG_BASE64 } from './iconData';
@@ -306,8 +307,9 @@ function createTray(): void {
 
 type UpdateState =
   | { status: 'idle' | 'checking' | 'none' | 'unavailable' }
-  | { status: 'downloading' | 'downloaded'; version: string }
-  | { status: 'error'; message: string };
+  | { status: 'downloading'; version: string; percent?: number }
+  | { status: 'downloaded'; version: string }
+  | { status: 'error'; message: string; reason?: UpdateFailReason };
 
 let updateState: UpdateState = { status: 'idle' };
 
@@ -332,10 +334,22 @@ function setupUpdater(logger: Logger): void {
   autoUpdater.on('update-available', (info) => {
     setUpdateState({ status: 'downloading', version: info.version });
   });
+  autoUpdater.on('download-progress', (p) => {
+    if (updateState.status !== 'downloading') return;
+    setUpdateState({
+      status: 'downloading',
+      version: updateState.version,
+      percent: Math.round(p.percent),
+    });
+  });
   autoUpdater.on('update-not-available', () => setUpdateState({ status: 'none' }));
   autoUpdater.on('error', (err) => {
     logger.warn({ stage: 'CONFIG', error: err.message }, 'update check failed');
-    setUpdateState({ status: 'error', message: 'Could not check for updates. Try again later.' });
+    setUpdateState({
+      status: 'error',
+      message: 'Could not check for updates. Try again later.',
+      reason: classifyUpdateError(err.message),
+    });
   });
   autoUpdater.on('update-downloaded', (info) => {
     logger.info({ stage: 'CONFIG', version: info.version }, 'update downloaded');

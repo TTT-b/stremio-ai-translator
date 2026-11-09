@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AppError } from '../src/errors';
 import { chunkCues } from '../src/subtitles/chunk';
 import { parseSubtitle, stripOverrideTags } from '../src/subtitles/parse';
-import { applyRtlFix } from '../src/subtitles/rtl';
+import { applyRtlFix, stripDialogueDashes, unflipPunctuation } from '../src/subtitles/rtl';
 import { serializeSubtitle } from '../src/subtitles/serialize';
 import {
   assertSameStructure,
@@ -274,6 +274,63 @@ describe('rtl fix', () => {
 
   it('leaves empty lines alone', () => {
     expect(applyRtlFix('א\n\nב')).toBe(`${RLM}א${RLM}\n\n${RLM}ב${RLM}`);
+  });
+});
+
+describe('music notes', () => {
+  it('removes the note symbols from a line that has words', () => {
+    expect(applyRtlFix('♪ או שיט ♪')).toBe('‏או שיט‏');
+    expect(applyRtlFix('<i>♪ la la ♪</i>')).toBe('‏<i>la la‏</i>');
+  });
+
+  it('leaves a line that is only notes alone', () => {
+    expect(applyRtlFix('♪♪')).toBe('‏♪♪‏');
+  });
+});
+
+describe('stripDialogueDashes', () => {
+  it('removes a leading dash and a trailing dash, keeping the final stop', () => {
+    expect(stripDialogueDashes('- טייסינו הטובים! מה קורה?\n– היי, אחי.')).toBe(
+      'טייסינו הטובים! מה קורה?\nהיי, אחי.',
+    );
+    expect(stripDialogueDashes('תתפוצץ-.')).toBe('תתפוצץ.');
+    expect(stripDialogueDashes('<i>- שלום</i>')).toBe('<i>שלום</i>');
+    expect(stripDialogueDashes('שלום -')).toBe('שלום');
+  });
+
+  it('keeps a dash inside a line', () => {
+    expect(stripDialogueDashes('דו-קרב גדול')).toBe('דו-קרב גדול');
+  });
+});
+
+describe('unflipPunctuation (subtitles stored with flipped punctuation)', () => {
+  it('puts stops back at the end and a trailing dash at the start (real case)', () => {
+    const flipped = [
+      '.שיניתי את דעתי\n.בואו נלך',
+      '?למה אתה מתכוון -\n?למה אני מתכוון -',
+      '!שתוק\n.שב',
+    ];
+    expect(unflipPunctuation(flipped)).toEqual([
+      'שיניתי את דעתי.\nבואו נלך.',
+      '- למה אתה מתכוון?\n- למה אני מתכוון?',
+      'שתוק!\nשב.',
+    ]);
+  });
+
+  it('keeps tags in place and reverses a flipped "?!" run', () => {
+    const flipped = ['<i>.אחד</i>', '<i>?!שניים</i>', '.שלוש'];
+    expect(unflipPunctuation(flipped)).toEqual(['<i>אחד.</i>', '<i>שניים!?</i>', 'שלוש.']);
+  });
+
+  it('leaves a normal file untouched', () => {
+    const normal = ['שלום!', '- מה?\n- כלום...', 'ביי.', 'עוד אחד', '...והוא הלך'];
+    expect(unflipPunctuation(normal)).toEqual(normal);
+  });
+
+  it('leaves a file with only a rare leading stop untouched', () => {
+    const texts = Array.from({ length: 40 }, () => 'שורה רגילה.');
+    texts[5] = '.חריג';
+    expect(unflipPunctuation(texts)).toEqual(texts);
   });
 });
 

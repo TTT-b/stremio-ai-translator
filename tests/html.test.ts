@@ -28,7 +28,7 @@ describe('config page', () => {
     expect(page).not.toMatch(/src=["']https?:\/\/(?!127\.0\.0\.1)/i);
     // External links are click-throughs only (Stremio Web + the key-creation pages), never loaded resources.
     expect(page).not.toMatch(
-      /href=["']https?:\/\/(?!127\.0\.0\.1|web\.stremio\.com\/|aistudio\.google\.com\/|platform\.claude\.com\/|platform\.openai\.com\/|www\.opensubtitles\.com\/|subdl\.com\/)/i,
+      /href=["']https?:\/\/(?!127\.0\.0\.1|web\.stremio\.com\/|aistudio\.google\.com\/|platform\.claude\.com\/|platform\.openai\.com\/|www\.opensubtitles\.com\/|subdl\.com\/|jimaku\.cc\/)/i,
     );
     expect(page).not.toMatch(/cdn\.tailwindcss\.com|<canvas/i);
     // The only drawings are the two small flags, the menu arrow and the eye icon (no QR code).
@@ -46,6 +46,7 @@ describe('config page', () => {
       'https://www.opensubtitles.com/consumers',
       'https://www.opensubtitles.com/en/users/sign_up',
       'https://subdl.com/panel/api',
+      'https://jimaku.cc/account',
     ]) {
       expect(page).toContain(`href="${url}" target="_blank" rel="noopener noreferrer"`);
     }
@@ -408,6 +409,19 @@ describe('unsaved changes in the settings drawer', () => {
     expect(html).not.toContain('libMuxMp4)');
   });
 
+  it('groups the library as series, seasons and episodes, and explains a video that Stremio does not hold', () => {
+    for (const part of [
+      'seriesGroup',
+      'seasonBlock',
+      'askNoStream',
+      'libNoStreamTitle',
+      'nostream-open',
+      'nostream-file',
+    ]) {
+      expect(html).toContain(part);
+    }
+  });
+
   it('shows the eye button of a password field only once something is typed', () => {
     expect(html).toContain('top-1/2 hidden h-8 w-8');
     expect(html).toContain("b.classList.toggle('hidden', !has)");
@@ -439,6 +453,26 @@ describe('unsaved changes in the settings drawer', () => {
     for (const id of ['unsaved-modal', 'unsaved-save', 'unsaved-discard', 'unsaved-stay']) {
       expect(html).toContain(`id="${id}"`);
     }
+  });
+  it('shows each service as a row that opens its fields, with optional sources grouped', () => {
+    for (const svc of ['ai', 'os', 'subdl', 'jimaku']) expect(html).toContain(`data-svc="${svc}"`);
+    for (const id of ['d-ai', 'd-os', 'd-user', 'd-pass', 'd-subdl', 'd-jimaku'])
+      expect(html).toContain(`id="${id}"`);
+    expect(html).toContain('data-rm-yes="aiApiKey"');
+  });
+
+  it('summarises unsaved changes without ever showing key values', () => {
+    expect(html).toContain('id="unsaved-summary"');
+    expect(html).toContain('SECRET_IDS');
+    expect(html).toContain('T.unsavedKeyChanged');
+  });
+
+  it('has an update bar under the title bar with install, busy-job question and failure message', () => {
+    for (const id of ['update-bar', 'update-install', 'update-busy-wait', 'update-busy-now']) {
+      expect(html).toContain(`id="${id}"`);
+    }
+    expect(html).not.toContain('id="update-btn"');
+    expect(html).toContain('T.updBarFailed');
   });
 
   it('does not save the startup switches by itself: only the Save button applies them', () => {
