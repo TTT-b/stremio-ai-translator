@@ -14,3 +14,6 @@ Thumbs.db
 *.zip
 dist-electron/
 release/
+
+# local design mockups (not uploaded)
+/design-mockups/
