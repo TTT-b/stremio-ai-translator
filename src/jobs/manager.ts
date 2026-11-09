@@ -652,11 +652,12 @@ export class JobManager {
 
   /**
    * Ask OpenSubtitles how many downloads the account has left today. At most once every 10
-   * minutes, never in parallel, and a failure only leaves the old number in place.
+   * minutes (unless `force`, used by the user's own check button), never in parallel, and a
+   * failure only leaves the old number in place.
    */
-  async refreshQuota(): Promise<void> {
+  async refreshQuota(force = false): Promise<void> {
     const nowMs = (this.deps.now ?? Date.now)();
-    if (this.quotaChecking || nowMs - this.quotaCheckedAt < QUOTA_REFRESH_MS) return;
+    if (this.quotaChecking || (!force && nowMs - this.quotaCheckedAt < QUOTA_REFRESH_MS)) return;
     this.quotaChecking = true;
     this.quotaCheckedAt = nowMs;
     try {
@@ -1411,7 +1412,7 @@ export class JobManager {
                   !!fallback || prefetched || this.episodeServed(job),
                   wasSkipped,
                 ),
-                this.deps.limits?.embeddedCapMs ?? 140_000, // one try is 30 s; a loading video gets up to 2 min
+                this.deps.limits?.embeddedCapMs ?? 140_000, // one try is 30 s; a loading video gets up to 40 s of retries
                 () => {
                   log.warn({ stage: 'SOURCE', embedded: 'cap' }, 'embedded lookup took too long');
                   return undefined;
@@ -1451,7 +1452,8 @@ export class JobManager {
     let placedOnSpeech = false;
     if (!chosen) {
       this.stopIfCancelled(job);
-      job.stage = 'search';
+      // The check inside the video may still be running: keep its label instead of flipping back and forth.
+      if (!job.lateEmbedded) job.stage = 'search';
       chosen = await withCap(
         this.openSubtitlesSource(job, cfg, lang.code, log),
         this.deps.limits?.sourceCapMs ?? 120_000,

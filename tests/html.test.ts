@@ -146,14 +146,10 @@ describe('main screen layout', () => {
     }
   });
 
-  it('puts the Continue button inside the status card', () => {
+  it('has no Continue button and no floating better-subtitle card', () => {
     const html = renderStatusPage(base);
-    const card = html.indexOf('id="st-state"');
-    const button = html.indexOf('id="resume-btn"');
-    const next = html.indexOf('id="st-progress-text"');
-    expect(card).toBeGreaterThan(-1);
-    expect(button).toBeGreaterThan(card);
-    expect(button).toBeLessThan(next);
+    expect(html).not.toContain('id="resume-btn"');
+    expect(html).not.toContain('id="st-upgrade"');
   });
 
   it('says no key was entered when there is no SubDL key, and counts when there is', () => {

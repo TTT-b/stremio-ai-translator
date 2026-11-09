@@ -83,9 +83,8 @@ try { dismissedUpgrade = Number(localStorage.getItem('upgradeDismissed')) || 0; 
 const dismissSyncNotices = () => {
   dismissedUpgrade = Date.now();
   try { localStorage.setItem('upgradeDismissed', String(dismissedUpgrade)); } catch { /* not saved */ }
-  for (const id of ['st-upgrade', 'st-sync']) { $(id).classList.add('hidden'); $(id).classList.remove('flex'); }
+  for (const id of ['st-sync']) { $(id).classList.add('hidden'); $(id).classList.remove('flex'); }
 };
-$('st-upgrade-close').addEventListener('click', dismissSyncNotices);
 $('st-sync-ok').addEventListener('click', dismissSyncNotices);
 // Cancel (and Skip, when a step can be skipped) sit with the other buttons and show only while there is a job.
 let stopJob = '';
@@ -130,7 +129,23 @@ $('st-skip-btn').addEventListener('click', () => {
   else if (stopJob) queueAct(stopJob, 'cancel');
 });
 let quotaAcked = '';
-if ($('st-quota-ack')) $('st-quota-ack').onclick = () => { quotaAcked = $('st-quota-hint').dataset.level || ''; $('st-quota-hint').classList.replace('flex', 'hidden'); };
+const paintQuotaTag = (osRow) => {
+  const tag = $('st-quota-tag');
+  if (!tag || !osRow) return;
+  const lv = osRow.dataset.quota || '';
+  $('st-quota-tag-text').textContent = lv === 'out' ? T.checksQuotaOut : T.checksQuotaLow;
+  $('st-quota-dot').className = 'h-1.5 w-1.5 rounded-full ' + (lv === 'out' ? 'bg-rose-400' : 'bg-amber-400');
+  const on = !!lv && osRow.dataset.quotaAck === lv;
+  tag.classList.toggle('hidden', !on);
+  tag.classList.toggle('inline-flex', on);
+};
+// The check mark removes the yellow colour; a small grey tag with the same words stays in the row.
+if ($('st-quota-ack')) $('st-quota-ack').onclick = () => {
+  quotaAcked = $('st-quota-hint').dataset.level || '';
+  $('st-quota-hint').classList.replace('flex', 'hidden');
+  const osRow = document.querySelector('[data-check-row="opensubtitles"][data-base]');
+  if (osRow) { osRow.dataset.quotaAck = osRow.dataset.quota || ''; paintRow(osRow); paintQuotaTag(osRow); }
+};
 const refreshStatus = async () => {
   try {
     const r = await (await fetch('/api/status')).json();
@@ -228,19 +243,10 @@ const refreshStatus = async () => {
       hint.className = 'mt-1 items-center justify-between gap-2 text-xs ' + (level0 === 'out' ? 'text-rose-300' : 'text-amber-300') + (show ? ' flex' : ' hidden');
       const osRow = document.querySelector('[data-check-row="opensubtitles"][data-base]');
       const level = q.left === 0 ? 'out' : q.left < 10 ? 'low' : '';
-      if (osRow && osRow.dataset.quota !== level) { osRow.dataset.quota = level; paintRow(osRow); }
+      if (osRow && osRow.dataset.quota !== level) { osRow.dataset.quota = level; osRow.dataset.quotaAck = ''; if (level !== quotaAcked) quotaAcked = ''; paintRow(osRow); }
+      paintQuotaTag(osRow);
     }
     if (subdlOn) $('st-subdl-text').textContent = f(T.stSubdlCount, {n: r.subdlDownloads || 0});
-    // Continue shows only when there is something it can do.
-    const up = r.upgrade;
-    const upVisible = fresh(up);
-    $('st-upgrade').classList.toggle('hidden', !upVisible);
-    $('st-upgrade').classList.toggle('flex', upVisible);
-    if (upVisible) {
-      const where = up.season !== undefined && up.episode !== undefined ? (UI === 'he' ? ' עונה ' + up.season + ' פרק ' + up.episode : ' S' + up.season + 'E' + up.episode) : '';
-      $('st-upgrade-text').textContent = f(T.upgradeText, {name: up.title + where});
-    }
-    $('resume-btn').classList.toggle('hidden', !r.resumable);
     renderQueue(r.queue || []);
     renderStop(r.queue || [], r.exactComing, bs);
     renderNow(r.queue || [], bs, r.exactComing, dl);

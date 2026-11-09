@@ -890,6 +890,8 @@ export function createApp(deps: ServerDeps): express.Express {
       },
       'opensubtitles test',
     );
+    // The check button also asks how many downloads are left today (not only "is the login valid").
+    if (result.ok) await jobs.refreshQuota(true);
     res.json(result);
   });
 

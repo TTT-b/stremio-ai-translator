@@ -14,6 +14,7 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 - Built (uncommitted until the commit step): floating notice + tray dot/tooltip (`trayDot.ts`), "try another subtitle" button (`src/jobs/tryAnother.ts`, `POST /api/try-another`; works only for results still in memory), names glossary, 90-day cleanup, English before Japanese, no pointless "better subtitle" notice after a 0.0 s fit (`isNoShift`).
 - From the Stremio research (9 Nov 2026): Stremio sends two requests per video (name only, then with the file hash 3-22 s later) and plays only the first. The hash request now joins the first job (`JobManager.ensure`), `SUB_WAIT_MS` is 8 s (Stremio's own server gives up on /sub after exactly 10 s), and a request with another file name for the same episode stops the older jobs' in-video wait and sound check (`supersedeOthers`). 741 tests.
 - NOT done: ending the older job's download itself when the source is switched; answering with a quick filler instead of a held answer (item 3, partly covered by the 8 s wait); the "two unreachable-server checks = left the video" rule.
+- Last round (9 Nov): retries for the in-video subtitle now 40 s (was 2 min); stage label no longer flips local/search/local; removed the Continue-translation button and the floating better-subtitle card (the app resumes by itself); quota tag/pill/key-section UI polish.
 - Next: user tests the built installer, then OK to push + tag v2.1.0 + publish release (installer, blockmap, latest.yml).
 
 ## Not now / later

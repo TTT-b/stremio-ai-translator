@@ -111,20 +111,6 @@ const openStremioNow = async () => {
   setTimeout(() => { openStremioBtn.disabled = false; }, 2000);
 };
 if (openStremioBtn) openStremioBtn.addEventListener('click', () => askOpen(T.extStremioTitle, T.extStremioBody, 'Stremio', openStremioNow));
-$('resume-btn').addEventListener('click', async () => {
-  const btn = $('resume-btn');
-  const label = btn.textContent;
-  btn.style.minWidth = btn.offsetWidth + 'px'; // the new text must not change the button's size
-  btn.disabled = true;
-  btn.textContent = T.resumeBusy;
-  btn.classList.add('animate-pulse');
-  setTimeout(() => { btn.disabled = false; btn.textContent = label; btn.classList.remove('animate-pulse'); }, 1500);
-  try {
-    const r = await post('/api/resume', {});
-    toast(r.ok, r.ok ? T.resumeStarted : T.resumeNone);
-  } catch { toast(false, FAILED); }
-  refreshStatus();
-});
 $('sync-now-btn').addEventListener('click', async () => {
   const btn = $('sync-now-btn');
   btn.disabled = true;

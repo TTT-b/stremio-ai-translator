@@ -65,7 +65,7 @@ subtitle's sync. In order of effect:
    subtitle track and the torrent has no subtitle file for it; `ffmpeg: false` there means tracks
    inside the file could not be read because ffmpeg was not found, set `FFMPEG_PATH`). `retry` lines mean
    the video's tracks were found but the video is still loading: the add-on tries again every 10
-   seconds for up to 2 minutes before it gives up and uses the next source.
+   seconds for up to 40 seconds before it gives up and uses the next source.
 2. For a torrent without its own subtitle, the add-on listens to a few short pieces of the video's sound and
    moves the downloaded subtitle onto the speech. The main screen shows "Syncing to the speech... N%".
    Log lines: `subtitle moved onto the speech` (done), `timing left as it was` (not sure, the subtitle is

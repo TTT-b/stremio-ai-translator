@@ -41,7 +41,7 @@ export interface EmbeddedDeps {
   exec?: Exec;
   /** Longest one try may take before the next try or the OpenSubtitles search (default 30 s). */
   budgetMs?: number;
-  /** Longest all tries may take together when tracks were found but not yet readable (default 2 min). */
+  /** Longest all tries may take together when tracks were found but not yet readable (default 40 s). */
   retryBudgetMs?: number;
   /** Pause between tries (default 10 s). Tests set 0. */
   retryGapMs?: number;
@@ -78,7 +78,7 @@ const EMBEDDED_BUDGET_MS = 30_000;
  * A video that is still loading shows its subtitle tracks but cannot be read yet. Instead of giving
  * up after the first budget, the lookup tries again for this long in total, with a pause between.
  */
-const RETRY_BUDGET_MS = 120_000;
+const RETRY_BUDGET_MS = 40_000;
 const RETRY_GAP_MS = 10_000;
 const FILE_TIMEOUT_MS = 15_000;
 const PROBE_TIMEOUT_MS = 12_000;

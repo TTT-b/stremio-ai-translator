@@ -97,7 +97,8 @@ const ckRows = () => [...document.querySelectorAll('[data-check-row][data-base]'
 // A low or used-up quota shows on the row even when it was not tested yet.
 const ckState = (row) => {
   const b = row.dataset.base;
-  if (b === 'ok' || b === 'idle') { if (row.dataset.quota === 'out') return 'out'; if (row.dataset.quota === 'low') return 'warn'; }
+  // After the user pressed the check mark, a low quota keeps only its small tag, not the yellow state.
+  if ((b === 'ok' || b === 'idle') && row.dataset.quotaAck !== row.dataset.quota) { if (row.dataset.quota === 'out') return 'out'; if (row.dataset.quota === 'low') return 'warn'; }
   return b;
 };
 let ckAt = 0;
@@ -107,6 +108,7 @@ const paintLast = () => {
   const m = Math.floor((Date.now() - ckAt) / 60000);
   box.textContent = !ckAt ? T.checksNever : m < 1 ? T.checksJustNow : f(T.checksMinAgo, {n: m});
 };
+let pillTimer = 0, pillHidden = false;
 const paintChecks = () => {
   const pill = $('checks-pill');
   if (!pill) return;
@@ -117,6 +119,11 @@ const paintChecks = () => {
   pill.className = 'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-px text-xs font-bold ' + CK_PILL[a];
   pill.innerHTML = ckIcon(a) + '<span></span>';
   pill.lastChild.textContent = label;
+  // The all-OK pill goes away 10 s after it appears, like the messages in the rows.
+  if (a === 'ok') {
+    if (!pillTimer) pillTimer = setTimeout(() => { pillHidden = true; paintChecks(); }, 10000);
+    if (pillHidden) pill.classList.add('hidden');
+  } else { clearTimeout(pillTimer); pillTimer = 0; pillHidden = false; }
   paintLast();
 };
 const paintRow = (row) => {
@@ -155,7 +162,7 @@ const show =(id, ok, msg) => {
     clearTimeout(msgTimers.get(el));
     if (ok === true) {
       const text = el.textContent;
-      msgTimers.set(el, setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 5000));
+      msgTimers.set(el, setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 10000));
     }
   }
 };

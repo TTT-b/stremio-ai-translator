@@ -90,15 +90,17 @@ ${toggle('d-test', d.testMode === true, 'testOn')}
     escapeHtml(d.aiProviderLabel) || tt('rowAi'),
     d.aiConfigured,
     d.aiConfigured ? tt('configured') : tt('setNotSet'),
-    `<ul class="grid gap-2 text-sm">${keyRow('aiApiKey', tt('rowAi'), d.aiConfigured, escapeHtml(d.aiProviderLabel) || tt('configured'))}</ul>
-<div><label class="${labelCls}" for="d-ai">${tt('aiKeyLabel')}</label><input class="${field}" id="d-ai" type="password" autocomplete="off" placeholder="${keyPh(d.aiConfigured)}"></div>`,
+    `${d.aiConfigured ? `<ul class="grid gap-2 text-sm">${keyRow('aiApiKey', tt('rowAi'), true, escapeHtml(d.aiProviderLabel) || tt('configured'))}</ul>` : ''}
+<input class="${field}" id="d-ai" type="password" autocomplete="off" aria-label="${tt('aiKeyLabel')}" placeholder="${keyPh(d.aiConfigured)}">`,
     d.aiConfigured ? tt('setKeySaved') : '',
   );
   const osRow = serviceRow(
     'os',
     'bg-sky-400',
     'OpenSubtitles',
-    d.openSubtitlesUsername ? `<span dir="ltr">${escapeHtml(d.openSubtitlesUsername)}</span>` : '',
+    d.openSubtitlesUsername
+      ? `${tt('username')}: <span dir="ltr">${escapeHtml(d.openSubtitlesUsername)}</span>`
+      : '',
     osOk,
     osOk
       ? tt('setConnected')
@@ -120,8 +122,8 @@ ${keyRow('openSubtitlesLogin', `${tt('rowOsLogin')}${d.openSubtitlesUsername ? `
     tt('setSubdlDetail'),
     d.subdlKeyConfigured ?? false,
     d.subdlKeyConfigured ? tt('configured') : tt('setNotSet'),
-    `<ul class="grid gap-2 text-sm">${keyRow('subdlApiKey', tt('rowSubdl'), d.subdlKeyConfigured ?? false)}</ul>
-<div><label class="${labelCls}" for="d-subdl">${tt('subdlKeyLabel')}</label><input class="${field}" id="d-subdl" type="password" autocomplete="off" placeholder="${keyPh(d.subdlKeyConfigured ?? false)}"><p class="mt-1 text-xs text-warm-mu">${tt('subdlHint')}</p></div>
+    `${d.subdlKeyConfigured ? `<ul class="grid gap-2 text-sm">${keyRow('subdlApiKey', tt('rowSubdl'), true)}</ul>` : ''}
+<input class="${field}" id="d-subdl" type="password" autocomplete="off" aria-label="${tt('subdlKeyLabel')}" placeholder="${keyPh(d.subdlKeyConfigured ?? false)}">
 <div class="flex flex-wrap gap-2">${keyLink('https://subdl.com/panel/api', t(lang, 'getSubdlKey'))}</div>`,
   );
   const jimakuRow = serviceRow(
@@ -131,8 +133,8 @@ ${keyRow('openSubtitlesLogin', `${tt('rowOsLogin')}${d.openSubtitlesUsername ? `
     tt('setJimakuDetail'),
     d.jimakuKeyConfigured ?? false,
     d.jimakuKeyConfigured ? tt('configured') : tt('setNotSet'),
-    `<ul class="grid gap-2 text-sm">${keyRow('jimakuApiKey', tt('rowJimaku'), d.jimakuKeyConfigured ?? false)}</ul>
-<div><label class="${labelCls}" for="d-jimaku">${tt('jimakuKeyLabel')}</label><input class="${field}" id="d-jimaku" type="password" autocomplete="off" placeholder="${keyPh(d.jimakuKeyConfigured ?? false)}"><p class="mt-1 text-xs text-warm-mu">${tt('jimakuHint')}</p></div>
+    `${d.jimakuKeyConfigured ? `<ul class="grid gap-2 text-sm">${keyRow('jimakuApiKey', tt('rowJimaku'), true)}</ul>` : ''}
+<input class="${field}" id="d-jimaku" type="password" autocomplete="off" aria-label="${tt('jimakuKeyLabel')}" placeholder="${keyPh(d.jimakuKeyConfigured ?? false)}">
 <div class="flex flex-wrap gap-2">${keyLink('https://jimaku.cc/account', t(lang, 'getJimakuKey'))}</div>`,
   );
   const keysSection = group(
