@@ -25,6 +25,8 @@ import { cinemetaTitle, kitsuTitles, makeTitleResolver, parseFilename } from '..
 import type { SubtitleCandidate } from '../sources/types';
 import { type ConsensusItem, pickByConsensus } from '../subtitles/consensus';
 import { buildCast } from '../subtitles/cast';
+import { extractNames, seriesKeyOf, type GlossaryNames } from '../translation/glossary';
+import { GlossaryStore } from '../translation/glossaryStore';
 import { cleanSubtitle, cleanTranslated } from '../subtitles/clean';
 import { parseSubtitle } from '../subtitles/parse';
 import { applyRtlFix, stripDialogueDashes, unflipPunctuation } from '../subtitles/rtl';
@@ -177,8 +179,13 @@ export class JobManager {
   /** Source downloads in progress, by source cache key, so one file is downloaded once. */
   private readonly downloading = new Map<string, Promise<string>>();
 
+  private readonly glossary: GlossaryStore | undefined;
+
   constructor(private readonly deps: JobManagerDeps) {
     this.now = deps.now ?? Date.now;
+    this.glossary = deps.glossaryFile
+      ? new GlossaryStore(deps.glossaryFile, deps.logger, this.now)
+      : undefined;
     mkdirSync(deps.jobsDir, { recursive: true });
   }
 
@@ -1581,6 +1588,8 @@ export class JobManager {
       cfg.partialSubtitles &&
       parsed.cues.length >= (this.deps.limits?.partialMinTotalCues ?? PARTIAL_MIN_TOTAL_CUES);
     const untilMs = parsed.cues[parsed.cues.length - 1]?.endMs ?? 0;
+    const seriesKey = seriesKeyOf(job.spec.video);
+    const seriesNames = sharing ? undefined : this.seriesNames(seriesKey, log);
     const work =
       sharing?.work ??
       translateSubtitle(parsed, provider, {
@@ -1602,6 +1611,7 @@ export class JobManager {
         maxValidationRetries: cfg.chunkMaxRetries,
         rtlFix: rtl,
         cast,
+        ...(seriesNames && Object.keys(seriesNames).length > 0 ? { glossary: seriesNames } : {}),
         dualSubtitles: dual,
         isCancelled: () => [...watchers].every((w) => w.cancelled),
         waitWhilePaused: () => this.waitWhilePaused(() => [...watchers].every((w) => w.cancelled)),
@@ -1639,6 +1649,8 @@ export class JobManager {
       delete job.kick;
     }
     watchers.delete(job);
+    if (!sharing)
+      this.learnSeriesNames(seriesKey, parsed.cues, result.file.cues, lang.code, dual, log);
     job.progress = { done: result.file.cues.length, total: result.file.cues.length };
     // A sound note the AI wrote itself is removed too (two-line dual subtitles are left as they are).
     const finalCues =
@@ -1662,6 +1674,38 @@ export class JobManager {
       exact,
       timing,
     };
+  }
+
+  /** Names fixed by earlier episodes of this series; never fails the job. */
+  private seriesNames(seriesKey: string | undefined, log: Logger): GlossaryNames | undefined {
+    if (!seriesKey || !this.glossary) return undefined;
+    try {
+      return this.glossary.get(seriesKey);
+    } catch {
+      log.warn({ stage: 'CACHE' }, 'series names could not be read');
+      return undefined;
+    }
+  }
+
+  /** Remembers the names of this episode for the next one; never fails the job. */
+  private learnSeriesNames(
+    seriesKey: string | undefined,
+    source: readonly { text: string }[],
+    translated: readonly { text: string }[],
+    languageCode: string,
+    dual: boolean,
+    log: Logger,
+  ): void {
+    if (!seriesKey || !this.glossary) return;
+    try {
+      const found = extractNames(source, translated, languageCode, dual);
+      if (Object.keys(found).length > 0) this.glossary.learn(seriesKey, found);
+    } catch (err) {
+      log.warn(
+        { stage: 'CACHE', errorCode: isAppError(err) ? err.code : 'UNKNOWN' },
+        'series names could not be saved',
+      );
+    }
   }
 
   /**

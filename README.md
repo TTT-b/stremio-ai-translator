@@ -37,6 +37,9 @@ validated, cached and served to the player.
   prompt tells the model to infer gender from pronouns and names, stay consistent, and use
   gender-neutral wording when it is truly unknown. Translations made with older versions are
   re-made (the prompt version is part of the cache key).
+- **Same names in every episode** - after an episode is translated, the app keeps the spelling of
+  recurring character and place names per series (`glossary.json` in the data folder, at most 100
+  names per series) and tells the AI to use them in the next episodes.
 
 ## Requirements
 

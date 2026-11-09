@@ -102,6 +102,7 @@ abstract class HttpProvider implements TranslationProvider {
       context: req.context,
       upcoming: req.upcoming ?? [],
       ...(req.cast?.length ? { cast: req.cast } : {}),
+      ...(req.glossary?.length ? { glossary: req.glossary } : {}),
       cues: req.cues,
     };
     let reply: Reply;

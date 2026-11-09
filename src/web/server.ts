@@ -262,6 +262,7 @@ export function createApp(deps: ServerDeps): express.Express {
       : {}),
     testMode,
     jobsDir: join(dataDir, 'jobs'),
+    glossaryFile: join(dataDir, 'glossary.json'),
     makeSource: (c, l) => (testMode() ? makeTestSource(dataDir) : makeSource(c, l)),
     makeProvider: (c) => (testMode() ? makeTestProvider() : makeProvider(c)),
     // The meter only reads the account's allowance, so it stays real in test mode.

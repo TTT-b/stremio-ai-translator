@@ -127,6 +127,8 @@ export interface JobManagerDeps {
   cache: FileCache;
   /** Directory for small job spec files so /sub URLs survive a restart. */
   jobsDir: string;
+  /** Where the per-series names are kept so every episode spells them the same way (optional). */
+  glossaryFile?: string;
   makeSource: (config: Config, logger: Logger) => SourceSubtitleProvider;
   makeProvider: (config: Config) => TranslationProvider;
   /** Source used only to read the daily allowance (read-only); defaults to makeSource. */

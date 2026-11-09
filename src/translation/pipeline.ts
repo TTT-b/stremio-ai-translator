@@ -11,6 +11,7 @@ import {
   findSuspiciousLines,
   stripForeignScripts,
 } from '../subtitles/validate';
+import { namesForRequest, type GlossaryNames } from './glossary';
 import type { TokenUsage, TranslateChunkResult, TranslationProvider } from './provider';
 import { withRetry } from './retry';
 
@@ -42,6 +43,8 @@ export interface PipelineOptions {
   targetLanguageName: string;
   /** Characters with a known gender ("Nisha: female"), sent with every request. */
   cast?: string[];
+  /** Names of this series with the spelling earlier episodes used (see glossary.ts). */
+  glossary?: GlossaryNames;
   chunkSize: number;
   concurrency: number;
   /** Extra attempts when a chunk comes back invalid. */
@@ -251,6 +254,18 @@ function withKick<T>(call: Promise<T>, opts: PipelineOptions): Promise<T> {
   });
 }
 
+/** The glossary entries that occur in the lines of one request (nothing is sent when none do). */
+function glossaryFor(
+  opts: PipelineOptions,
+  lines: readonly { text: string }[],
+): { glossary?: string[] } {
+  const list = namesForRequest(
+    opts.glossary,
+    lines.map((l) => l.text),
+  );
+  return list.length > 0 ? { glossary: list } : {};
+}
+
 /** Most lines one chunk may send back for a second look, and how many neighbours give context. */
 const MAX_REPAIR_LINES = 40;
 const REPAIR_NEIGHBOURS = 2;
@@ -298,6 +313,7 @@ async function repairSuspiciousLines(
         context: around,
         upcoming: [],
         ...(opts.cast?.length ? { cast: opts.cast } : {}),
+        ...glossaryFor(opts, [...redo, ...around]),
       }),
       opts,
     );
@@ -376,6 +392,7 @@ function askModel(
               context,
               upcoming: chunk.upcoming,
               ...(opts.cast?.length ? { cast: opts.cast } : {}),
+              ...glossaryFor(opts, [...sub, ...context, ...chunk.upcoming]),
             }),
             opts,
           );
