@@ -239,6 +239,35 @@ describe('OpenSubtitlesProvider', () => {
     expect(new URL(calls[2]?.url as string).searchParams.has('languages')).toBe(false);
   });
 
+  it('still looks for an English subtitle by title when the id only finds other languages', async () => {
+    const item = (language: string, id: number) => ({
+      attributes: {
+        language,
+        release: 'Some Anime S01E03',
+        files: [{ file_id: id, file_name: `${language}.srt` }],
+      },
+    });
+    const { f } = fakeFetch((url) => {
+      const u = new URL(url);
+      if (u.searchParams.has('query')) return json({ data: [item('en', 7)] });
+      if (u.searchParams.has('languages')) return json({ data: [] });
+      return json({ data: [item('ja', 5)] }); // the id search without a language filter
+    });
+    const out = await provider(f).search({
+      video: {
+        type: 'series',
+        idKind: 'imdb',
+        externalId: 'tt1',
+        imdbId: 'tt1',
+        season: 1,
+        episode: 3,
+      },
+      languages: ['he', 'en'],
+      resolveTitles: async () => [{ title: 'Some Anime', season: 1, episode: 3 }],
+    });
+    expect(out.map((c) => c.language).sort()).toEqual(['en', 'ja']);
+  });
+
   it('maps HTTP errors to normalized codes', async () => {
     const q = {
       video: {
