@@ -57,7 +57,16 @@
     "zod": "^4.6.7"
   },
   "overrides": {
-    "path-to-regexp": "0.1.13"
+    "path-to-regexp": "0.1.13",
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.1"
+    },
+    "app-builder-lib": {
+      "minimatch": "^11.0.1"
+    },
+    "@electron/universal": {
+      "minimatch": "^11.0.1"
+    }
   },
   "main": "dist-electron/main.cjs",
   "author": "Stremio AI Subtitle Translator",
