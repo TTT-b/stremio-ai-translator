@@ -9,7 +9,7 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 - No open Dependabot alerts. `npm audit` leftovers are dev tools only (`tmp` via stremio-addon-sdk, needs a breaking upgrade): leave them.
 - Never push or release without the user's OK. Commit by file names, no attribution lines.
 
-## v2.0.2 (built locally, NOT published yet)
+## v2.0.2 (committed 32ef814; installer NOT built: this PC has Smart App Control ON, so `npm run dist` fails with "spawn UNKNOWN" even after 4 retries. Build it on the desktop, or the user turns Smart App Control off; do not publish)
 
 - Committed on main: left-video stop of the embedded wait (`embedded.ts`), chunk cache for kept-original chunks (`pipeline.ts`), README shortened (details moved to `docs/`, one screenshot), quota card: the low-quota warning shows once per app start with a small check button; an "i" icon next to the count explains it is only this computer's count (not synced). The status poll already refreshes the number every 1.5 s, so no refresh button.
 - NOT verified on real Stremio: whether `stats.json` drops the torrent right when the user leaves; if the wait stays long, shorten `embeddedCapMs` (140 s, `src/jobs/manager.ts`).
