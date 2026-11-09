@@ -91,7 +91,10 @@ the English meaning. Every release adds its What's new notes in both languages
   series by season and episode, movies together. Tick what to delete (a whole series, a season or
   single episodes), or use **Select all** / **Delete all**; a confirmation always comes first. A
   deleted subtitle is translated again the next time you play it. Downloaded source files are kept,
-  so no OpenSubtitles download quota is lost. Each row says whether its timing is **exact** (taken
+  so no OpenSubtitles download quota is lost. A saved subtitle is deleted automatically 90 days
+  after it was made (checked at start and once a day). Names of characters and places are
+  remembered per series (`glossary.json` in the data folder, small and capped) so they are spelled
+  the same way from the second episode on. Each row says whether its timing is **exact** (taken
   from the video itself, or a file-hash match) or **estimated** (an OpenSubtitles subtitle that may
   belong to another version of the video: if it is off, try another stream or shift it in Stremio's
   player). The list stores titles and numbers only
