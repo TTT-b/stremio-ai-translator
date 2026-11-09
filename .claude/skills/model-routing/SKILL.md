@@ -9,7 +9,8 @@ description: Choose the cheapest model that does the job and keep token use low.
 
 - **Sonnet (default, ~90% of work):** edits, bug fixes, tests, refactors of known code, git, docs, README/TROUBLESHOOTING updates, running `npm run check`.
 - **Opus (only when it pays off):** a new feature spanning several modules, architecture or data-flow changes, a bug whose cause is unknown after one Sonnet attempt, security review, large migrations. Use it to produce a short written plan (max ~30 lines), then execute the plan on Sonnet.
-- **Haiku:** pure lookups, grep-and-report, summarizing logs, listing files. Delegate with a subagent and `model: haiku`.
+- **Haiku:** reading code, lookups, grep-and-report, summarizing logs, listing files, and simple checks. Delegate with a subagent and `model: haiku`. A serious test or review (anything whose result decides correctness) goes to Sonnet, not Haiku.
+- Owner's rule in short: **Opus = massive planning only; Sonnet = normal work; Haiku = reading and simple checks.**
 - Do not escalate to Opus for style, naming, or one-file changes. If a Sonnet attempt fails twice, escalate once, then return to Sonnet.
 
 ## Saving tokens without losing quality
