@@ -12,6 +12,38 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '2.1.0': {
+    en: [
+      {
+        title: 'Try another subtitle',
+        text: 'When the sound check shows the subtitle comes from another version of the video, a button offers the next best subtitle. After it finishes, select the subtitle again in Stremio.',
+      },
+      {
+        title: 'Tray shows the status',
+        text: 'The tray icon gets a coloured dot and a tooltip with the current state and progress. A floating notice appears when a better subtitle is ready.',
+      },
+      {
+        title: 'Faster and cheaper',
+        text: 'Stremio asks twice for each video and plays only the first answer. The second request now joins the first job, so a subtitle is downloaded once and your daily quota is not wasted. The wait for a subtitle file is shortened to 8 seconds, before Stremio gives up. Switching to another source stops the old one from listening to its video.',
+      },
+      'Names of characters are kept consistent across episodes (a glossary), old data is cleaned after 90 days, and English subtitles are tried before Japanese ones.',
+    ],
+    he: [
+      {
+        title: 'נסה כתובית אחרת',
+        text: 'כשבדיקת הצליל מראה שהכתובית היא מגרסה אחרת של הסרט, כפתור מציע את הכתובית הבאה בתור. אחרי שהיא מוכנה, בוחרים את הכתובית שוב בסטרימיו.',
+      },
+      {
+        title: 'המגש מציג את המצב',
+        text: 'לאייקון במגש נוספת נקודה צבעונית והסבר קופץ עם המצב וההתקדמות. הודעה צפה מופיעה כשכתובית טובה יותר מוכנה.',
+      },
+      {
+        title: 'מהיר וחסכוני יותר',
+        text: 'סטרימיו מבקש פעמיים לכל סרטון ומנגן רק את התשובה הראשונה. הבקשה השנייה מצטרפת עכשיו לעבודה הראשונה, כך שכתובית יורדת פעם אחת והמכסה היומית לא מתבזבזת. ההמתנה לקובץ הכתובית קוצרה ל-8 שניות, לפני שסטרימיו מוותר. מעבר למקור אחר מפסיק את ההאזנה לסרטון הישן.',
+      },
+      'שמות הדמויות נשמרים עקביים בין פרקים (מילון שמות), נתונים ישנים מנוקים אחרי 90 יום, וכתוביות באנגלית נבדקות לפני יפנית.',
+    ],
+  },
   '2.0.2': {
     en: [
       {

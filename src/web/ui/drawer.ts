@@ -77,29 +77,28 @@ ${toggle('d-test', d.testMode === true, 'testOn')}
     ok: boolean,
     status: string,
     body: string,
+    note = '',
   ) =>
-    `<details data-svc="${svc}" class="rounded-2xl border border-warm-ln bg-warm-bg/40"><summary class="flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-2xl px-3.5 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac [&::-webkit-details-marker]:hidden"><div class="min-w-0 flex-1"><div class="flex items-center gap-2 text-sm font-bold text-warm-tx">${dotOf(dotCls)}<span>${name}</span></div><div class="mt-0.5 truncate text-xs text-warm-mu">${detail}</div></div>${
+    `<details data-svc="${svc}" class="rounded-2xl border border-warm-ln bg-warm-bg/40"><summary class="flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-2xl px-3.5 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac [&::-webkit-details-marker]:hidden"><div class="min-w-0 flex-1"><div class="flex items-center gap-2 text-sm font-bold text-warm-tx">${dotOf(dotCls)}<span>${name}</span></div>${detail ? `<div class="mt-0.5 break-all text-sm font-semibold text-warm-tx" dir="auto">${detail}</div>` : ''}${note ? `<div class="mt-0.5 text-[11px] text-warm-mu">${note}</div>` : ''}</div>${
       ok ? badge(true, status) : `<span class="text-xs font-semibold text-warm-mu">${status}</span>`
     }<span data-svc-btn class="${btn} shrink-0 !px-3 !py-1 !text-xs">${tt('setChange')}</span></summary><div class="flex flex-col gap-3.5 border-t border-warm-ln p-3.5">${body}</div></details>`;
   const osOk = d.openSubtitlesKeyConfigured && d.openSubtitlesLoginConfigured;
-  const osUser = d.openSubtitlesUsername
-    ? ` · ${tt('setUser', { u: d.openSubtitlesUsername })}`
-    : '';
   const aiRow = serviceRow(
     'ai',
     'bg-warm-ac',
     tt('rowAi'),
-    `${escapeHtml(d.aiProviderLabel) || tt('rowAi')}${d.aiConfigured ? ` · ${tt('setKeySaved')}` : ''}`,
+    escapeHtml(d.aiProviderLabel) || tt('rowAi'),
     d.aiConfigured,
     d.aiConfigured ? tt('configured') : tt('setNotSet'),
     `<ul class="grid gap-2 text-sm">${keyRow('aiApiKey', tt('rowAi'), d.aiConfigured, escapeHtml(d.aiProviderLabel) || tt('configured'))}</ul>
 <div><label class="${labelCls}" for="d-ai">${tt('aiKeyLabel')}</label><input class="${field}" id="d-ai" type="password" autocomplete="off" placeholder="${keyPh(d.aiConfigured)}"></div>`,
+    d.aiConfigured ? tt('setKeySaved') : '',
   );
   const osRow = serviceRow(
     'os',
     'bg-sky-400',
     'OpenSubtitles',
-    `${d.openSubtitlesKeyConfigured ? tt('setKeySaved') : tt('missing')}${osUser}`,
+    d.openSubtitlesUsername ? `<span dir="ltr">${escapeHtml(d.openSubtitlesUsername)}</span>` : '',
     osOk,
     osOk
       ? tt('setConnected')
@@ -112,6 +111,7 @@ ${keyRow('openSubtitlesLogin', `${tt('rowOsLogin')}${d.openSubtitlesUsername ? `
 <div><label class="${labelCls}" for="d-os">${tt('osKeyLabel')}</label><input class="${field}" id="d-os" type="password" autocomplete="off" placeholder="${keyPh(d.openSubtitlesKeyConfigured)}"></div>
 <div class="grid grid-cols-2 gap-3"><div><label class="${labelCls}" for="d-user">${tt('username')}</label><input class="${field}" id="d-user" type="text" autocomplete="off" placeholder="${d.openSubtitlesUsername ? tt('keptPh') : tt('username')}"></div><div><label class="${labelCls}" for="d-pass">${tt('password')}</label>${passwordField('d-pass', d.openSubtitlesLoginConfigured ? tt('keptPh') : tt('password'))}</div></div>
 <div class="flex flex-wrap gap-2">${keyLink('https://www.opensubtitles.com/consumers', t(lang, 'getOsKey'))}</div>`,
+    d.openSubtitlesKeyConfigured ? tt('setKeySaved') : tt('missing'),
   );
   const subdlRow = serviceRow(
     'subdl',

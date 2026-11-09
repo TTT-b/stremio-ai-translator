@@ -23,6 +23,8 @@ export interface JobSpec {
   /** Developer redo: take the subtitle only from this source, and ignore what was saved before. */
   onlyProvider?: SourceId;
   fresh?: boolean;
+  /** Files the user already tried ("try another subtitle"), as `source:fileId`; they are skipped. */
+  avoid?: string[];
 }
 
 /** Where a subtitle came from, shown in the library so the sources can be compared. */
@@ -97,6 +99,8 @@ export interface Job {
   partial?: { cues: Cue[]; untilMs: number; served: boolean };
   /** How the late sound check says the timing is off; applied to the partial when it is shown. */
   lateMove?: TimingFit;
+  /** The downloaded file this job's subtitle was made from (`source:fileId`); memory only. */
+  usedKey?: string;
   /** Display name for the queue (filled in shortly after the job is created). */
   title?: string;
   /** Set when the user cancelled it; the translation stops before its next request. */

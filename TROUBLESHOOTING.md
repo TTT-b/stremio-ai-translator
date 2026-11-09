@@ -71,6 +71,10 @@ subtitle's sync. In order of effect:
    Log lines: `subtitle moved onto the speech` (done), `timing left as it was` (not sure, the subtitle is
    untouched), `not waiting longer for the video` (the video's own subtitle took more than 15 seconds).
    It needs the video to be on Stremio's local server and ffmpeg (see above).
+   If the sound check shows the subtitle is from another version of the video, a "Try another subtitle" button
+   appears; it works only for a subtitle downloaded in this run of the app. Afterwards select the subtitle
+   again in Stremio. Stremio asks twice per video (the second with the file hash) and plays only the first
+   answer, so both requests share one job.
 3. Otherwise, when OpenSubtitles reports plenty of downloads left today (30 or more), the add-on
    compares 3 downloaded subtitles and uses the one most agree with (`timing consensus` in the
    log). With a small daily quota it downloads a single file to save the quota.

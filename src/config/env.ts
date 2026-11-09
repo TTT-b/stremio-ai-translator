@@ -97,7 +97,8 @@ const envSchema = z.object({
   FFMPEG_PATH: optionalString,
   LOG_DIALOGUE: boolish,
   CACHE_TTL_DAYS: intRange(90, 1, 3650),
-  SUB_WAIT_MS: intRange(15000, 0, 60000),
+  // Stremio's own server gives up on a subtitle file after exactly 10 s; answer before that.
+  SUB_WAIT_MS: intRange(8000, 0, 60000),
   MAX_CONCURRENT_JOBS: intRange(4, 1, 8),
   STREMIO_ALLOWED_ORIGINS: optionalString,
 });

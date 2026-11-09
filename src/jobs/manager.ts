@@ -8,6 +8,7 @@ import {
   translateEtaSec,
   type JobStats,
 } from './jobStatus';
+import { candidateKey, offerTryAnother, withoutTried } from './tryAnother';
 import { autoRetryDelayMs } from './autoRetry';
 
 /** The "subtitles ready" notice waits this long for a timing check to finish, then is sent anyway. */
@@ -92,8 +93,10 @@ function fixDirectCues(cues: readonly Cue[]): Cue[] {
   }));
 }
 
-function isNoShift(fit: TimingFit): boolean {
-  return fit.scale === 1 && Math.abs(fit.offsetMs) < 100 && !fit.parts?.length;
+/** The fit moves nothing: no scale, no offset, no moving knots, and every listened piece is already on the speech. */
+export function isNoShift(fit: TimingFit): boolean {
+  if (fit.scale !== 1 || Math.abs(fit.offsetMs) >= 100 || fit.knots?.length) return false;
+  return (fit.parts ?? []).every((p) => p.offsetMs === null || Math.abs(p.offsetMs) < 100);
 }
 
 export class JobManager {
@@ -164,6 +167,7 @@ export class JobManager {
     outcome: 'moved' | 'kept' | 'inSync' | 'unavailable';
     offsetMs?: number;
     at: number;
+    jobId?: string;
   } | null = null;
   /** Translations in progress, by translation cache key, so identical requests share one. */
   private readonly translating = new Map<
@@ -192,6 +196,18 @@ export class JobManager {
   /** Start (or join) the job for this request. Returns immediately. */
   ensure(spec: JobSpec, restored = false, force = false): Job {
     const cfg = this.deps.config();
+    // Stremio asks again, seconds later, with the file hash added, but plays the subtitle of its
+    // first answer. The second request joins that job instead of spending another download.
+    if (spec.movieHash && !restored && !force && !spec.onlyProvider && !spec.fresh) {
+      const { movieHash, ...plain } = spec;
+      const twin = this.jobs.get(jobIdFor(plain, cfg.aiModel, cfg.dualSubtitles));
+      if (twin && twin.status !== 'failed' && twin.status !== 'cancelled') {
+        if (!twin.spec.movieHash && (twin.status === 'running' || twin.status === 'pending')) {
+          twin.spec = { ...twin.spec, movieHash };
+        }
+        return this.ensure(plain, restored, force);
+      }
+    }
     const id = jobIdFor(spec, cfg.aiModel, cfg.dualSubtitles);
     const existing = this.jobs.get(id);
     if (existing) {
@@ -224,6 +240,7 @@ export class JobManager {
       this.skipped.delete(videoKey(spec));
     }
     this.saveSpec(id, spec);
+    if (!restored && !spec.prefetch) this.supersedeOthers(spec);
     this.started++;
     // Ask mode: a subtitle made before is served at once; a new one waits for the user's OK, and
     // choosing another video drops the ones still waiting.
@@ -264,6 +281,24 @@ export class JobManager {
       });
     });
     return job;
+  }
+
+  /**
+   * A request for the same episode with another video file means the user switched source. The
+   * older jobs stop waiting for the abandoned stream: the search inside the video and the sound
+   * check end, so nothing keeps that stream open. Their subtitles are still made and kept.
+   */
+  private supersedeOthers(spec: JobSpec): void {
+    if (!spec.filename) return;
+    const key = videoKey(spec);
+    for (const other of this.jobs.values()) {
+      if (videoKey(other.spec) !== key) continue;
+      if (!other.spec.filename || other.spec.filename === spec.filename) continue;
+      if (other.status === 'running' || other.status === 'pending' || other.exactPending) {
+        other.searchSkipped = true;
+      }
+      if (other.syncPercent !== undefined || other.syncWaiting) other.syncStopped = true;
+    }
   }
 
   /** Jobs for the same episode as `id` (itself included): what one click of the user applies to. */
@@ -610,6 +645,7 @@ export class JobManager {
         this.lastSync && this.now() - this.lastSync.at < UPGRADE_NOTICE_MS
           ? { ...this.lastSync }
           : null,
+      tryAnother: this.tryAnotherJob(),
       queue: this.queue(),
     };
   }
@@ -913,6 +949,42 @@ export class JobManager {
     // What is kept on disk (for a restart) is the plain request, so the redo happens only once.
     this.saveSpec(id, plain);
     return true;
+  }
+
+  /**
+   * "Try another subtitle": the file now in use is remembered as tried and the subtitle is made
+   * again from the next best one (a file never downloaded before costs a download; the translation
+   * of identical text is reused). The tried list is kept on disk so a second press moves on again.
+   */
+  tryAnother(id: string): boolean {
+    if (!isJobId(id)) return false;
+    const current = this.jobs.get(id);
+    if (!current || current.status !== 'done' || current.usedKey === undefined) return false;
+    let spec: JobSpec;
+    try {
+      spec = JSON.parse(readFileSync(join(this.deps.jobsDir, `${id}.json`), 'utf8')) as JobSpec;
+    } catch {
+      return false;
+    }
+    const plain: JobSpec = { ...spec, avoid: [...(spec.avoid ?? []), current.usedKey] };
+    delete plain.onlyProvider;
+    delete plain.fresh;
+    // The old sound check result belongs to the file just dropped; the new file is judged afresh.
+    if (this.lastSync?.jobId === id) this.lastSync = null;
+    this.jobs.delete(id);
+    this.ensure({ ...plain, fresh: true }, false, true);
+    this.saveSpec(id, plain);
+    return true;
+  }
+
+  /** The job the main screen's "try another" button belongs to, or null when none is shown. */
+  private tryAnotherJob(): string | null {
+    const sync = this.lastSync;
+    if (!sync?.jobId || this.now() - sync.at >= UPGRADE_NOTICE_MS || !offerTryAnother(sync)) {
+      return null;
+    }
+    const job = this.jobs.get(sync.jobId);
+    return job && job.status === 'done' && job.usedKey !== undefined ? job.id : null;
   }
 
   /** A finished subtitle whose timing is only a guess, and that is still the current one. */
@@ -1223,6 +1295,8 @@ export class JobManager {
     result: 'moved' | 'kept' | 'inSync',
     offsetMs?: number,
   ): Promise<void> {
+    // A job that was replaced (try another subtitle, redo) must not describe its successor.
+    if (this.jobs.get(job.id) !== job) return;
     const v = job.spec.video;
     // "Not sure" is not the same as "never listened": say so when the video was not found.
     const outcome = result === 'kept' && job.syncNoVideo ? 'unavailable' : result;
@@ -1233,6 +1307,7 @@ export class JobManager {
       outcome,
       ...(offsetMs !== undefined ? { offsetMs } : {}),
       at: this.now(),
+      jobId: job.id,
     };
   }
 
@@ -1968,7 +2043,10 @@ export class JobManager {
     const only = job.spec.onlyProvider;
     // Developer option: translate from English even when a ready subtitle in the language exists.
     if (cfg.preferTranslation && forceLanguage === undefined) forceLanguage = 'en';
-    const candidates = only ? found.filter((c) => (c.provider ?? 'opensubtitles') === only) : found;
+    const candidates = withoutTried(
+      only ? found.filter((c) => (c.provider ?? 'opensubtitles') === only) : found,
+      job.spec.avoid,
+    );
     const videoName = job.spec.filename;
     let selection = selectSubtitle(candidates, lang.code, 'en', videoName);
     const forced = forceLanguage
@@ -2099,6 +2177,7 @@ export class JobManager {
     }
     // Another source's file may be in another language than the one first chosen.
     const sameAsTarget = candidate.language.toLowerCase().split('-')[0] === lang.code.toLowerCase();
+    job.usedKey = candidateKey(candidate);
     return {
       kind:
         candidate === selection.candidate ? selection.kind : sameAsTarget ? 'direct' : 'translate',

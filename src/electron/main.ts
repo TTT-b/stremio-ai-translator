@@ -33,7 +33,8 @@ import {
   readStartupPrefs,
   writeStartupPrefs,
 } from './loginItem';
-import { etaValue, TRAY_LABELS, type TrayStatus } from './trayMenu';
+import { etaValue, TRAY_LABELS, trayIndicator, type TrayDot, type TrayStatus } from './trayMenu';
+import { withDot } from './trayDot';
 import { pickWhatsNew } from './whatsNew';
 
 const TITLE = 'TTT Sub';
@@ -166,11 +167,28 @@ async function fetchTrayStatus(): Promise<TrayStatus | null> {
     const res = await fetch(`http://127.0.0.1:${running.port}/api/status`, {
       signal: AbortSignal.timeout(1000),
     });
-    const body = (await res.json()) as Partial<TrayStatus>;
+    const body = (await res.json()) as Partial<TrayStatus> & {
+      progress?: { percent?: number } | null;
+      queue?: { title?: string; season?: number; episode?: number; state?: string }[];
+      upgrade?: { at?: number } | null;
+      lastDelivered?: { at?: number } | null;
+    };
+    const current = body.queue?.find((q) => q.state === 'running') ?? body.queue?.[0];
+    const readyTimes = [body.upgrade?.at, body.lastDelivered?.at].filter(
+      (t): t is number => typeof t === 'number',
+    );
     return {
       running: typeof body.running === 'number' ? body.running : 0,
       paused: body.paused === true,
       totalEtaSec: typeof body.totalEtaSec === 'number' ? body.totalEtaSec : null,
+      state: typeof body.state === 'string' ? body.state : 'idle',
+      percent:
+        typeof body.progress?.percent === 'number' ? Math.round(body.progress.percent) : null,
+      title: current?.title ?? null,
+      season: current?.season ?? null,
+      episode: current?.episode ?? null,
+      readyAt: readyTimes.length ? Math.max(...readyTimes) : null,
+      lastError: typeof body.lastError === 'string' ? body.lastError : null,
     };
   } catch {
     return null;
@@ -267,7 +285,9 @@ function buildTrayMenu(status: TrayStatus | null): Menu {
   const labels = TRAY_LABELS[uiLang];
   const eta = etaValue(status, uiLang);
   const startup = startupState();
+  const line = trayIndicator(status, uiLang, Date.now()).menuLine;
   const items: Electron.MenuItemConstructorOptions[] = [
+    ...(line ? [{ label: line, enabled: false }, { type: 'separator' as const }] : []),
     { label: labels.open, click: showWindow },
     { type: 'separator' },
     {
@@ -296,9 +316,32 @@ function buildTrayMenu(status: TrayStatus | null): Menu {
   return Menu.buildFromTemplate(items);
 }
 
+const TRAY_ICON_SIZE = 32;
+const TRAY_REFRESH_MS = 5000;
+let trayDot: TrayDot | undefined;
+
+/** Colour dot and tooltip on the tray icon, from the app's own status (the app's local server). */
+async function refreshTrayIndicator(): Promise<void> {
+  if (!tray) return;
+  const ind = trayIndicator(await fetchTrayStatus(), uiLang, Date.now());
+  tray.setToolTip(ind.tooltip);
+  if (ind.dot === trayDot) return;
+  trayDot = ind.dot;
+  const base = icon.resize({ width: TRAY_ICON_SIZE, height: TRAY_ICON_SIZE });
+  const bitmap = withDot(base.toBitmap(), TRAY_ICON_SIZE, ind.dot);
+  tray.setImage(
+    nativeImage.createFromBitmap(Buffer.from(bitmap), {
+      width: TRAY_ICON_SIZE,
+      height: TRAY_ICON_SIZE,
+    }),
+  );
+}
+
 function createTray(): void {
-  tray = new Tray(icon.resize({ width: 32, height: 32 }));
+  tray = new Tray(icon.resize({ width: TRAY_ICON_SIZE, height: TRAY_ICON_SIZE }));
   tray.setToolTip(TITLE);
+  void refreshTrayIndicator();
+  setInterval(() => void refreshTrayIndicator(), TRAY_REFRESH_MS).unref();
   tray.on('click', showWindow);
   tray.on('right-click', () => {
     void fetchTrayStatus().then((status) => tray?.popUpContextMenu(buildTrayMenu(status)));

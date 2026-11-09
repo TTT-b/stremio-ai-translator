@@ -52,7 +52,7 @@ Build it yourself (Node.js 22+): `npm run dist` writes the installer to `release
    whether the timing was moved, was already in sync, could not be verified, or the video was not found.
 
 The subtitle list answers immediately with a local link. Opening it waits up to `SUB_WAIT_MS`
-(15 s) for the job and otherwise shows the placeholder. A translation that fails part-way resumes
+(8 s; Stremio gives up on a subtitle file after 10 s) for the job and otherwise shows the placeholder. A translation that fails part-way resumes
 from the finished parts on the next attempt.
 
 ## Config page

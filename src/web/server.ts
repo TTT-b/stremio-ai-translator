@@ -461,6 +461,18 @@ export function createApp(deps: ServerDeps): express.Express {
     res.json({ ok: true });
   });
 
+  // The "try another subtitle" button: the file in use is dropped and the next best one is used.
+  app.post('/api/try-another', (req, res) => {
+    const id = (req.body as { id?: unknown } | undefined)?.id;
+    if (typeof id !== 'string' || !isJobId(id)) {
+      res.status(400).json({ ok: false, message: 'Invalid request.' });
+      return;
+    }
+    const done = jobs.tryAnother(id);
+    logger.info({ stage: 'API', jobId: id.slice(0, 8), done }, 'try another subtitle');
+    res.json({ ok: done });
+  });
+
   // Test mode: puts a made-up episode in the real queue (made-up subtitle, pretend AI).
   app.post('/api/test/run', (_req, res) => {
     if (!testMode()) {

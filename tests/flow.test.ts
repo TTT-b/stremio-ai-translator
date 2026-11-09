@@ -773,7 +773,7 @@ describe('subtitle request flow', () => {
         await current.get('/subtitles/movie/tt0111161/videoHash=8e245d9679d31e12.json')
       ).json()) as SubsResponse
     ).subtitles[0]!;
-    expect(b.url).not.toBe(a.url); // different job (hash)
+    expect(b.url).toBe(a.url); // the hash request joins the first job
     await current.get(new URL(b.url).pathname);
     expect(current.translator.calls).toBe(callsAfterFirst); // translation cache hit
     expect(current.downloads).toBe(1); // download cache hit
@@ -1613,6 +1613,22 @@ describe('timing from the sound of the video', () => {
     expect(cueCalls).toBe(1);
   });
 
+  it('the second request with the file hash joins the first job: one address, one set of work', async () => {
+    current = await start({ subWaitMs: 50 });
+    const first = ((await (await current.get(FILE_PATH)).json()) as SubsResponse).subtitles[0]!;
+    const withHash = FILE_PATH.replace('.json', '&videoHash=8e245d9679d31e12.json');
+    const second = ((await (await current.get(withHash)).json()) as SubsResponse).subtitles[0]!;
+    expect(second.url).toBe(first.url);
+  });
+
+  it('a request that has the hash first is still its own job', async () => {
+    current = await start({ subWaitMs: 50 });
+    const withHash = FILE_PATH.replace('.json', '&videoHash=8e245d9679d31e12.json');
+    const a = ((await (await current.get(withHash)).json()) as SubsResponse).subtitles[0]!;
+    const b = ((await (await current.get(FILE_PATH)).json()) as SubsResponse).subtitles[0]!;
+    expect(a.url).not.toBe(b.url);
+  });
+
   it('gives up listening when the video sends no sound, and goes on with the subtitle', async () => {
     current = await start({
       findStream: async () => stream,
@@ -1947,7 +1963,7 @@ describe('ask mode (translate only after the user says yes)', () => {
       '/subtitles/series/tt0944947%3A1%3A1/videoHash=8e245d9679d31e12.json',
     );
     const second = ((await res.json()) as SubsResponse).subtitles[0]!.url;
-    expect(second).not.toBe(first); // two job ids...
+    expect(second).toBe(first); // one job id (the hash request joins the first)...
     const queue = await queueOf(current);
     expect(queue).toHaveLength(1); // ...one line for the user
     expect((await post(current, `/api/jobs/${queue[0]!.id}/approve`, {})).ok).toBe(true);

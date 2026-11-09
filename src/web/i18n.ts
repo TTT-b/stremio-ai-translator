@@ -490,7 +490,6 @@ const S = {
   setConnected: { he: 'מחובר', en: 'Connected' },
   setNotSet: { he: 'לא מוגדר', en: 'Not set' },
   setKeySaved: { he: 'מפתח שמור', en: 'Key saved' },
-  setUser: { he: 'משתמש {u}', en: 'User {u}' },
   setSubdlDetail: { he: 'מקור נוסף לכתוביות', en: 'An extra subtitle source' },
   setJimakuDetail: { he: 'כתוביות לאנימה', en: 'Subtitles for anime' },
   updBarNew: { he: 'עדכון חדש קיים: {v}', en: 'New update available: {v}' },
@@ -589,10 +588,10 @@ const S = {
     he: 'חסר מפתח Jimaku. הוסף אותו בהגדרות.',
     en: 'The Jimaku key is missing. Add it in Settings.',
   },
-  upgradeTitle: { he: 'הסנכרון הסתיים', en: 'Sync done' },
+  upgradeTitle: { he: 'כתוביות מדויקות מוכנות', en: 'Accurate subtitles ready' },
   upgradeText: {
-    he: '{name}. בחר שוב את הכתובית ב-Stremio.',
-    en: '{name}. Select the subtitle again in Stremio.',
+    he: '{name}. בחר אותן שוב בסטרימיו כדי לקבל את התזמון המדויק.',
+    en: '{name}. Select them again in Stremio to get the exact timing.',
   },
   openStremio: { he: 'פתח את Stremio', en: 'Open Stremio' },
   openStremioOk: { he: 'פותח את Stremio', en: 'Opening Stremio' },
@@ -716,6 +715,11 @@ const S = {
   syncInSync: {
     he: 'הכתובית כבר מסונכרנת: {name}. אין צורך לעשות כלום.',
     en: 'The subtitle is already in sync: {name}. Nothing to do.',
+  },
+  tryAnother: { he: 'נסה כתובית אחרת', en: 'Try another subtitle' },
+  tryAnotherNote: {
+    he: 'נראה שהכתובית הזו מגרסה אחרת של הסרט. אפשר לנסות את הכתובית הבאה בתור (לפעמים זה דורש הורדה חדשה). אחרי זה בחר את הכתובית שוב בסטרימיו.',
+    en: 'This subtitle seems to be from another version of the video. You can try the next best one (sometimes this needs a new download). Then select the subtitle again in Stremio.',
   },
   syncUnavailable: {
     he: 'לא מצאתי את הווידאו ב-Stremio: {name}. לא בדקתי את הקול, והכתובית נשארה כמו שהיא.',

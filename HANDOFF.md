@@ -5,19 +5,16 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 
 ## State
 
-- ONE folder `D:\TTT Sub`, branch `main`. v2.0.1 is the last PUBLISHED release (tag v2.0.1, installer + blockmap + latest.yml) and pushed. In-app update 2.0.0 -> 2.0.1 confirmed working on a second PC (2026-11-09). Real episodes (Dragon Ball) translate fine; the skipped-lines rescue ladder worked in real use.
+- ONE folder `D:\TTT Sub`, branch `main`. v2.0.1 is the last PUBLISHED release (tag v2.0.1). Never push or release without the user's OK.
 - No open Dependabot alerts. `npm audit` leftovers are dev tools only (`tmp` via stremio-addon-sdk, needs a breaking upgrade): leave them.
 - Never push or release without the user's OK. Commit by file names, no attribution lines.
 
-## v2.0.2 (committed 32ef814; installer NOT built: this PC has Smart App Control ON, so `npm run dist` fails with "spawn UNKNOWN" even after 4 retries. Build it on the desktop, or the user turns Smart App Control off; do not publish)
+## v2.1.0 (this release; version 2.1.0 in package.json; v2.0.2 was never published, its changes ship inside 2.1.0)
 
-- Committed on main: left-video stop of the embedded wait (`embedded.ts`), chunk cache for kept-original chunks (`pipeline.ts`), README shortened (details moved to `docs/`, one screenshot), quota card: the low-quota warning shows once per app start with a small check button; an "i" icon next to the count explains it is only this computer's count (not synced). The status poll already refreshes the number every 1.5 s, so no refresh button.
-- NOT verified on real Stremio: whether `stats.json` drops the torrent right when the user leaves; if the wait stays long, shorten `embeddedCapMs` (140 s, `src/jobs/manager.ts`).
-- Next: user tries the installed build, then OK to push + tag v2.0.2 + publish release (installer, blockmap, latest.yml).
-
-## Waiting for the user's OK (show a mockup first, then code)
-
-1. "Try another subtitle" button: only when the failure is on the subtitle-source side (not AI/key errors); try it and check it works.
+- Built (uncommitted until the commit step): floating notice + tray dot/tooltip (`trayDot.ts`), "try another subtitle" button (`src/jobs/tryAnother.ts`, `POST /api/try-another`; works only for results still in memory), names glossary, 90-day cleanup, English before Japanese, no pointless "better subtitle" notice after a 0.0 s fit (`isNoShift`).
+- From the Stremio research (9 Nov 2026): Stremio sends two requests per video (name only, then with the file hash 3-22 s later) and plays only the first. The hash request now joins the first job (`JobManager.ensure`), `SUB_WAIT_MS` is 8 s (Stremio's own server gives up on /sub after exactly 10 s), and a request with another file name for the same episode stops the older jobs' in-video wait and sound check (`supersedeOthers`). 741 tests.
+- NOT done: ending the older job's download itself when the source is switched; answering with a quick filler instead of a held answer (item 3, partly covered by the 8 s wait); the "two unreachable-server checks = left the video" rule.
+- Next: user tests the built installer, then OK to push + tag v2.1.0 + publish release (installer, blockmap, latest.yml).
 
 ## Not now / later
 

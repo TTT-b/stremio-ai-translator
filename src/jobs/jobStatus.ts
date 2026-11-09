@@ -68,7 +68,11 @@ export interface JobStats {
     outcome: 'moved' | 'kept' | 'inSync' | 'unavailable';
     offsetMs?: number;
     at: number;
+    /** The job it was about; the "try another subtitle" button acts on it. */
+    jobId?: string;
   } | null;
+  /** The job whose subtitle the "try another" button can replace right now, else null. */
+  tryAnother: string | null;
   /** Downloads from SubDL this session. */
   subdlDownloads: number;
   /** A better subtitle replaced the shown one in the last half hour (Stremio needs a new selection). */

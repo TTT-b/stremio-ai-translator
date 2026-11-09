@@ -13,6 +13,14 @@ const STATES = {
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
 // The translation queue: waiting for the user's OK, waiting for a free slot, or running.
 const queueAct = async (id, action) => { try { await post('/api/jobs/' + id + '/' + action); } catch { /* shown on the next refresh */ } refreshStatus(); };
+let triedJob = null; // the video the "try another subtitle" button acts on, while it is shown
+$('st-try-another').addEventListener('click', async () => {
+  if (!triedJob) return;
+  $('st-try-another').disabled = true;
+  try { await post('/api/try-another', {id: triedJob}); } catch { /* shown on the next refresh */ }
+  $('st-try-another').disabled = false;
+  refreshStatus();
+});
 const queueRows = new Map(); // id -> the line on screen, kept between refreshes so a click is never lost
 const queueStatus = (it) => it.state === 'pending' ? T.qPending : it.state === 'queued' ? T.qQueued : it.skippable === 'local' ? T.qLocal : it.skippable === 'sync' ? T.qSync : (it.percent === null ? T.qRunning : f(T.qRunningPct, {p: it.percent}));
 const buildQueueRow = (it) => {
@@ -198,6 +206,10 @@ const refreshStatus = async () => {
     } else if (syncShown) {
       $('st-sync-text').textContent = ls.outcome === 'moved' ? f(T.syncMoved, {name: nameOf(ls)}) : ls.outcome === 'inSync' ? f(T.syncInSync, {name: nameOf(ls)}) : ls.outcome === 'unavailable' ? f(T.syncUnavailable, {name: nameOf(ls)}) : f(T.syncKept, {name: nameOf(ls)});
     }
+    const canTry = syncShown && !bs && !r.exactComing && !!r.tryAnother;
+    triedJob = canTry ? r.tryAnother : null;
+    $('st-try-another').classList.toggle('hidden', !canTry);
+    $('st-try-note').classList.toggle('hidden', !canTry);
     const q = r.quota;
     $('st-quota').classList.toggle('hidden', !q);
     if (q) {
