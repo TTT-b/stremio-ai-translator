@@ -13,7 +13,7 @@ export function renderModelPicker(c: UiCtx): string {
   const current = `<option value="${escapeHtml(d.aiModel)}" selected>${escapeHtml(d.aiModel)}</option>`;
   const body = `<div><label class="${labelCls}" for="d-model">${tt('modelLabel')}</label>
 <div class="flex items-center gap-2"><div class="min-w-0 flex-1" dir="ltr">${selectField('d-model', current)}</div><button type="button" id="d-model-refresh" class="${btn} shrink-0">${tt('modelRefresh')}</button></div>
-<span class="${result} mt-1 !text-xs text-warm-mu" id="d-model-result" data-provider="${escapeHtml(provider)}"></span>
+<span class="${result} mt-1 w-fit rounded-full border border-warm-ln bg-warm-sf px-3 py-1 !text-xs text-warm-mu transition-opacity duration-300 empty:hidden" data-autohide id="d-model-result" data-provider="${escapeHtml(provider)}"></span>
 <p class="mt-1 text-xs text-warm-mu">${tt('modelHint')}</p></div>${
     isGemini
       ? `<div class="overflow-hidden rounded-2xl border border-warm-ln">${toggle('d-auto-model', d.autoSwitchModel ?? true, 'modelAutoLabel', 'modelAutoHint', true)}</div>`

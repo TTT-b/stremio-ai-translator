@@ -30,12 +30,11 @@ export function createUiCtx(d: StatusPageData) {
 
   const askBtn = (extra: string) =>
     `rounded-lg border px-2 py-0.5 font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac ${extra}`;
+  /** Green "configured" chip with a small x; the x swaps it for a confirm question (script/drawer.ts). */
+  const keyChip = (field: string, yes = tt('configured'), askExtra = '') =>
+    `<span data-rm-normal class="inline-flex items-center"><span class="inline-flex items-center gap-1.5 rounded-full border border-warm-ok/40 bg-warm-ok/10 py-0.5 ps-2.5 pe-1 text-xs font-semibold text-warm-ok"><span class="h-1.5 w-1.5 rounded-full bg-warm-ok"></span>${yes}<button type="button" data-rm title="${tt('removeKeyAria')}" aria-label="${tt('removeKeyAria')}" class="ms-0.5 flex h-6 w-6 items-center justify-center rounded-full text-[11px] leading-none transition hover:bg-rose-400/20 hover:text-rose-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">&#10005;</button></span></span><span data-rm-ask class="hidden items-center gap-2 text-xs ${askExtra}"><span class="text-warm-mu">${tt('removeKeyAsk')}</span><button type="button" data-rm-yes="${field}" class="${askBtn('border-rose-400/50 text-rose-300 hover:bg-rose-400/10')}">${tt('removeKeyYes')}</button><button type="button" data-rm-no class="${askBtn('border-warm-ln text-warm-mu hover:text-warm-tx')}">${tt('removeKeyNo')}</button></span>`;
   const keyRow = (field: string, label: string, ok: boolean, yes = tt('configured')) =>
-    `<li data-key-row class="flex items-center justify-between gap-3"><span>${label}</span>${
-      ok
-        ? `<span data-rm-normal class="inline-flex items-center"><span class="inline-flex items-center gap-1.5 rounded-full border border-warm-ok/40 bg-warm-ok/10 py-0.5 ps-2.5 pe-1.5 text-xs font-semibold text-warm-ok"><span class="h-1.5 w-1.5 rounded-full bg-warm-ok"></span>${yes}<button type="button" data-rm title="${tt('removeKeyAria')}" aria-label="${tt('removeKeyAria')}" class="ms-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] leading-none transition hover:bg-rose-400/20 hover:text-rose-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">&#10005;</button></span></span><span data-rm-ask class="hidden items-center gap-2 text-xs"><span class="text-warm-mu">${tt('removeKeyAsk')}</span><button type="button" data-rm-yes="${field}" class="${askBtn('border-rose-400/50 text-rose-300 hover:bg-rose-400/10')}">${tt('removeKeyYes')}</button><button type="button" data-rm-no class="${askBtn('border-warm-ln text-warm-mu hover:text-warm-tx')}">${tt('removeKeyNo')}</button></span>`
-        : badge(false)
-    }</li>`;
+    `<li data-key-row class="flex items-center justify-between gap-3"><span>${label}</span>${ok ? keyChip(field, yes) : badge(false)}</li>`;
   const badge = (ok: boolean, yes = tt('configured'), no = tt('missing')) =>
     `<span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
       ok
@@ -119,6 +118,7 @@ ${testRow(tt('testSample'), testBtn(`id="${sampleId}" data-sample data-res="${rp
     arrow,
     nudge,
     keyRow,
+    keyChip,
     badge,
     keyLink,
     langMenu,

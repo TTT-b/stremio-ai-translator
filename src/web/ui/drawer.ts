@@ -5,10 +5,22 @@ import { renderModelPicker } from './modelPicker';
 
 /** Settings drawer: keys, translation, general, maintenance and about (with developer settings). */
 export function renderDrawer(c: UiCtx): string {
-  const { d, lang, tt, passwordField, keyRow, keyLink, badge, toggle, group, langOptions, keyPh } =
-    c;
+  const {
+    d,
+    lang,
+    tt,
+    passwordField,
+    keyRow,
+    keyChip,
+    keyLink,
+    badge,
+    toggle,
+    group,
+    langOptions,
+    keyPh,
+  } = c;
   /** Settings drawer footer (desktop only): app version and a manual update check, result on its own line below. */
-  const updatesRow = `<div class="flex flex-col gap-3"><div class="flex items-center justify-between gap-3"><div><div class="text-xs text-warm-mu">${tt('version')}</div><div id="app-version" dir="ltr" class="font-mono text-base font-bold text-warm-tx"></div></div><button type="button" id="check-update" class="${btn} flex items-center gap-2 !px-5"><span aria-hidden="true">&#8635;</span>${tt('checkUpdates')}</button></div><span class="${result}" id="update-result"></span></div>`;
+  const updatesRow = `<div class="flex flex-col gap-3"><div class="flex items-center justify-between gap-3"><div><div class="text-xs text-warm-mu">${tt('version')}</div><div id="app-version" dir="ltr" class="font-mono text-base font-bold text-warm-tx"></div></div><button type="button" id="check-update" class="${btn} flex items-center gap-2 !px-5"><span aria-hidden="true">&#8635;</span>${tt('checkUpdates')}</button></div><span class="${result} rounded-2xl border border-warm-ln bg-warm-sf px-3.5 py-2.5 transition-opacity duration-300 empty:hidden" data-autohide id="update-result"></span></div>`;
   // Settings > Developers
   const dev = d.dev ?? {
     soundCheck: 'background' as const,
@@ -78,10 +90,15 @@ ${toggle('d-test', d.testMode === true, 'testOn')}
     status: string,
     body: string,
     note = '',
+    keyField = '',
   ) =>
-    `<details data-svc="${svc}" class="rounded-2xl border border-warm-ln bg-warm-bg/40"><summary class="flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-2xl px-3.5 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac [&::-webkit-details-marker]:hidden"><div class="min-w-0 flex-1"><div class="flex items-center gap-2 text-sm font-bold text-warm-tx">${dotOf(dotCls)}<span>${name}</span></div>${detail ? `<div class="mt-0.5 break-all text-sm font-semibold text-warm-tx" dir="auto">${detail}</div>` : ''}${note ? `<div class="mt-0.5 text-[11px] text-warm-mu">${note}</div>` : ''}</div>${
-      ok ? badge(true, status) : `<span class="text-xs font-semibold text-warm-mu">${status}</span>`
-    }<span data-svc-btn class="${btn} shrink-0 !px-3 !py-1 !text-xs">${tt('setChange')}</span></summary><div class="flex flex-col gap-3.5 border-t border-warm-ln p-3.5">${body}</div></details>`;
+    `<details data-svc="${svc}" class="group rounded-2xl border border-warm-ln bg-warm-bg/40"><summary${ok && keyField ? ' data-key-row' : ''} class="flex min-h-14 cursor-pointer flex-wrap list-none items-center gap-3 rounded-2xl px-3.5 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac [&::-webkit-details-marker]:hidden"><div class="min-w-0 flex-1"><div class="flex items-center gap-2 text-sm font-bold text-warm-tx">${dotOf(dotCls)}<span>${name}</span></div>${detail ? `<div class="mt-0.5 break-all text-sm font-semibold text-warm-tx" dir="auto">${detail}</div>` : ''}${note ? `<div class="mt-0.5 text-[11px] text-warm-mu">${note}</div>` : ''}</div>${
+      ok
+        ? keyField
+          ? keyChip(keyField, status, 'basis-full order-last border-t border-warm-ln pt-2')
+          : badge(true, status)
+        : `<span class="text-xs font-semibold text-warm-mu">${status}</span>`
+    }<span aria-hidden="true" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-warm-ln text-warm-mu transition group-hover:border-warm-ac/60 group-hover:text-warm-ac group-open:rotate-180 group-open:border-warm-ac/60 group-open:text-warm-ac"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary><div class="flex flex-col gap-3.5 border-t border-warm-ln p-3.5">${body}</div></details>`;
   const osOk = d.openSubtitlesKeyConfigured && d.openSubtitlesLoginConfigured;
   const aiRow = serviceRow(
     'ai',
@@ -90,9 +107,9 @@ ${toggle('d-test', d.testMode === true, 'testOn')}
     escapeHtml(d.aiProviderLabel) || tt('rowAi'),
     d.aiConfigured,
     d.aiConfigured ? tt('configured') : tt('setNotSet'),
-    `${d.aiConfigured ? `<ul class="grid gap-2 text-sm">${keyRow('aiApiKey', tt('rowAi'), true, escapeHtml(d.aiProviderLabel) || tt('configured'))}</ul>` : ''}
-<input class="${field}" id="d-ai" type="password" autocomplete="off" aria-label="${tt('aiKeyLabel')}" placeholder="${keyPh(d.aiConfigured)}">`,
+    `<input class="${field}" id="d-ai" type="password" autocomplete="off" aria-label="${tt('aiKeyLabel')}" placeholder="${keyPh(d.aiConfigured)}">`,
     d.aiConfigured ? tt('setKeySaved') : '',
+    'aiApiKey',
   );
   const osRow = serviceRow(
     'os',
@@ -122,9 +139,10 @@ ${keyRow('openSubtitlesLogin', `${tt('rowOsLogin')}${d.openSubtitlesUsername ? `
     tt('setSubdlDetail'),
     d.subdlKeyConfigured ?? false,
     d.subdlKeyConfigured ? tt('configured') : tt('setNotSet'),
-    `${d.subdlKeyConfigured ? `<ul class="grid gap-2 text-sm">${keyRow('subdlApiKey', tt('rowSubdl'), true)}</ul>` : ''}
-<input class="${field}" id="d-subdl" type="password" autocomplete="off" aria-label="${tt('subdlKeyLabel')}" placeholder="${keyPh(d.subdlKeyConfigured ?? false)}">
+    `<input class="${field}" id="d-subdl" type="password" autocomplete="off" aria-label="${tt('subdlKeyLabel')}" placeholder="${keyPh(d.subdlKeyConfigured ?? false)}">
 <div class="flex flex-wrap gap-2">${keyLink('https://subdl.com/panel/api', t(lang, 'getSubdlKey'))}</div>`,
+    '',
+    'subdlApiKey',
   );
   const jimakuRow = serviceRow(
     'jimaku',
@@ -133,9 +151,10 @@ ${keyRow('openSubtitlesLogin', `${tt('rowOsLogin')}${d.openSubtitlesUsername ? `
     tt('setJimakuDetail'),
     d.jimakuKeyConfigured ?? false,
     d.jimakuKeyConfigured ? tt('configured') : tt('setNotSet'),
-    `${d.jimakuKeyConfigured ? `<ul class="grid gap-2 text-sm">${keyRow('jimakuApiKey', tt('rowJimaku'), true)}</ul>` : ''}
-<input class="${field}" id="d-jimaku" type="password" autocomplete="off" aria-label="${tt('jimakuKeyLabel')}" placeholder="${keyPh(d.jimakuKeyConfigured ?? false)}">
+    `<input class="${field}" id="d-jimaku" type="password" autocomplete="off" aria-label="${tt('jimakuKeyLabel')}" placeholder="${keyPh(d.jimakuKeyConfigured ?? false)}">
 <div class="flex flex-wrap gap-2">${keyLink('https://jimaku.cc/account', t(lang, 'getJimakuKey'))}</div>`,
+    '',
+    'jimakuApiKey',
   );
   const keysSection = group(
     'secKeys',
