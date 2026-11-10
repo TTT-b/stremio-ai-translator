@@ -235,7 +235,7 @@ const LINE_TOLERANCE_MS = 250;
 const LEVEL_EDGE_MS = 60_000;
 
 /** True when the shift grows steadily along the video (a slightly different speed). */
-function isSteadyDrift(knots: Knot[]): boolean {
+export function isSteadyDrift(knots: Knot[]): boolean {
   const first = knots[0] as Knot;
   const last = knots[knots.length - 1] as Knot;
   if (knots.length < 3 || last.atMs === first.atMs) return false;

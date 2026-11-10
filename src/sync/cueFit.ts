@@ -3,7 +3,14 @@ import { spawn } from 'node:child_process';
 import { defaultExec, listTextTracks, rankTracks, type Exec } from '../sources/embedded';
 import { parseSubtitle } from '../subtitles/parse';
 import type { Cue } from '../subtitles/types';
-import { alignSplit, alignWindow, buildCueFit, SAME_SHIFT_MS, type WindowMatch } from './cueAlign';
+import {
+  alignSplit,
+  alignWindow,
+  buildCueFit,
+  isSteadyDrift,
+  SAME_SHIFT_MS,
+  type WindowMatch,
+} from './cueAlign';
 import { applyFit, SCALE_CANDIDATES, type TimingFit } from './fit';
 import { pickWindows } from './videoFit';
 
@@ -24,8 +31,19 @@ const RESCUE_SHARES = [0.5, 0.9, 0.1];
  * of an hour down to one piece takes about six, so two jumps fit; a jump is then found exactly, not guessed.
  */
 const MAX_EXTRA_PIECES = 16;
-/** Read as well once a jump is known to exist: near the start and the end of the video. */
-const EDGE_SHARES = [0.06, 0.94];
+/**
+ * The start and the end of the video are always read too (one piece each): a recap or a different
+ * opening moves only the first minutes, and the two middle pieces cannot see that.
+ */
+const EDGE_SPAN_SHARE = 0.15;
+const EDGE_SPAN_MAX_SEC = 600;
+const EDGE_STEP_SEC = 15;
+/**
+ * A minute of the subtitle with at least this many lines is worth reading at an edge. The piece is
+ * cut by the video's clock, which may be seconds off there (that is what is being looked for), so
+ * a few lines fall outside it; this leaves enough to compare.
+ */
+const EDGE_MIN_LINES = 14;
 /** No further piece is started for narrowing a jump after this long; what is known by then is used. */
 const NARROWING_BUDGET_MS = 150_000;
 /** A stretch is trusted when this many pieces agree on it. */
@@ -183,6 +201,34 @@ function stretchFit(stretch: Stretch): TimingFit {
   };
 }
 
+/** How many of the subtitle's lines start inside [from, to) seconds. */
+function linesIn(cues: Cue[], from: number, to: number): number {
+  return cues.filter((c) => c.startMs >= from * 1000 && c.startMs < to * 1000).length;
+}
+
+/**
+ * Where a piece at the start (or, with `fromEnd`, at the end) of the subtitle may be read, best
+ * first: the minute nearest to that edge that has enough lines to be compared, then the minute
+ * with the most lines there. Seconds on the subtitle's own clock; empty for a short subtitle.
+ */
+export function edgePlaces(cues: Cue[], fromEnd: boolean): number[] {
+  const firstSec = Math.min(...cues.map((c) => c.startMs)) / 1000;
+  const lastSec = Math.max(...cues.map((c) => c.endMs)) / 1000;
+  const span = Math.min(EDGE_SPAN_MAX_SEC, (lastSec - firstSec) * EDGE_SPAN_SHARE);
+  if (span < WINDOW_SEC) return [];
+  const steps = Math.floor((span - WINDOW_SEC) / EDGE_STEP_SEC);
+  // Candidate starts, the one nearest to the edge first.
+  const starts = Array.from({ length: steps + 1 }, (_, i) =>
+    fromEnd ? lastSec - WINDOW_SEC - i * EDGE_STEP_SEC : firstSec + i * EDGE_STEP_SEC,
+  );
+  const count = (at: number): number => linesIn(cues, at, at + WINDOW_SEC);
+  const nearest = starts.find((at) => count(at) >= EDGE_MIN_LINES);
+  const densest = starts.reduce((best, at) => (count(at) > count(best) ? at : best));
+  const places = nearest === undefined ? [densest] : [nearest, densest];
+  // A second place is of use only when it is a different minute.
+  return places.filter((at, i) => i === 0 || Math.abs(at - (places[0] as number)) >= WINDOW_SEC);
+}
+
 const gapKey = (a: WindowMatch, b: WindowMatch): string => `${a.atMs}|${b.atMs}`;
 
 /**
@@ -309,13 +355,25 @@ export async function fitSubtitleToEmbeddedCues(
 
     // Where neighbours differ, the shift jumps somewhere between them: halve the gap until it is found.
     const dead = new Set<string>();
-    // A video that jumps once may jump again near its start or end, outside the pieces read so far.
-    if (spreadOf(matches) > SAME_SHIFT_MS) {
-      progress.needMore(EDGE_SHARES.length);
-      await readRound(EDGE_SHARES);
+    // The start and the end: a jump there (a recap, another opening) is outside the pieces read so far.
+    const byPlace = [...matches].sort((p, q) => p.atMs - q.atMs);
+    const nearShift = [
+      (byPlace[0] as WindowMatch).offsetMs,
+      (byPlace[byPlace.length - 1] as WindowMatch).offsetMs,
+    ];
+    for (const [side, shiftMs] of nearShift.entries()) {
+      // A second place is read only when the first gave no clear shift.
+      for (const place of edgePlaces(opts.cues, side === 1)) {
+        const before = matches.length;
+        progress.needMore(1);
+        await readAt([Math.max(0, place + shiftMs / 1000)]);
+        if (matches.length > before) break;
+      }
     }
     for (let extra = 0; extra < MAX_EXTRA_PIECES; extra++) {
       if (Date.now() - probeStart > NARROWING_BUDGET_MS) break;
+      // Points on one straight line are a steady drift: nothing to search for between them.
+      if (isSteadyDrift(matches)) break;
       const gap = worstGap(matches, dead);
       if (!gap) break;
       const { a, b } = gap;

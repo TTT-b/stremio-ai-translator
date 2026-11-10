@@ -69,7 +69,9 @@ describe('fitSubtitleToEmbeddedCues', () => {
   const signal = new AbortController().signal;
   const exec = async () => tracks('eng');
 
-  it('reads two short pieces and finds one shift', async () => {
+  // Until 2026-11-11 this read two pieces. Two more are read on purpose now, one at the start and
+  // one at the end of the video, so a jump there (a recap, another opening) is not missed.
+  it('reads two short pieces, then the start and the end, and finds one shift', async () => {
     const real = sub.map((c) => ({ ...c, startMs: c.startMs + 37_000, endMs: c.endMs + 37_000 }));
     const asked: number[] = [];
     const fit = await fitSubtitleToEmbeddedCues({
@@ -79,7 +81,7 @@ describe('fitSubtitleToEmbeddedCues', () => {
       exec,
       readPiece: piecesOf(real, asked),
     });
-    expect(asked).toHaveLength(2);
+    expect(asked).toHaveLength(4);
     expect(Math.abs((fit?.offsetMs ?? 0) - 37_000)).toBeLessThan(150);
     expect(fit?.knots).toBeUndefined();
   });
@@ -247,6 +249,44 @@ describe('fitSubtitleToEmbeddedCues on a film (frame rate and jumps)', () => {
     });
     const { fit } = await run(real);
     expect(exactShare(applyFit(film, fit!), real)).toBeGreaterThanOrEqual(0.99);
+  });
+
+  it('finds a single jump near the start (a recap the subtitle does not have)', async () => {
+    const jumpAt = film[Math.floor(film.length * 0.08)]!.startMs;
+    const real = film.map((c) => {
+      const off = c.startMs < jumpAt ? 0 : 6000;
+      return { ...c, startMs: c.startMs + off, endMs: c.endMs + off };
+    });
+    const { fit } = await run(real);
+    expect(exactShare(applyFit(film, fit!), real)).toBeGreaterThanOrEqual(0.99);
+  });
+
+  it('finds a single jump near the end', async () => {
+    const jumpAt = film[Math.floor(film.length * 0.92)]!.startMs;
+    const real = film.map((c) => {
+      const off = c.startMs < jumpAt ? 500 : -8500;
+      return { ...c, startMs: c.startMs + off, endMs: c.endMs + off };
+    });
+    const { fit } = await run(real);
+    expect(exactShare(applyFit(film, fit!), real)).toBeGreaterThanOrEqual(0.99);
+  });
+
+  it('follows a steady drift that no frame rate explains, without searching for jumps', async () => {
+    const real = film.map((c) => ({
+      ...c,
+      startMs: Math.round(c.startMs * 1.004 + 1000),
+      endMs: Math.round(c.endMs * 1.004 + 1000),
+    }));
+    const { fit, asked } = await run(real);
+    expect(asked.length).toBeLessThanOrEqual(6);
+    const moved = applyFit(film, fit!);
+    const worst = Math.max(...moved.map((c, i) => Math.abs(c.startMs - real[i]!.startMs)));
+    expect(worst).toBeLessThan(400);
+  });
+
+  it('leaves the subtitle alone when the track belongs to another film', async () => {
+    const { fit } = await run(subtitle(110, 77));
+    expect(fit).toBeUndefined();
   });
 
   it('does not take a jump for a frame-rate stretch', async () => {

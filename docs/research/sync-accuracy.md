@@ -4,16 +4,22 @@ Nothing here claims 100%. What is measured is below, with numbers.
 
 ## STATE / NEXT STEPS (updated 2026-11-11)
 
-- Branch `claude/research-sync-d9e0a8`, not merged, not pushed. `npm run check` passes (765 tests).
+- Branch `claude/research-sync-d9e0a8`, not merged, not pushed. `npm run check` passes (769 tests).
 - Done and committed: the timing fix of the in-video subtitle check (`src/sync/cueFit.ts`,
   `src/sync/cueAlign.ts`), the Gemini line-count fix (`src/translation/gemini.ts`), their tests,
   the benches in `scripts/research/`, `docs/SPEC.md`, `DECISIONS.md`, this report.
+- Numbers now (cue check, lines within 0.25 s): 99.7% on all 85 cases, 99.6% on the first 67
+  (83.7% before any change), 94.9% on the 10 real pairs (floor 95.3%). 0 of 85 fits are worse
+  than leaving the subtitle untouched.
 - Nothing is running. Raw results are in `data/research/results/` (gitignored); the numbers are
   copied into this report.
-- Next, in this order: (1) the owner checks one real video in Stremio (a video with its own
-  subtitle track, and one normal translation) before any merge; (2) optional: a bigger A/B of the
-  line count (a few hundred requests) to make the 0-of-26 result firm; (3) the sound check on
-  real video sound, which was only simulated here.
+- **Not done: no check on a real video.** Everything above was measured on subtitle files, with
+  the video's own track played by a second subtitle file. Whether ffmpeg really returns the track
+  pieces fast enough from a playing torrent, and how long 4 pieces take, was not measured.
+- Next, in this order: (1) one real video in Stremio (a video with its own subtitle track, and
+  one normal translation) before any merge; (2) optional: a bigger A/B of the line count (a few
+  hundred requests) to make the 0-of-26 result firm; (3) the sound check on real video sound,
+  which was only simulated here and was not touched.
 - To resume from a fresh session: the sample files are not in git. Fetch them again with the
   `gh api` lines in "How it was measured", then run
   `npx tsx scripts/research/sync-bench.ts --path=cue` (fast) and compare with the tables here.
@@ -33,7 +39,8 @@ Nothing here claims 100%. What is measured is below, with numbers.
   - `mx-silu.srt`: kousyoukun/subtitle-collection, `movie/35145/` (the `...SiLUHD.eng.srt` file)
   - `mx-yts.srt`: alfredlu1986/movie-english-sub, `1999/The.Matrix.1999.1080p.720p.BluRay.x264. [YTS.MX]-English.srt`
   - `mx-tlf.srt`: Enceladus-Ensoul/mov; `mx-hddvd.srt`: DaviFB27/film-subtitles (other languages, not used in the tables)
-- `scripts/research/sync-bench.ts`: timing. 67 cases, 75,235 lines. 57 cases are a real file with a
+- `scripts/research/sync-bench.ts`: timing. At first 67 cases, 75,235 lines (85 cases since
+  2026-11-11, see below). 57 cases are a real file with a
   known change (shift, frame rate, jumps, missing lines, other language, noise), so every line's
   right time is known. 10 cases are two real releases of the same film; lines with the same unique
   text are the anchors, and "floor" is the best any fit could reach (the two authors do not start
@@ -45,12 +52,22 @@ Nothing here claims 100%. What is measured is below, with numbers.
 
 ## Timing: the check against the subtitle track inside the video (`cueFit.ts`)
 
-| All 67 cases                                   | Before | After |
+| The first 67 cases                             | Before | After |
 | ---------------------------------------------- | ------ | ----- |
-| Lines within 0.1 s                             | 80.1%  | 93.8% |
-| Lines within 0.25 s                            | 83.7%  | 97.8% |
-| Lines within 0.5 s                             | 85.1%  | 98.1% |
-| Cases with at least 99% of lines within 0.25 s | 41     | 59    |
+| Lines within 0.1 s                             | 80.1%  | 94.7% |
+| Lines within 0.25 s                            | 83.7%  | 99.6% |
+| Lines within 0.5 s                             | 85.1%  | 99.9% |
+| Cases with at least 99% of lines within 0.25 s | 41     | 60    |
+
+On 2026-11-11 the bench got 18 more cases (85 in all, 98,059 lines): a single jump at 8%, 15% and
+90% of the length, a steady speed that no frame rate explains (x1.02), and "wrong film" (the track
+of another film, where any move at all is wrong). On all 85: 95.7% / 99.7% / 99.9% of lines within
+0.1 / 0.25 / 0.5 s, and 77 of 85 cases with at least 99% within 0.25 s. There is no "before" for
+the new cases as a set; the edge-jump cases alone were at 85% to 97% before the last change.
+
+**Never worse than untouched:** the bench now compares every fit with the subtitle left as it is
+and prints any case where the fit is worse. Result: 0 of 85. In all 6 "wrong film" cases the check
+gives no answer, so the subtitle stays untouched.
 
 Root causes found and fixed:
 
@@ -63,10 +80,18 @@ Root causes found and fixed:
    slope between two pieces and continued as a slope before the first and after the last piece
    (cases with 26% to 45% of lines right, worst error 90 s). Now the gap is halved until the piece
    that holds the jump is read, the jump is placed on the exact line, and the shift stays level
-   outside the pieces. Once a jump is known, one piece near the start and one near the end are read
-   too. Result: all 9 made-up jump cases at 99.4% to 100% (7 of them exactly 100%).
+   outside the pieces. Result: 17 of the 18 made-up jump cases at 99.7% to 100% (12 exactly 100%).
 3. **Small differences (0.1 to 0.4 s) between pieces** were replaced by one shift, which made a real
    pair worse than untouched. Now each part follows the pieces around it.
+4. **A single jump near the start or the end** (a recap, another opening) was invisible: the two
+   pieces in the middle agreed, and the first or last minutes stayed wrong (85% to 97% of lines
+   right). Now one piece at the start and one at the end are **always** read: the minute nearest
+   to the edge that has at least 14 lines, and a second place only when the first gave nothing.
+   Result: 8 of the 9 edge cases at 99.7% to 100%.
+5. **A steady drift that is no known frame rate** was searched for jumps (20 pieces read, 80.8% in
+   one case). Now points that lie on one line end the search. Result: 100% within 0.25 s with 4 to
+   5 pieces.
+6. A found jump was read again and again until the pieces ran out (a bug of the first fix); fixed.
 
 Real pairs (share of anchor lines within 0.25 s):
 
@@ -74,25 +99,34 @@ Real pairs (share of anchor lines within 0.25 s):
 | -------------------------------- | --------- | ------ | ----- | ----- |
 | Inception DVDRip on BluRay video | 0%        | 89.1%  | 99.1% | 99.3% |
 | Inception BluRay on DVDRip video | 0%        | 84.5%  | 99.1% | 99.3% |
-| Matrix YTS on SiLU video         | 87.4%     | 80.2%  | 93.9% | 94.5% |
-| Matrix SiLU on YTS video         | 87.4%     | 64.3%  | 94.3% | 94.5% |
-| Breaking Bad WEBRip on BluRay    | 0%        | 89.8%  | 89.8% | 90.3% |
+| Matrix YTS on SiLU video         | 87.4%     | 80.2%  | 94.0% | 94.5% |
+| Matrix SiLU on YTS video         | 87.4%     | 64.3%  | 94.5% | 94.5% |
+| Breaking Bad WEBRip on BluRay    | 0%        | 89.8%  | 89.2% | 90.3% |
 
+All 10 real cases together (5,082 anchor lines): 94.9% within 0.25 s, against a floor of 95.3%.
 The Inception pair really has three jumps (-0.3 s, -0.55 s, +1.5 s, +1.43 s along the film).
+
+**One small step back, stated plainly:** the Breaking Bad pairs were at 89.8% / 90.6% after the
+first fix and are at 89.2% now. Reading the start and the end gives four pieces instead of two,
+their shifts differ by 0.1 to 0.4 s (the two authors timed lines differently), and following those
+small differences added a little noise there, while it helped the Matrix pairs. Both numbers are
+within about a point of the floor, and far from untouched (0%). Not tuned further, on purpose: a
+threshold fitted to these three films would not prove anything.
 
 What remains, and why:
 
+- A jump in the last minutes of an episode whose ending has too few lines in any one minute to be
+  compared (1 case of 9: 97%, the body of the film is right, the last 3% of lines keep the body's
+  shift). Still far better than untouched (0%).
 - Frame rate + 25% missing lines + other language + noise on a 2.5 h film: no answer from this
-  check (unchanged); the sound check then takes over.
-- A single jump before the first piece (25% of the length) or after the last (75%) is not seen:
-  the edges are read only once another jump is known. Reading them always would cost every user
-  two more pieces; left as a decision for the owner.
-- The 8 cases still under 99% within 0.25 s: 6 real pairs that sit at their floor (89.8% to 94.3%
-  against a floor of 90.3% to 94.5%: the two authors timed the lines differently), 1 case with a
-  random 0.2 s noise on every line (94.6%; no single fit can remove it), and the case in the next
-  point.
-- Cost: a jump now reads up to 2 + 16 more one-minute pieces (was 3), and no new piece after 2.5
-  minutes. Measured: 6 to 12 pieces for one jump, 13 to 17 for two, 20 for the real Inception pair. Cases without a jump read the same or fewer pieces.
+  check on one of three films (unchanged); the subtitle is left as it is and the sound check
+  takes over. On another film the same change now reaches 97.4%.
+- The 8 cases still under 99% within 0.25 s: the 6 real pairs that sit at their floor (89.2% to
+  94.5% against a floor of 90.3% to 94.5%), and the two cases above.
+- Cost, measured in pieces of one minute read from the video: a plain shift reads **4 now, 2
+  before** (the start and the end are always read); a frame-rate stretch 3 to 4 (5 to 8 before);
+  a jump 4 to 17 (4 to 5 before, with a wrong result); the real Inception pair 20. At most
+  2 + 3 + 4 + 16 pieces, and no new piece for narrowing a jump after 2.5 minutes.
 
 ## Timing: the sound check (`videoFit.ts`), not changed
 

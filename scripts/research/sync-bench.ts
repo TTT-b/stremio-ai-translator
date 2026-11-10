@@ -71,6 +71,8 @@ interface Stats {
   medianMs: number;
   p95Ms: number;
   maxMs: number;
+  /** Share of lines within 0.25 s when the subtitle is left as it is. */
+  untouched250?: number;
 }
 
 function stats(truth: Truth[], fit: TimingFit | undefined, pieces: number): Stats {
@@ -226,6 +228,10 @@ const CHANGES: [string, Change][] = [
   ['25 fps subtitle on 23.976 video', warp(23.976 / 25, () => 1500)],
   ['23.976 fps subtitle on 25 video', warp(25 / 23.976, () => 1500)],
   ['24 fps subtitle on 23.976 video', warp(23.976 / 24, () => -800)],
+  ['one jump +6 s at 8% (a recap at the start)', warp(1, (s) => (s < 0.08 ? 0 : 6000))],
+  ['one jump +6 s at 15%', warp(1, (s) => (s < 0.15 ? 0 : 6000))],
+  ['one jump -9 s at 90%', warp(1, (s) => (s < 0.9 ? 500 : -8500))],
+  ['a speed no frame rate explains (x1.02)', warp(1.02, () => 1000)],
   ['one jump +8 s at 40%', warp(1, (s) => (s < 0.4 ? 1000 : 9000))],
   ['one jump -20 s at 62%', warp(1, (s) => (s < 0.62 ? 0 : -20_000))],
   [
@@ -344,10 +350,27 @@ async function main(): Promise<void> {
         const truth = change(ref, rng(100 + i));
         const sub = truth.map((t) => t.cue);
         const cue = await cuePath(sub, ref);
-        report(base, name, 'cue', stats(truth, cue.fit, cue.pieces));
+        const untouched250 = stats(truth, undefined, 0).w250;
+        report(base, name, 'cue', { ...stats(truth, cue.fit, cue.pieces), untouched250 });
         if (!withSound) continue;
         const sound = await soundPath(sub, ref, 7 + i);
         report(base, name, 'sound', stats(truth, sound.fit, 0));
+      }
+    }
+  }
+  if (!only || only === 'wrong') {
+    const names = bases.length >= 2 ? bases : [];
+    for (const subName of names) {
+      for (const refName of names) {
+        if (subName === refName) continue;
+        const sub = load(subName);
+        const cue = await cuePath(sub, load(refName));
+        // Nothing is right here: any fit at all is a wrong move.
+        const truth = sub.map((c) => ({ cue: c, wantMs: c.startMs }));
+        report('wrong film', `${subName} on video of ${refName}`, 'cue', {
+          ...stats(truth, cue.fit, cue.pieces),
+          untouched250: 100,
+        });
       }
     }
   }
@@ -369,7 +392,10 @@ async function main(): Promise<void> {
           report('real', name, 'before', stats(truth, undefined, 0));
           report('real', name, 'floor', floorOf(truth));
           const cue = await cuePath(sub, ref);
-          report('real', name, 'cue', stats(truth, cue.fit, cue.pieces));
+          report('real', name, 'cue', {
+            ...stats(truth, cue.fit, cue.pieces),
+            untouched250: stats(truth, undefined, 0).w250,
+          });
           if (!withSound) continue;
           const sound = await soundPath(sub, ref, 3);
           report('real', name, 'sound', stats(truth, sound.fit, 0));
@@ -384,6 +410,16 @@ async function main(): Promise<void> {
       const avg = (k: 'w100' | 'w250' | 'w500'): string =>
         (mine.reduce((n, r) => n + r[k] * r.lines, 0) / lines).toFixed(1);
       const exact = mine.filter((r) => r.w250 >= 99).length;
+      const worse = (
+        rows as unknown as (Stats & { group: string; name: string; path: string })[]
+      ).filter(
+        (r) => r.path === path && r.untouched250 !== undefined && r.w250 < r.untouched250 - 0.5,
+      );
+      for (const r of worse) {
+        process.stdout.write(
+          `WORSE than untouched: ${r.group} | ${r.name}: ${r.w250}% after, ${r.untouched250}% untouched\n`,
+        );
+      }
       process.stdout.write(
         `\n${path}: ${mine.length} cases, ${lines} lines; within 0.1 s ${avg('w100')}%, 0.25 s ${avg('w250')}%, 0.5 s ${avg('w500')}%; cases with >=99% of lines within 0.25 s: ${exact}/${mine.length}\n`,
       );
