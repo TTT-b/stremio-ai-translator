@@ -23,7 +23,9 @@ const RESCUE_SHARES = [0.5, 0.9, 0.1];
  * At most this many more pieces, each in the middle of a gap whose two ends differ. Halving a gap
  * of an hour down to one piece takes about six, so two jumps fit; a jump is then found exactly, not guessed.
  */
-const MAX_EXTRA_PIECES = 12;
+const MAX_EXTRA_PIECES = 16;
+/** Read as well once a jump is known to exist: near the start and the end of the video. */
+const EDGE_SHARES = [0.06, 0.94];
 /** No further piece is started for narrowing a jump after this long; what is known by then is used. */
 const NARROWING_BUDGET_MS = 150_000;
 /** A stretch is trusted when this many pieces agree on it. */
@@ -307,6 +309,11 @@ export async function fitSubtitleToEmbeddedCues(
 
     // Where neighbours differ, the shift jumps somewhere between them: halve the gap until it is found.
     const dead = new Set<string>();
+    // A video that jumps once may jump again near its start or end, outside the pieces read so far.
+    if (spreadOf(matches) > SAME_SHIFT_MS) {
+      progress.needMore(EDGE_SHARES.length);
+      await readRound(EDGE_SHARES);
+    }
     for (let extra = 0; extra < MAX_EXTRA_PIECES; extra++) {
       if (Date.now() - probeStart > NARROWING_BUDGET_MS) break;
       const gap = worstGap(matches, dead);
@@ -326,6 +333,8 @@ export async function fitSubtitleToEmbeddedCues(
         if (!split) continue;
         opts.log?.({ cue: 'jump', atSec: Math.round(split[1].atMs / 1000) });
         matches.push(...split);
+        // The jump is now known to the line: nothing between these two is left to read.
+        dead.add(gapKey(split[0], split[1]));
       }
       if (matches.length === before) dead.add(gapKey(a, b));
     }

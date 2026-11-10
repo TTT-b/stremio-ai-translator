@@ -238,6 +238,17 @@ describe('fitSubtitleToEmbeddedCues on a film (frame rate and jumps)', () => {
     expect(Math.abs(moved[last]!.startMs - real[last]!.startMs)).toBeLessThanOrEqual(150);
   });
 
+  it('once a jump is known, also finds one near the start, before the first piece', async () => {
+    const early = film[Math.floor(film.length * 0.12)]!.startMs;
+    const late = film[Math.floor(film.length * 0.6)]!.startMs;
+    const real = film.map((c) => {
+      const off = c.startMs < early ? 0 : c.startMs < late ? 4000 : 10_000;
+      return { ...c, startMs: c.startMs + off, endMs: c.endMs + off };
+    });
+    const { fit } = await run(real);
+    expect(exactShare(applyFit(film, fit!), real)).toBeGreaterThanOrEqual(0.99);
+  });
+
   it('does not take a jump for a frame-rate stretch', async () => {
     // 3.3 s between the first two pieces is what a 24 / 23.976 stretch would give; here it is a jump
     const jumpAt = film[Math.floor(film.length * 0.5)]!.startMs;

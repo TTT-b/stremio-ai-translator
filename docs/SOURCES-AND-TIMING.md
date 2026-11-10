@@ -101,7 +101,8 @@ Everything here is saved at once and is meant for trying things:
   their start times and words, and moves the subtitle by what it finds: one shift; a stretch, when the
   subtitle was made for another frame rate (25 against 23.976, confirmed by a third piece); or jumps,
   when the video has a scene or a break the subtitle does not. A jump is searched for by halving
-  the gap between two pieces that disagree (up to 12 more pieces, no new piece after 2.5 minutes),
+  the gap between two pieces that disagree, and one piece near the start and one near the end are
+  read too (up to 16 more pieces, no new piece after 2.5 minutes),
   so the lines before and after it each get their own shift. Only when the video has no usable track does it listen to the sound.
   The diagnostics table marks this as `cue-match`.
 - **Seconds to wait for the subtitle inside the video** (default 15).

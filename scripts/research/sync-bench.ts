@@ -25,6 +25,9 @@ const asJson = process.argv.includes('--json');
 const only = process.argv.find((a) => a.startsWith('--only='))?.slice(7);
 /** --path=cue leaves the (slow) sound simulation out. */
 const withSound = !process.argv.includes('--path=cue');
+/** --case=text runs only the made-up cases whose name holds the text; --log prints each step of the cue check. */
+const onlyCase = process.argv.find((a) => a.startsWith('--case='))?.slice(7);
+const showLog = process.argv.includes('--log');
 
 function rng(seed: number): () => number {
   let a = seed;
@@ -115,6 +118,13 @@ async function cuePath(sub: Cue[], ref: Cue[]): Promise<{ fit?: TimingFit; piece
     signal: new AbortController().signal,
     exec: async () => trackList,
     readPiece,
+    ...(showLog
+      ? {
+          log: (info: Record<string, unknown>) =>
+            process.stdout.write(`      ${JSON.stringify(info)}
+`),
+        }
+      : {}),
   });
   return { ...(fit ? { fit } : {}), pieces };
 }
@@ -330,6 +340,7 @@ async function main(): Promise<void> {
     for (const base of bases) {
       const ref = load(base);
       for (const [i, [name, change]] of CHANGES.entries()) {
+        if (onlyCase && !name.includes(onlyCase)) continue;
         const truth = change(ref, rng(100 + i));
         const sub = truth.map((t) => t.cue);
         const cue = await cuePath(sub, ref);
