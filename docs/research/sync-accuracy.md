@@ -4,15 +4,16 @@ Nothing here claims 100%. What is measured is below, with numbers.
 
 ## STATE / NEXT STEPS (updated 2026-11-11)
 
-- Branch `claude/research-sync-d9e0a8`, not merged, not pushed. `npm run check` passes.
+- Branch `claude/research-sync-d9e0a8`, not merged, not pushed. `npm run check` passes (765 tests).
 - Done and committed: the timing fix of the in-video subtitle check (`src/sync/cueFit.ts`,
-  `src/sync/cueAlign.ts`), its tests, the benches in `scripts/research/`, this report.
-- Running now: the missing-id A/B (`scripts/research/id-ab.ts`, 48 requests, one at a time, 5 s
-  apart, stops after two rate-limit answers in a row). Raw results go to
-  `data/research/results/ab-bb.json` (gitignored); the numbers are copied into this report.
-- Next: (1) put the A/B numbers here and decide on the schema change in `gemini.ts`;
-  (2) the weak timing cases listed under "What remains"; (3) one real check in Stremio by the
-  owner before any merge.
+  `src/sync/cueAlign.ts`), the Gemini line-count fix (`src/translation/gemini.ts`), their tests,
+  the benches in `scripts/research/`, `docs/SPEC.md`, `DECISIONS.md`, this report.
+- Nothing is running. Raw results are in `data/research/results/` (gitignored); the numbers are
+  copied into this report.
+- Next, in this order: (1) the owner checks one real video in Stremio (a video with its own
+  subtitle track, and one normal translation) before any merge; (2) optional: a bigger A/B of the
+  line count (a few hundred requests) to make the 0-of-26 result firm; (3) the sound check on
+  real video sound, which was only simulated here.
 - To resume from a fresh session: the sample files are not in git. Fetch them again with the
   `gh api` lines in "How it was measured", then run
   `npx tsx scripts/research/sync-bench.ts --path=cue` (fast) and compare with the tables here.
@@ -118,14 +119,47 @@ Before any change, 5 whole files (5,725 lines) and 8 single chunks, chunk size 8
 Root cause: the model sometimes ends the list early and says it is done. The pipeline already
 repairs this at the price of one more request.
 
-**Not finished:** a structural fix was tried (the answer schema states the exact number of lines,
-`minItems` / `maxItems`). Gemini accepts it, but in the first small test the model then returned
-one wrong id instead of a missing one, so it is **not proven** and was **not committed**. The
-comparison script is `scripts/research/id-ab.ts`; it needs that schema change in `gemini.ts` to be
-put back locally before it measures anything. A real A/B of about 50 requests is the next step.
+### The fix, and its A/B (2026-11-11)
+
+The answer schema now states the exact number of lines (`minItems` / `maxItems`), so the model
+cannot close the list early. `scripts/research/id-ab.ts` sent the same 8 parts (80 lines each) of
+Breaking Bad S01E01 three times each way, in turn, one request every 5 s, to
+`gemini-3.5-flash-lite`:
+
+|                                     | Without the count       | With the count     |
+| ----------------------------------- | ----------------------- | ------------------ |
+| Answers                             | 23 (1 more failed: 503) | 24                 |
+| Answers that ended early            | 2 (40 of 80 lines each) | 0                  |
+| Lines missing                       | 80 of 1,840 (4.3%)      | 1 of 1,920 (0.05%) |
+| Answers with extra (repeated) lines | 2                       | 0                  |
+| Answers with a mistyped id          | 0                       | 1 (`>53` for `53`) |
+| Answers right in every id           | 19 of 23 (83%)          | 23 of 24 (96%)     |
+
+Together with the earlier runs: early endings in 4 of 48 answers without the count, 0 of 26 with
+it. The sample is small, so a chance result is not excluded (roughly 1 in 6), but the cause is
+mechanical: with the count the model is not allowed to end the list. One more observation backs
+it: `gemini-3.1-flash-lite` ended one of two plain answers early (20 of 80 lines) and none of two
+counted ones.
+
+Limits found while testing:
+
+- Gemini **refuses** a count that is too high: 120 was accepted; 128, 129, 130, 140, 160 and 200
+  gave HTTP 400 "invalid argument". The count is therefore sent only for parts of up to 100 lines
+  (100 was accepted by all three models of the fallback list); the default part is 80 lines. A
+  bigger part (`CHUNK_SIZE` above 100) works as before, without the count.
+- Safety net: if a model answers HTTP 400 to a counted request, the same request is sent once
+  more without the count (never when the 400 is about the key).
+- A mistyped id (1 of 1,920 lines) is not prevented; the pipeline asks for that one line again.
+- After the change, a whole file through the app's pipeline: 672 lines, 9 of 9 full answers
+  complete, 0 lines untranslated.
+- Not measured: whether translation quality changes with the count (no reason to expect it; the
+  texts were not compared).
 
 ## Recommendation
 
-- Timing changes: tests pass and the numbers are clearly better, but they were measured without a
-  real video. Merge after one real check in Stremio on a video with an inside subtitle track.
-- Missing ids: no code change; the current protection held in every run.
+- Both fixes pass all tests and are clearly better in the measurements, but nothing was checked
+  on a real video in Stremio. Merge after one real check: a video that has its own subtitle track
+  (timing) and one normal translation (line count).
+- The risk of the line-count fix is low: a refused request falls back to the old request.
+- The risk of the timing fix: in a video with jumps the check reads more pieces than before
+  (up to 20 one-minute pieces were measured), so it takes longer in exactly those cases.

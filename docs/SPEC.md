@@ -55,6 +55,8 @@ The app tries to give a subtitle in the user's language. Best first:
 
 **Timing check after the choice.** A downloaded subtitle may be off. The app compares it with the
 video's own subtitle track, or else with the sound of the video, and moves it only when sure.
+Against the video's own track it corrects one shift, a subtitle made for another frame rate, and
+jumps (a scene or a break the subtitle does not have); against the sound, one shift or a frame rate.
 Translation does not wait for this check; if the subtitle is moved later, the user is told to
 select it again. The "My subtitles" list labels timing as **exact**, **by speech** or
 **estimated**.
@@ -96,7 +98,8 @@ select it again. The "My subtitles" list labels timing as **exact**, **by speech
   minutes. The main screen shows the wait.
 - **Translation stops half way:** the finished parts are kept; the next attempt continues from
   them.
-- **A line the AI drops or breaks:** repaired or retried; as a last resort the original line is
+- **A line the AI drops or breaks:** Gemini is told the exact number of lines to send back (parts
+  of up to 100 lines); what is still missing or broken is repaired or retried; as a last resort the original line is
   kept (never more than 25% of a part).
 - **OpenSubtitles daily downloads used up:** another source is used if one has a key; otherwise
   an error is shown.
