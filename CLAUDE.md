@@ -24,6 +24,9 @@
 - For any UI change, first describe the screen and the user's click path in plain words
   and wait for the user's OK before coding.
 - Keep state in the branch and HANDOFF.md, not in the chat.
+- Before any change, check it against `DECISIONS.md`. If it contradicts a decision, stop and ask
+  the user. Every new decision gets a line there.
+- Any change to what the product does must update `docs/SPEC.md` in the same change.
 
 ## Conventions
 

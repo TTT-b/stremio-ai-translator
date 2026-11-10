@@ -1,0 +1,74 @@
+# DECISIONS - the decision log of TTT Sub (יומן החלטות)
+
+This file lists the decisions that were already made for TTT Sub, one line each, with the reason.
+It exists so nobody (the owner, Claude, or any other helper) builds something that was already
+rejected, or quietly reverses something that was already chosen. Every line below comes from a
+file in this repo (`HANDOFF.md`, `PLAN.md`, `CLAUDE.md`, `README.md`, `docs/DETAILS.md`,
+`docs/SOURCES-AND-TIMING.md`). Where a date or a reason is not written there, this file says
+"unknown" and does not guess.
+
+## How to use this file
+
+1. Before any change, check it against this log.
+2. If the change contradicts a decision here, STOP and ask the owner. Do not decide alone.
+3. Every new decision gets a new line here (date, decision, reason). If a decision is reversed,
+   do not delete the old line: add a new line that says it was reversed, with the date and the reason.
+
+(לפני כל שינוי, בודקים מול היומן. אם השינוי סותר החלטה - עוצרים ושואלים את הבעלים. כל החלטה חדשה נרשמת כאן.)
+
+## Do NOT build / not now (לא לבנות / לא עכשיו)
+
+| Date                                         | Decision                                                                                                                                                                                    | Reason                                                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| unknown (listed in HANDOFF.md of 2026-11-09) | Do NOT build: subtitle signature, remember-per-episode, cue-only check.                                                                                                                     | Reason not written.                                                                                   |
+| unknown                                      | No notice for users of the old name "AI Subtitle Translator".                                                                                                                               | Decided: not needed.                                                                                  |
+| unknown                                      | Fix 3 (real abort on Continue, raise `STALL_AFTER_MS`) and Fix 5 (compact output format, Gemini thinking tokens): not now.                                                                  | Fix 3: the owner did not understand it; explain simply before asking again. Fix 5: no reason written. |
+| unknown                                      | Whole-episode skipped-lines rule (~5% of all lines): only if real failures show up.                                                                                                         | Keeps the current rule of 25% per 80-line chunk until real failures prove it is not enough.           |
+| unknown                                      | Chunk rejected with an unusual 4xx: only if it is seen in a real log.                                                                                                                       | No reason written beyond "only if seen".                                                              |
+| unknown                                      | Leave the `npm audit` leftovers (`tmp` via `stremio-addon-sdk`).                                                                                                                            | Dev tools only; fixing needs a breaking upgrade.                                                      |
+| unknown                                      | Not done in v2.1.0: ending the older job's download when the source is switched; a quick filler answer instead of a held answer; the "two unreachable-server checks = left the video" rule. | No reason written (the 8 s wait partly covers the filler answer).                                     |
+| unknown                                      | Docker was intentionally skipped.                                                                                                                                                           | The app is localhost-only (`PLAN.md`, phase 7).                                                       |
+
+## Product and process (מוצר ותהליך)
+
+| Date       | Decision                                                                                                              | Reason                                                                             |
+| ---------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| unknown    | Code signing (SignPath) comes at the END of the project.                                                              | Needs a GitHub Actions build, a README policy section, and more stars/users first. |
+| unknown    | Never push, tag or publish a release without the owner's OK.                                                          | Not written; the owner tests the built installer first (HANDOFF.md).               |
+| unknown    | Commit by file names, with no attribution lines.                                                                      | Reason not written.                                                                |
+| 2026-11-09 | v2.0.2 was never published; its changes ship inside v2.1.0.                                                           | HANDOFF.md says so; no reason written.                                             |
+| unknown    | Secrets live only in `.env` (gitignored) and are never printed, logged, put in URLs, caches, HTML or error responses. | `CLAUDE.md` permanent rule.                                                        |
+| unknown    | Run `npm run check` after changes; never weaken, skip or delete a test to make it pass.                               | `CLAUDE.md` permanent rule.                                                        |
+
+## How the app works (איך האפליקציה עובדת)
+
+| Date       | Decision                                                                                                                                                                             | Reason                                                                                                                            |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| unknown    | The AI only translates. Deterministic code owns parsing, timestamps, IDs, cache and validation.                                                                                      | `CLAUDE.md` convention. Also: IDs sent to the model are the cue index, and timestamps never go through the AI (`PLAN.md`).        |
+| unknown    | The cache is JSON files, with atomic writes and SHA-256 keys.                                                                                                                        | No native build tools needed on Windows.                                                                                          |
+| unknown    | Express 4.                                                                                                                                                                           | `stremio-addon-sdk` builds on it.                                                                                                 |
+| unknown    | API keys are optional at startup.                                                                                                                                                    | The status page can then show what is missing; a feature that needs a key fails with `CONFIGURATION_INVALID` naming the variable. |
+| unknown    | Local-only protections: listen on 127.0.0.1 only, Host allow-list, Origin check, strict CSP, no CORS headers.                                                                        | Protect against DNS rebinding and cross-site POSTs (`PLAN.md`).                                                                   |
+| unknown    | Gemini temperature is 0.3.                                                                                                                                                           | 0.6-1.0 made the model drop duplicate lines and shift later lines.                                                                |
+| unknown    | The embedded subtitle track in the video is tried first; the OpenSubtitles download waits for that check.                                                                            | Exact timing and no download (HANDOFF.md, DETAILS).                                                                               |
+| unknown    | Jimaku (mostly Japanese) is the last resort; English and target-language subtitles from other sources always win.                                                                    | Translating from Japanese is worse than from English.                                                                             |
+| unknown    | A season pack never guesses an episode: a wrong episode is never taken, a pack without the episode is skipped.                                                                       | Stated in `docs/SOURCES-AND-TIMING.md`; deeper reason not written.                                                                |
+| unknown    | For films of 1000 lines or more, the first quarter is given to Stremio while the rest is translated (switch: `PARTIAL_SUBTITLES=false`).                                             | So the viewer does not wait for the whole translation.                                                                            |
+| unknown    | A saved translation is deleted automatically after 90 days.                                                                                                                          | Reason not written.                                                                                                               |
+| 2026-11-09 | `SUB_WAIT_MS` is 8 s.                                                                                                                                                                | Stremio's own server gives up on `/sub` after exactly 10 s.                                                                       |
+| 2026-11-09 | The request with the file hash joins the first job (`JobManager.ensure`); a request with another file name for the same episode stops the older jobs' in-video wait and sound check. | Stremio sends two requests per video (name only, then with the hash 3-22 s later) and plays only the first.                       |
+| 2026-11-09 | The in-video subtitle retry went from 2 minutes to 40 seconds.                                                                                                                       | Reason not written.                                                                                                               |
+| 2026-11-09 | The "Continue translation" button and the floating "better subtitle" card were removed.                                                                                              | The app resumes and shows this by itself. (`docs/DETAILS.md` still describes the Continue button; it is out of date.)             |
+| 2026-11-09 | No "better subtitle" notice after a 0.0 s fit (`isNoShift`).                                                                                                                         | The notice would be pointless: nothing changed.                                                                                   |
+
+## Documentation (תיעוד)
+
+| Date    | Decision                                                                                                                  | Reason                        |
+| ------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| unknown | Docs use simple words; the owner is not a developer and gets exact PowerShell steps; answers are in Hebrew.               | `CLAUDE.md` and `HANDOFF.md`. |
+| unknown | For any UI change, first describe the screen and the click path in plain words and wait for the owner's OK before coding. | `CLAUDE.md` working rule.     |
+
+## Not decisions (ideas only, so nobody mistakes them for decisions)
+
+- Home server mode (serving the Stremio endpoints to the home network): saved 2026-10-20, not started (`PLAN.md`).
+- Anthropic/OpenAI providers were never tried live; sound-check "no data" on anime; subtitle ~1 s early; constant lead/lag setting; per-file remembered offset: open items in `HANDOFF.md`, no decision taken.
