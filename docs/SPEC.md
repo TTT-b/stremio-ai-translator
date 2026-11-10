@@ -134,8 +134,6 @@ select it again. The "My subtitles" list labels timing as **exact**, **by speech
 
 ## 8. To verify
 
-- **(to verify)** [DETAILS.md](DETAILS.md) still describes a **Continue translation** button;
-  HANDOFF.md and this spec say it was removed in v2.1.0. DETAILS.md probably needs updating.
 - **(to verify)** Whether "Try another subtitle" and the Skip/Cancel buttons look exactly as
   described above on screen (taken from HANDOFF.md and DETAILS.md, not from the UI code).
 - **(to verify)** The 12-second stuck-request cut is in code (`STALL_AFTER_MS`), but what the

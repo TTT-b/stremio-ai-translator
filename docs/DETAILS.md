@@ -165,13 +165,12 @@ speed so far.
 
 The SubDL and Jimaku checks (wizard and main screen) appear only once a key for them is saved.
 
-### The Continue button
+### No Continue button (since v2.1.0)
 
-The main screen has a **Continue translation** button. It can always be pressed (it says so when there is nothing to continue).
-It is highlighted when a request was cancelled or failed, or when a translation has had no news from the
-AI for 12 seconds (for example a request that is not answered). Pressing it cuts the stuck request
-and asks again, or starts the cancelled request again from what was saved: parts that were already
-translated are not translated twice.
+There is no **Continue translation** button any more. The app does it by itself: a translation that
+has had no news from the AI for 12 seconds is cut and asked again, and parts that were already
+translated are not translated twice. A better subtitle that arrives late replaces the earlier one
+without a floating card.
 
 While the subtitle is not ready, the player shows what is happening (for example `Translating the
 subtitles… 45%`) in the interface language instead of one fixed sentence.
