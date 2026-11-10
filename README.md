@@ -19,6 +19,8 @@ are instant.
 - Uses the subtitle that is inside the video when there is one (exact timing; works when the video
   plays through Stremio's own streaming server, such as torrents), and checks a downloaded
   subtitle's timing against the video's sound, moving it only when sure.
+- If a subtitle is off, "Try another subtitle" on the main screen switches to a different source
+  and builds the result from that one instead.
 - Correct punctuation for Hebrew, Arabic and Persian; speaker names and sound notes are removed.
 - Simple setup wizard and a dashboard with a queue, progress and "My subtitles" library.
 - Can save a video with the translated subtitle inside (MKV or MP4; desktop app only).
