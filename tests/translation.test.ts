@@ -838,6 +838,100 @@ describe('GeminiProvider', () => {
     expect(day.retryAfterMs).toBeUndefined();
   });
 
+  it('asks for exactly as many entries as lines, so the list cannot be ended early', async () => {
+    const configs: Record<string, unknown>[] = [];
+    const p = providerWith({
+      models: {
+        generateContent: async (params) => {
+          configs.push(params.config ?? {});
+          const translations = ['1', '2', '3'].map((id) => ({ id, text: 'a' }));
+          return { text: JSON.stringify({ translations }) };
+        },
+      },
+    });
+    await p.translateChunk({
+      targetLanguage: 'Hebrew',
+      targetLanguageCode: 'he',
+      cues: ['1', '2', '3'].map((id) => ({ id, text: 'x' })),
+      context: [{ id: '0', text: 'before' }],
+    });
+    const schema = configs[0]?.['responseJsonSchema'] as {
+      properties: { translations: { minItems: number; maxItems: number } };
+    };
+    expect(schema.properties.translations.minItems).toBe(3);
+    expect(schema.properties.translations.maxItems).toBe(3);
+  });
+
+  it('sends no line count for a request bigger than Gemini accepts a count for', async () => {
+    const configs: Record<string, unknown>[] = [];
+    const ids = Array.from({ length: 101 }, (_, i) => String(i + 1));
+    const p = providerWith({
+      models: {
+        generateContent: async (params) => {
+          configs.push(params.config ?? {});
+          return { text: JSON.stringify({ translations: ids.map((id) => ({ id, text: 'a' })) }) };
+        },
+      },
+    });
+    await p.translateChunk({
+      targetLanguage: 'Hebrew',
+      targetLanguageCode: 'he',
+      cues: ids.map((id) => ({ id, text: 'x' })),
+      context: [],
+    });
+    const schema = configs[0]?.['responseJsonSchema'] as {
+      properties: { translations: Record<string, unknown> };
+    };
+    expect(schema.properties.translations['minItems']).toBeUndefined();
+    expect(schema.properties.translations['maxItems']).toBeUndefined();
+  });
+
+  it('asks once more without the line count when the model refuses it (HTTP 400)', async () => {
+    const counted: boolean[] = [];
+    const p = providerWith({
+      models: {
+        generateContent: async (params) => {
+          const schema = params.config?.['responseJsonSchema'] as {
+            properties: { translations: Record<string, unknown> };
+          };
+          const hasCount = schema.properties.translations['minItems'] !== undefined;
+          counted.push(hasCount);
+          if (hasCount) throw apiError(400, 'Request contains an invalid argument.');
+          return { text: JSON.stringify({ translations: [{ id: '1', text: 'a' }] }) };
+        },
+      },
+    });
+    const r = await p.translateChunk({
+      targetLanguage: 'Hebrew',
+      targetLanguageCode: 'he',
+      cues: [{ id: '1', text: 'x' }],
+      context: [],
+    });
+    expect(counted).toEqual([true, false]);
+    expect(r.translations).toEqual([{ id: '1', text: 'a' }]);
+  });
+
+  it('does not ask again when a bad key is the reason for the 400', async () => {
+    let calls = 0;
+    const p = providerWith({
+      models: {
+        generateContent: async () => {
+          calls++;
+          throw apiError(400, 'API key not valid. Please pass a valid API key.');
+        },
+      },
+    });
+    await expect(
+      p.translateChunk({
+        targetLanguage: 'Hebrew',
+        targetLanguageCode: 'he',
+        cues: [{ id: '1', text: 'x' }],
+        context: [],
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_API_KEY' });
+    expect(calls).toBe(1);
+  });
+
   it('normalizes provider errors', () => {
     const p = providerWith(throwing(null));
     expect(

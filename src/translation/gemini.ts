@@ -30,20 +30,38 @@ const responseSchema = z.object({
   translations: z.array(z.object({ id: z.union([z.string(), z.number()]), text: z.string() })),
 });
 
-const RESPONSE_JSON_SCHEMA = {
-  type: 'object',
-  properties: {
-    translations: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: { id: { type: 'string' }, text: { type: 'string' } },
-        required: ['id', 'text'],
+/**
+ * Gemini refuses a schema whose count is too high: measured 2026-11-11, a count of 120 was accepted
+ * and 128 was refused with HTTP 400 ("invalid argument"). Up to this many lines the count is sent
+ * (100 was accepted by all three models of the fallback list); a bigger request goes without it.
+ */
+export const EXACT_COUNT_MAX = 100;
+
+/**
+ * The shape the answer must have. The list must hold exactly as many entries as lines were asked
+ * for. Measured on a real episode (docs/research/sync-accuracy.md): without the count the model
+ * sometimes ended the list early (20 or 40 of 80 lines) and still reported a normal finish; with
+ * the count in the schema it cannot close the list before the last line. Ids and texts are still
+ * checked by the pipeline.
+ */
+export function responseSchemaFor(lineCount: number, exact = true): Record<string, unknown> {
+  const counted = exact && lineCount >= 1 && lineCount <= EXACT_COUNT_MAX;
+  return {
+    type: 'object',
+    properties: {
+      translations: {
+        type: 'array',
+        ...(counted ? { minItems: lineCount, maxItems: lineCount } : {}),
+        items: {
+          type: 'object',
+          properties: { id: { type: 'string' }, text: { type: 'string' } },
+          required: ['id', 'text'],
+        },
       },
     },
-  },
-  required: ['translations'],
-};
+    required: ['translations'],
+  };
+}
 
 /**
  * Measured on a real episode (12 runs of one 80-line chunk): at 1.0 the model twice dropped a
@@ -140,20 +158,33 @@ export class GeminiProvider implements TranslationProvider {
       ...(req.glossary?.length ? { glossary: req.glossary } : {}),
       cues: req.cues,
     };
-    let response;
-    try {
-      response = await this.client.models.generateContent({
+    const ask = (exact: boolean) =>
+      this.client.models.generateContent({
         model: this.model,
         contents: JSON.stringify(payload),
         config: {
           systemInstruction: buildSystemInstruction(req.targetLanguage, req.targetLanguageCode),
           responseMimeType: 'application/json',
-          responseJsonSchema: RESPONSE_JSON_SCHEMA,
+          responseJsonSchema: responseSchemaFor(req.cues.length, exact),
           temperature: TRANSLATION_TEMPERATURE,
         },
       });
+    let response;
+    try {
+      response = await ask(true);
     } catch (err) {
-      throw this.normalizeError(err);
+      const first = this.normalizeError(err);
+      // A model that refuses the line count in the schema (HTTP 400) is asked once more without it.
+      const refused =
+        first.code === 'PROVIDER_RESPONSE_INVALID' &&
+        first.details['status'] === 400 &&
+        req.cues.length <= EXACT_COUNT_MAX;
+      if (!refused) throw first;
+      try {
+        response = await ask(false);
+      } catch (again) {
+        throw this.normalizeError(again);
+      }
     }
 
     if (response.candidates?.[0]?.finishReason === 'MAX_TOKENS') throw cutOffError();

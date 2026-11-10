@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   let lastFinish = 'none';
   /**
    * The `exact` arm adds the number of lines asked for to the answer schema (minItems / maxItems);
-   * the `plain` arm sends the request exactly as the app does today.
+   * the `plain` arm sends the request without it (the app before 2026-11-11).
    */
   const clientFor = (arm: Arm): GeminiClientLike => ({
     models: {
@@ -62,22 +62,25 @@ async function main(): Promise<void> {
         const schema = params.config?.['responseJsonSchema'] as
           { properties: { translations: Record<string, unknown> } } | undefined;
         const count = (JSON.parse(params.contents) as { cues: unknown[] }).cues.length;
-        const config2 =
-          arm === 'exact' && schema
-            ? {
-                ...params.config,
-                responseJsonSchema: {
-                  ...schema,
-                  properties: {
-                    translations: {
-                      ...schema.properties.translations,
-                      minItems: count,
-                      maxItems: count,
-                    },
+        // The app itself may already send the count: it is set for one arm and removed for the other.
+        const config2 = schema
+          ? {
+              ...params.config,
+              responseJsonSchema: {
+                ...schema,
+                properties: {
+                  translations: {
+                    ...Object.fromEntries(
+                      Object.entries(schema.properties.translations).filter(
+                        ([k]) => k !== 'minItems' && k !== 'maxItems',
+                      ),
+                    ),
+                    ...(arm === 'exact' ? { minItems: count, maxItems: count } : {}),
                   },
                 },
-              }
-            : params.config;
+              },
+            }
+          : params.config;
         const res = await real.models.generateContent({
           ...params,
           ...(config2 ? { config: config2 } : {}),
