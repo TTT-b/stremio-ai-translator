@@ -46,10 +46,10 @@ Nothing here claims 100%. What is measured is below, with numbers.
 
 | All 67 cases                                   | Before | After |
 | ---------------------------------------------- | ------ | ----- |
-| Lines within 0.1 s                             | 80.1%  | 93.2% |
-| Lines within 0.25 s                            | 83.7%  | 97.3% |
-| Lines within 0.5 s                             | 85.1%  | 97.6% |
-| Cases with at least 99% of lines within 0.25 s | 41     | 58    |
+| Lines within 0.1 s                             | 80.1%  | 93.8% |
+| Lines within 0.25 s                            | 83.7%  | 97.8% |
+| Lines within 0.5 s                             | 85.1%  | 98.1% |
+| Cases with at least 99% of lines within 0.25 s | 41     | 59    |
 
 Root causes found and fixed:
 
@@ -62,7 +62,8 @@ Root causes found and fixed:
    slope between two pieces and continued as a slope before the first and after the last piece
    (cases with 26% to 45% of lines right, worst error 90 s). Now the gap is halved until the piece
    that holds the jump is read, the jump is placed on the exact line, and the shift stays level
-   outside the pieces. Result: 8 of 9 made-up jump cases at 99.4% to 100%.
+   outside the pieces. Once a jump is known, one piece near the start and one near the end are read
+   too. Result: all 9 made-up jump cases at 99.4% to 100% (7 of them exactly 100%).
 3. **Small differences (0.1 to 0.4 s) between pieces** were replaced by one shift, which made a real
    pair worse than untouched. Now each part follows the pieces around it.
 
@@ -80,12 +81,17 @@ The Inception pair really has three jumps (-0.3 s, -0.55 s, +1.5 s, +1.43 s alon
 
 What remains, and why:
 
-- Two jumps in a 2 h 16 min film: 71% (the 12 extra pieces ran out before the second jump).
 - Frame rate + 25% missing lines + other language + noise on a 2.5 h film: no answer from this
   check (unchanged); the sound check then takes over.
-- A jump before the first piece (25% of the length) or after the last (75%) is not seen.
-- Cost: a jump now reads up to 12 more one-minute pieces (was 3), and no new piece after 2.5
-  minutes. Cases without a jump read the same or fewer pieces.
+- A single jump before the first piece (25% of the length) or after the last (75%) is not seen:
+  the edges are read only once another jump is known. Reading them always would cost every user
+  two more pieces; left as a decision for the owner.
+- The 8 cases still under 99% within 0.25 s: 6 real pairs that sit at their floor (89.8% to 94.3%
+  against a floor of 90.3% to 94.5%: the two authors timed the lines differently), 1 case with a
+  random 0.2 s noise on every line (94.6%; no single fit can remove it), and the case in the next
+  point.
+- Cost: a jump now reads up to 2 + 16 more one-minute pieces (was 3), and no new piece after 2.5
+  minutes. Measured: 6 to 12 pieces for one jump, 13 to 17 for two, 20 for the real Inception pair. Cases without a jump read the same or fewer pieces.
 
 ## Timing: the sound check (`videoFit.ts`), not changed
 
