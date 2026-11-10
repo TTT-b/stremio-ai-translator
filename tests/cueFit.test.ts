@@ -172,3 +172,81 @@ describe('fitSubtitleToEmbeddedCues', () => {
     expect(fit).toBeUndefined();
   });
 });
+
+describe('fitSubtitleToEmbeddedCues on a film (frame rate and jumps)', () => {
+  const film = subtitle(110, 21);
+  const signal = new AbortController().signal;
+  const exec = async () => tracks('eng');
+  /** Share of lines that end up within 150 ms of where the video has them. */
+  const exactShare = (moved: Cue[], real: Cue[]): number =>
+    moved.filter((c, i) => Math.abs(c.startMs - (real[i] as Cue).startMs) <= 150).length /
+    moved.length;
+  const run = async (real: Cue[]) => {
+    const asked: number[] = [];
+    const fit = await fitSubtitleToEmbeddedCues({
+      ...base,
+      cues: film,
+      signal,
+      exec,
+      readPiece: piecesOf(real, asked),
+    });
+    return { fit, asked };
+  };
+
+  it.each([
+    ['25 fps subtitle on a 23.976 video', 25 / 23.976],
+    ['23.976 fps subtitle on a 25 video', 23.976 / 25],
+    ['24 fps subtitle on a 23.976 video', 24 / 23.976],
+  ])('finds the stretch of a %s from three pieces', async (_name, ratio) => {
+    const real = film.map((c) => ({
+      ...c,
+      startMs: Math.round(c.startMs * ratio + 1500),
+      endMs: Math.round(c.endMs * ratio + 1500),
+    }));
+    const { fit, asked } = await run(real);
+    expect(fit?.scale).toBeCloseTo(ratio, 3);
+    expect(fit?.knots).toBeUndefined();
+    expect(asked.length).toBeLessThanOrEqual(4);
+    expect(exactShare(applyFit(film, fit!), real)).toBe(1);
+  });
+
+  it('finds the exact place of one jump (a scene the video has and the subtitle does not)', async () => {
+    const jumpAt = film[Math.floor(film.length * 0.4)]!.startMs;
+    const real = film.map((c) => {
+      const off = c.startMs < jumpAt ? 1000 : 9000;
+      return { ...c, startMs: c.startMs + off, endMs: c.endMs + off };
+    });
+    const { fit, asked } = await run(real);
+    expect(fit?.scale).toBe(1);
+    expect(asked.length).toBeLessThanOrEqual(10);
+    expect(exactShare(applyFit(film, fit!), real)).toBeGreaterThanOrEqual(0.995);
+  });
+
+  it('follows two jumps, and keeps the shift level before the first and after the last', async () => {
+    const first = film[Math.floor(film.length * 0.3)]!.startMs;
+    const second = film[Math.floor(film.length * 0.7)]!.startMs;
+    const real = film.map((c) => {
+      const off = c.startMs < first ? 0 : c.startMs < second ? 5000 : 17_000;
+      return { ...c, startMs: c.startMs + off, endMs: c.endMs + off };
+    });
+    const { fit } = await run(real);
+    const moved = applyFit(film, fit!);
+    expect(exactShare(moved, real)).toBeGreaterThanOrEqual(0.97);
+    // the opening and the ending are far from any piece that was read
+    expect(Math.abs(moved[0]!.startMs - real[0]!.startMs)).toBeLessThanOrEqual(150);
+    const last = moved.length - 1;
+    expect(Math.abs(moved[last]!.startMs - real[last]!.startMs)).toBeLessThanOrEqual(150);
+  });
+
+  it('does not take a jump for a frame-rate stretch', async () => {
+    // 3.3 s between the first two pieces is what a 24 / 23.976 stretch would give; here it is a jump
+    const jumpAt = film[Math.floor(film.length * 0.5)]!.startMs;
+    const real = film.map((c) => {
+      const off = c.startMs < jumpAt ? 0 : 3300;
+      return { ...c, startMs: c.startMs + off, endMs: c.endMs + off };
+    });
+    const { fit } = await run(real);
+    expect(fit?.scale).toBe(1);
+    expect(exactShare(applyFit(film, fit!), real)).toBeGreaterThanOrEqual(0.995);
+  });
+});

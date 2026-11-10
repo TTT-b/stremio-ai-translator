@@ -98,8 +98,11 @@ Everything here is saved at once and is meant for trying things:
   to 30 s for the check before translating_, or _no sound check at all_.
   The check first compares the subtitle with the subtitle track inside the video, when it has one:
   it reads only two short pieces of that track (more where the two disagree), matches the lines by
-  their start times and words, and moves the subtitle by what it finds (one shift, or a shift that
-  changes along the video). Only when the video has no usable track does it listen to the sound.
+  their start times and words, and moves the subtitle by what it finds: one shift; a stretch, when the
+  subtitle was made for another frame rate (25 against 23.976, confirmed by a third piece); or jumps,
+  when the video has a scene or a break the subtitle does not. A jump is searched for by halving
+  the gap between two pieces that disagree (up to 12 more pieces, no new piece after 2.5 minutes),
+  so the lines before and after it each get their own shift. Only when the video has no usable track does it listen to the sound.
   The diagnostics table marks this as `cue-match`.
 - **Seconds to wait for the subtitle inside the video** (default 15).
 - **Skip the subtitle inside the video if reading it would take more than N seconds** (default 60,

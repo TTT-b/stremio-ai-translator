@@ -70,13 +70,15 @@ export function pickWindows(
   windowSec: number,
   lengthSec: number,
   taken: Span[],
+  /** How far (seconds) a piece may move from its place; default: 8% of the length. */
+  reachSec?: number,
 ): number[] {
   const lowest = Math.min(INTRO_SKIP_SEC, Math.max(0, lengthSec - windowSec));
   const highest = Math.max(lowest, lengthSec - windowSec);
   const starts: number[] = [];
   for (const share of shares) {
     const centre = lengthSec * share - windowSec / 2;
-    const reach = lengthSec * SEARCH_SPAN;
+    const reach = reachSec ?? lengthSec * SEARCH_SPAN;
     let best: { at: number; score: number } | undefined;
     for (let at = centre - reach; at <= centre + reach; at += SEARCH_STEP_SEC) {
       const from = Math.max(lowest, Math.min(highest, at));

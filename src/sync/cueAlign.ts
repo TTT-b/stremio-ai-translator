@@ -21,6 +21,8 @@ const RUNNER_UP_APART_BINS = 30;
 const RUNNER_UP_RATIO = 1.8;
 /** Windows that agree to within this are taken as one shift for the whole video. */
 export const SAME_SHIFT_MS = 400;
+/** Pieces that agree to within this get one and the same shift; a bigger (still small) difference is followed. */
+const FINE_SHIFT_MS = 100;
 /** The shift may change by at most this share per second of video (a frame-rate mismatch is ~4%). */
 const MAX_SLOPE = 0.05;
 
@@ -155,16 +157,172 @@ export function offsetAt(knots: Knot[], tMs: number): number {
   return last.offsetMs;
 }
 
-/** One fit from the pieces: a single shift when they agree, otherwise a shift that changes along the video. */
-export function buildCueFit(matches: WindowMatch[]): TimingFit | undefined {
+interface LineMatch {
+  diff: number;
+  startMs: number;
+}
+
+/** The subtitle line that sits at the given shift from a line of the track, if there is one. */
+function lineAt(ref: Cue, subCues: Cue[], shiftMs: number): LineMatch | undefined {
+  let pick: LineMatch | undefined;
+  for (const s of subCues) {
+    const diff = ref.startMs - s.startMs;
+    if (Math.abs(diff - shiftMs) > MATCH_MS) continue;
+    if (!pick || Math.abs(diff - shiftMs) < Math.abs(pick.diff - shiftMs)) {
+      pick = { diff, startMs: s.startMs };
+    }
+  }
+  return pick;
+}
+
+/** Fewest lines on each side of a jump for the place of the jump to be trusted. */
+const SPLIT_MIN_SIDE = 3;
+const SPLIT_MIN_SHARE = 0.6;
+
+/**
+ * A piece of the track in which the shift jumps from `beforeMs` to `afterMs` (a cut scene, an advert
+ * break): the last line that still has the first shift and the first line that has the second one.
+ * Undefined when the piece does not clearly hold both.
+ */
+export function alignSplit(
+  subCues: Cue[],
+  refCues: Cue[],
+  beforeMs: number,
+  afterMs: number,
+): [WindowMatch, WindowMatch] | undefined {
+  const refs = refCues.filter(usableRef).sort((p, q) => p.startMs - q.startMs);
+  if (refs.length < MIN_USABLE) return undefined;
+  const first = refs.map((r) => lineAt(r, subCues, beforeMs));
+  const second = refs.map((r) => lineAt(r, subCues, afterMs));
+  // Lines 0..k-1 on the first shift, the rest on the second: the k that explains the most lines.
+  const secondFrom = new Array<number>(refs.length + 1).fill(0);
+  for (let i = refs.length - 1; i >= 0; i--) {
+    secondFrom[i] = (secondFrom[i + 1] as number) + (second[i] ? 1 : 0);
+  }
+  let best = { k: 0, a: 0, b: secondFrom[0] as number };
+  let firstUpTo = 0;
+  for (let k = 1; k <= refs.length; k++) {
+    if (first[k - 1]) firstUpTo++;
+    const b = secondFrom[k] as number;
+    if (firstUpTo + b > best.a + best.b) best = { k, a: firstUpTo, b };
+  }
+  if (best.a < SPLIT_MIN_SIDE || best.b < SPLIT_MIN_SIDE) return undefined;
+  if (best.a + best.b < SPLIT_MIN_SHARE * refs.length) return undefined;
+  const left = first.slice(0, best.k).flatMap((m) => (m ? [m] : []));
+  const right = second.slice(best.k).flatMap((m) => (m ? [m] : []));
+  const lastLeft = left[left.length - 1] as LineMatch;
+  const firstRight = right[0] as LineMatch;
+  if (firstRight.startMs <= lastLeft.startMs) return undefined;
+  return [
+    {
+      offsetMs: Math.round(median(left.map((m) => m.diff))),
+      matched: left.length,
+      usable: left.length,
+      atMs: lastLeft.startMs,
+    },
+    {
+      offsetMs: Math.round(median(right.map((m) => m.diff))),
+      matched: right.length,
+      usable: right.length,
+      atMs: firstRight.startMs,
+    },
+  ];
+}
+
+/** Points that lie on one straight line to within this are a steady drift, not jumps. */
+const LINE_TOLERANCE_MS = 250;
+/** How far outside the first and last point the shift is pinned, so it stays level there. */
+const LEVEL_EDGE_MS = 60_000;
+
+/** True when the shift grows steadily along the video (a slightly different speed). */
+function isSteadyDrift(knots: Knot[]): boolean {
+  const first = knots[0] as Knot;
+  const last = knots[knots.length - 1] as Knot;
+  if (knots.length < 3 || last.atMs === first.atMs) return false;
+  const slope = (last.offsetMs - first.offsetMs) / (last.atMs - first.atMs);
+  return knots.every(
+    (k) =>
+      Math.abs(first.offsetMs + slope * (k.atMs - first.atMs) - k.offsetMs) <= LINE_TOLERANCE_MS,
+  );
+}
+
+/**
+ * Where a jump most likely is between two points with different shifts: the longest silence of
+ * the subtitle between them (a cut or a break does not fall inside a sentence).
+ */
+function jumpBetween(a: Knot, b: Knot, cues: Cue[]): Knot[] {
+  const inside = cues
+    .filter((c) => c.startMs >= a.atMs && c.startMs <= b.atMs)
+    .sort((p, q) => p.startMs - q.startMs);
+  let pick: { before: Cue; after: Cue; gap: number } | undefined;
+  for (let i = 1; i < inside.length; i++) {
+    const before = inside[i - 1] as Cue;
+    const after = inside[i] as Cue;
+    const gap = after.startMs - before.endMs;
+    if (!pick || gap > pick.gap) pick = { before, after, gap };
+  }
+  if (!pick) return [];
+  const out: Knot[] = [];
+  if (pick.before.startMs > a.atMs) out.push({ atMs: pick.before.startMs, offsetMs: a.offsetMs });
+  if (pick.after.startMs < b.atMs) out.push({ atMs: pick.after.startMs, offsetMs: b.offsetMs });
+  return out;
+}
+
+/** The points with the shift pinned level before the first and after the last of them. */
+function levelEnds(knots: Knot[]): Knot[] {
+  const first = knots[0] as Knot;
+  const last = knots[knots.length - 1] as Knot;
+  return [
+    { atMs: first.atMs - LEVEL_EDGE_MS, offsetMs: first.offsetMs },
+    ...knots,
+    { atMs: last.atMs + LEVEL_EDGE_MS, offsetMs: last.offsetMs },
+  ];
+}
+
+/**
+ * Jumps instead of slopes: the shift stays level up to each jump, and outside the first and last
+ * point. Used when the points do not lie on one line, so the changes are cuts, not a drift.
+ */
+function withJumps(knots: Knot[], cues: Cue[]): Knot[] {
+  const first = knots[0] as Knot;
+  const last = knots[knots.length - 1] as Knot;
+  const out: Knot[] = [{ atMs: first.atMs - LEVEL_EDGE_MS, offsetMs: first.offsetMs }];
+  knots.forEach((k, i) => {
+    out.push(k);
+    const next = knots[i + 1];
+    if (next && Math.abs(next.offsetMs - k.offsetMs) > SAME_SHIFT_MS) {
+      out.push(...jumpBetween(k, next, cues));
+    }
+  });
+  out.push({ atMs: last.atMs + LEVEL_EDGE_MS, offsetMs: last.offsetMs });
+  return out.filter((k, i) => i === 0 || k.atMs > (out[i - 1] as Knot).atMs);
+}
+
+/**
+ * One fit from the pieces: a single shift when they agree, otherwise a shift that changes along the
+ * video. With the subtitle's own lines (`cues`), changes that are not a steady drift become jumps,
+ * each placed in a silence of the subtitle.
+ */
+export function buildCueFit(matches: WindowMatch[], cues?: Cue[]): TimingFit | undefined {
   if (matches.length < 2) return undefined;
   const sorted = [...matches].sort((p, q) => p.atMs - q.atMs);
   const offsets = sorted.map((m) => m.offsetMs);
   const share = sorted.reduce((s, m) => s + m.matched / m.usable, 0) / sorted.length;
   const parts = sorted.map((m) => ({ atSec: Math.round(m.atMs / 1000), offsetMs: m.offsetMs }));
-  if (Math.max(...offsets) - Math.min(...offsets) <= SAME_SHIFT_MS) {
-    return { scale: 1, offsetMs: Math.round(median(offsets)), score: share, baseline: 0, parts };
+  const points = sorted.map((m) => ({ atMs: m.atMs, offsetMs: m.offsetMs }));
+  const spread = Math.max(...offsets) - Math.min(...offsets);
+  if (spread <= SAME_SHIFT_MS) {
+    const one = {
+      scale: 1,
+      offsetMs: Math.round(median(offsets)),
+      score: share,
+      baseline: 0,
+      parts,
+    };
+    // Pieces a little apart: each part of the video gets the shift of the pieces around it.
+    return spread <= FINE_SHIFT_MS ? one : { ...one, knots: levelEnds(points) };
   }
-  const knots = sorted.map((m) => ({ atMs: m.atMs, offsetMs: m.offsetMs }));
+  const knots =
+    cues && points.length >= 3 && !isSteadyDrift(points) ? withJumps(points, cues) : points;
   return { scale: 1, offsetMs: offsets[0] as number, score: share, baseline: 0, knots, parts };
 }

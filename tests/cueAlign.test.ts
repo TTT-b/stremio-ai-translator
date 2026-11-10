@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignWindow, buildCueFit, offsetAt } from '../src/sync/cueAlign';
+import { alignSplit, alignWindow, buildCueFit, offsetAt } from '../src/sync/cueAlign';
 import { applyFit } from '../src/sync/fit';
 import type { Cue } from '../src/subtitles/types';
 
@@ -137,5 +137,56 @@ describe('offsetAt', () => {
       { atMs: 110_000, offsetMs: 9000 },
     ];
     expect(offsetAt(steep, 210_000)).toBeLessThanOrEqual(9000 + 0.05 * 100_000 + 1);
+  });
+});
+
+describe('alignSplit', () => {
+  const sub = subtitle(24, 9);
+  const jumpAt = sub[Math.floor(sub.length / 2)]!.startMs;
+  const real = shift(sub, (c) => (c.startMs < jumpAt ? 1000 : 9000));
+
+  it('finds the last line before a jump and the first line after it', () => {
+    const piece = between(real, jumpAt - 45_000, jumpAt + 60_000);
+    const split = alignSplit(sub, piece, 1000, 9000)!;
+    expect(split[0].offsetMs).toBe(1000);
+    expect(split[1].offsetMs).toBe(9000);
+    expect(split[0].atMs).toBeLessThan(jumpAt);
+    expect(split[1].atMs).toBe(jumpAt);
+  });
+
+  it('has nothing to say about a piece that holds only one of the two shifts', () => {
+    const piece = between(real, jumpAt + 60_000, jumpAt + 180_000);
+    expect(alignSplit(sub, piece, 1000, 9000)).toBeUndefined();
+  });
+});
+
+describe('buildCueFit with the lines of the subtitle', () => {
+  const sub = subtitle(24, 9);
+  const at = (share: number): number => sub[Math.floor(sub.length * share)]!.startMs;
+  const point = (share: number, offsetMs: number) => ({
+    atMs: at(share),
+    offsetMs,
+    matched: 10,
+    usable: 10,
+  });
+
+  it('turns shifts that are not a steady drift into jumps and keeps the ends level', () => {
+    const fit = buildCueFit(
+      [point(0.25, 0), point(0.5, 0), point(0.6, 8000), point(0.75, 8000)],
+      sub,
+    )!;
+    const moved = applyFit(sub, fit);
+    const off = moved.map((c, i) => c.startMs - sub[i]!.startMs);
+    expect(off[0]).toBe(0);
+    expect(off[off.length - 1]).toBe(8000);
+    // every line has one of the two shifts: nothing is left half way
+    expect(off.every((o) => o === 0 || o === 8000)).toBe(true);
+    expect(off[Math.floor(sub.length * 0.45)]).toBe(0);
+    expect(off[Math.floor(sub.length * 0.65)]).toBe(8000);
+  });
+
+  it('keeps a steady drift as a slope', () => {
+    const fit = buildCueFit([point(0.25, 1000), point(0.5, 2000), point(0.75, 3000)], sub)!;
+    expect(fit.knots).toHaveLength(3);
   });
 });
