@@ -1,14 +1,37 @@
 # Subtitle accuracy research: missing ids and timing (2026-11-10)
 
-Status: **partly finished** (the session ran out of usage). What is measured is below, with numbers.
-Nothing here claims 100%.
+Nothing here claims 100%. What is measured is below, with numbers.
+
+## STATE / NEXT STEPS (updated 2026-11-11)
+
+- Branch `claude/research-sync-d9e0a8`, not merged, not pushed. `npm run check` passes.
+- Done and committed: the timing fix of the in-video subtitle check (`src/sync/cueFit.ts`,
+  `src/sync/cueAlign.ts`), its tests, the benches in `scripts/research/`, this report.
+- Running now: the missing-id A/B (`scripts/research/id-ab.ts`, 48 requests, one at a time, 5 s
+  apart, stops after two rate-limit answers in a row). Raw results go to
+  `data/research/results/ab-bb.json` (gitignored); the numbers are copied into this report.
+- Next: (1) put the A/B numbers here and decide on the schema change in `gemini.ts`;
+  (2) the weak timing cases listed under "What remains"; (3) one real check in Stremio by the
+  owner before any merge.
+- To resume from a fresh session: the sample files are not in git. Fetch them again with the
+  `gh api` lines in "How it was measured", then run
+  `npx tsx scripts/research/sync-bench.ts --path=cue` (fast) and compare with the tables here.
+- `node_modules` in this worktree is a junction to `D:\TTT Sub\node_modules` (no install was run).
 
 ## How it was measured
 
 - Real subtitle files, 587 to 1738 lines, taken from public GitHub repositories into
   `data/research/` (gitignored, never committed): Breaking Bad S01E01 (3 releases), Inception
   (3 releases), The Matrix (4 releases). OpenSubtitles downloads were not possible: the login in
-  the development `.env` was rejected (the keys were not touched).
+  the development `.env` was rejected (the keys were not touched). Each file was fetched with
+  `gh api -H "Accept: application/vnd.github.raw" repos/<owner>/<repo>/contents/<path>`:
+  - `bb-reward.srt`: teinvdlugt/PWS, `data/subscene/breaking bad seizoen 1-5/Breaking.Bad.S01E01.720p.BluRay.x264-REWARD.srt`
+  - `bb-yawnix.srt`, `bb-troll.srt`: flixadmin/Subtitle-API, `cache/Breaking.Bad.S01E01.1080p.Bluray.x265-YAWNiX.srt` and `cache/Breaking.Bad.S01E01.2160p.WEBRip.DTS-HD.MA5.1.x264-TrollUHD.srt`
+  - `bb-mhd.srt`: kidp2h/sub, `Breaking.Bad.S01E01.mHD.BluRay.DD5.1.srt`
+  - `inc-dvdrip.srt`, `inc-brrip.srt`, `inc-chd.srt`: kousyoukun/subtitle-collection, `movie/40794/` (`Inception.2010.DvDRip.H264-CRYS.srt`, `Inception.2010.BRRip.720p.H264.Feel-Free.srt`, `Inception.2010.BluRay.720p.DTS.2Audio.x264-CHD.eng.srt`)
+  - `mx-silu.srt`: kousyoukun/subtitle-collection, `movie/35145/` (the `...SiLUHD.eng.srt` file)
+  - `mx-yts.srt`: alfredlu1986/movie-english-sub, `1999/The.Matrix.1999.1080p.720p.BluRay.x264. [YTS.MX]-English.srt`
+  - `mx-tlf.srt`: Enceladus-Ensoul/mov; `mx-hddvd.srt`: DaviFB27/film-subtitles (other languages, not used in the tables)
 - `scripts/research/sync-bench.ts`: timing. 67 cases, 75,235 lines. 57 cases are a real file with a
   known change (shift, frame rate, jumps, missing lines, other language, noise), so every line's
   right time is known. 10 cases are two real releases of the same film; lines with the same unique

@@ -3,7 +3,10 @@
  * schema) stop it from ending the list early? The same chunks are sent both ways, in turn.
  *
  *   npx tsx scripts/research/id-ab.ts --file=data/research/bb-reward.srt [--chunks=8] [--passes=2]
- *       [--model=...] [--out=result.json]
+ *       [--model=...] [--pause=5000] [--out=result.json]
+ *
+ * One request at a time with a pause between them; two rate-limit answers in a row (or a quota
+ * answer) end the run, and what was measured until then is saved.
  *
  * RESEARCH_ENV may point at the .env to read. Keys are used, never printed; only ids and counts
  * are printed or saved.
@@ -49,24 +52,28 @@ async function main(): Promise<void> {
     httpOptions: { timeout: config.aiTimeoutMs },
   });
   let lastFinish = 'none';
-  /** `plain` takes the line count out of the schema again: the app as it was before. */
+  /**
+   * The `exact` arm adds the number of lines asked for to the answer schema (minItems / maxItems);
+   * the `plain` arm sends the request exactly as the app does today.
+   */
   const clientFor = (arm: Arm): GeminiClientLike => ({
     models: {
       async generateContent(params) {
         const schema = params.config?.['responseJsonSchema'] as
           { properties: { translations: Record<string, unknown> } } | undefined;
+        const count = (JSON.parse(params.contents) as { cues: unknown[] }).cues.length;
         const config2 =
-          arm === 'plain' && schema
+          arm === 'exact' && schema
             ? {
                 ...params.config,
                 responseJsonSchema: {
                   ...schema,
                   properties: {
-                    translations: Object.fromEntries(
-                      Object.entries(schema.properties.translations).filter(
-                        ([k]) => k !== 'minItems' && k !== 'maxItems',
-                      ),
-                    ),
+                    translations: {
+                      ...schema.properties.translations,
+                      minItems: count,
+                      maxItems: count,
+                    },
                   },
                 },
               }
@@ -98,12 +105,22 @@ async function main(): Promise<void> {
   const cues = cleanSubtitle(parseSubtitle(readFileSync(path, 'utf8'))).cues;
   const chunks = chunkCues(cues, Number(flag('chunk') ?? 80)).slice(0, Number(flag('chunks') ?? 8));
   const rows: Row[] = [];
+  const pauseMs = Number(flag('pause') ?? 5000);
+  const out = flag('out');
+  /** Two "too many requests" answers in a row end the run: the key's quota is not to be used up. */
+  let limitedInARow = 0;
+  let stopped = false;
+  const save = (): void => {
+    if (out) writeFileSync(out, JSON.stringify({ stopped, rows }, null, 1), 'utf8');
+  };
   for (let pass = 0; pass < Number(flag('passes') ?? 2); pass++) {
     for (const chunk of chunks) {
+      if (stopped) break;
       for (const arm of (pass % 2 ? ['exact', 'plain'] : ['plain', 'exact']) as Arm[]) {
+        if (stopped) break;
         const asked = chunk.cues.map((c) => String(c.index));
         const base = { arm, chunk: chunk.number, asked: asked.length };
-        for (let attempt = 0; attempt < 4; attempt++) {
+        for (let attempt = 0; attempt < 2; attempt++) {
           try {
             const reply = await providers[arm].translateChunk({
               targetLanguage: 'Hebrew',
@@ -112,6 +129,7 @@ async function main(): Promise<void> {
               context: chunk.context,
               upcoming: chunk.upcoming,
             });
+            limitedInARow = 0;
             const want = new Set(asked);
             const seen = new Map<string, number>();
             for (const t of reply.translations)
@@ -134,8 +152,10 @@ async function main(): Promise<void> {
             const code = isAppError(err)
               ? `${err.code}${err.details['truncated'] ? ':cut-off' : ''}:${String(err.details['status'] ?? '')}`
               : 'UNKNOWN';
+            if (/RATE_LIMITED|QUOTA/.test(code)) limitedInARow++;
+            if (limitedInARow >= 2 || /QUOTA/.test(code)) stopped = true;
             const waitable = /RATE_LIMITED|TIMEOUT/.test(code);
-            if (!waitable || attempt === 3) {
+            if (!waitable || attempt === 1 || stopped) {
               rows.push({
                 ...base,
                 returned: 0,
@@ -147,10 +167,11 @@ async function main(): Promise<void> {
               });
               break;
             }
-            await sleep(15_000);
+            await sleep(30_000);
           }
         }
-        await sleep(1500);
+        save();
+        await sleep(pauseMs);
       }
     }
   }
@@ -160,6 +181,7 @@ async function main(): Promise<void> {
     return {
       arm,
       model,
+      stoppedEarly: stopped,
       answered: ok.length,
       answersMissingLines: ok.filter((r) => r.missing > 0).length,
       linesAsked: ok.reduce((n, r) => n + r.asked, 0),
@@ -171,8 +193,7 @@ async function main(): Promise<void> {
     };
   });
   process.stdout.write(`${JSON.stringify(summary, null, 1)}\n`);
-  const out = flag('out');
-  if (out) writeFileSync(out, JSON.stringify({ summary, rows }, null, 1), 'utf8');
+  if (out) writeFileSync(out, JSON.stringify({ stopped, summary, rows }, null, 1), 'utf8');
 }
 
 main().catch((err: unknown) => {
