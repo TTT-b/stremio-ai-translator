@@ -20,6 +20,8 @@ const swap = (row, asking) => {
 document.addEventListener('click', async (ev) => {
   const t = ev.target.closest ? ev.target.closest('[data-rm], [data-rm-no], [data-rm-yes]') : null;
   if (!t) return;
+  ev.preventDefault();
+  ev.stopPropagation();
   const row = t.closest('[data-key-row]');
   if (t.hasAttribute('data-rm')) swap(row, true);
   else if (t.hasAttribute('data-rm-no')) swap(row, false);
@@ -36,10 +38,6 @@ const drawerEls = () => [...drawer.querySelectorAll('input, select')].filter((el
 const elValue = (el) => el.type === 'checkbox' ? el.checked : el.value;
 let drawerSnap = new Map();
 const takeSnap = () => { drawerSnap = new Map(drawerEls().map((el) => [el, elValue(el)])); renderUnsaved(); };
-// A service row opens to show its fields; its button says Change or Close.
-document.querySelectorAll('details[data-svc]').forEach((row) => row.addEventListener('toggle', () => {
-  row.querySelector('[data-svc-btn]').textContent = row.open ? T.setClose : T.setChange;
-}));
 // Summary of what changed (old -> new). Keys and passwords are never shown, only that they changed.
 const SECRET_IDS = new Set(['d-ai', 'd-os', 'd-pass', 'd-subdl', 'd-jimaku']);
 const labelOf = (el) => {

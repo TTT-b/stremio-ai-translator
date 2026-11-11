@@ -152,6 +152,14 @@ const show =(id, ok, msg) => {
   const base = el.className.split(' ').filter(c => !Object.values(TONE).includes(c)).join(' ');
   el.textContent = msg ? (ok === null ? '' : ok ? '\\u2714\\uFE0E ' : '\\u2716\\uFE0E ') + msg : '';
   el.className = base + ' ' + (ok === null ? TONE.info : ok ? TONE.ok : TONE.bad);
+  // A success message marked data-autohide fades out after 10 s; a new message cancels that.
+  clearTimeout(el._hideT); clearTimeout(el._clearT); el.style.opacity = '';
+  if (el.hasAttribute('data-autohide') && ok === true && msg) {
+    el._hideT = setTimeout(() => {
+      el.style.opacity = '0';
+      el._clearT = setTimeout(() => { el.textContent = ''; el.style.opacity = ''; }, 400);
+    }, 10000);
+  }
   const row = el.closest('[data-check-row][data-base]');
   if (row && msg) {
     row.dataset.base = ok === null ? (msg === T.testing ? 'checking' : 'nokey') : ok ? 'ok' : 'fail';
