@@ -195,24 +195,26 @@ export function alignSplit(
   const first = refs.map((r) => lineAt(r, subCues, beforeMs));
   const second = refs.map((r) => lineAt(r, subCues, afterMs));
   // Lines 0..k-1 on the first shift, the rest on the second: the k that explains the most lines.
-  const secondFrom = new Array<number>(refs.length + 1).fill(0);
-  for (let i = refs.length - 1; i >= 0; i--) {
-    secondFrom[i] = (secondFrom[i + 1] as number) + (second[i] ? 1 : 0);
+  // In fast dialogue a line often sits at the other shift from some OTHER subtitle line by chance.
+  // Such a match points back before the lines already used, so it is not counted: after the jump
+  // only subtitle lines later than the last one before it can follow.
+  let best: { left: LineMatch[]; right: LineMatch[] } | undefined;
+  for (let k = 1; k < refs.length; k++) {
+    const left = first.slice(0, k).flatMap((m) => (m ? [m] : []));
+    if (left.length === 0) continue;
+    const lastLeftMs = Math.max(...left.map((m) => m.startMs));
+    const right = second.slice(k).flatMap((m) => (m && m.startMs > lastLeftMs ? [m] : []));
+    if (!best || left.length + right.length > best.left.length + best.right.length) {
+      best = { left, right };
+    }
   }
-  let best = { k: 0, a: 0, b: secondFrom[0] as number };
-  let firstUpTo = 0;
-  for (let k = 1; k <= refs.length; k++) {
-    if (first[k - 1]) firstUpTo++;
-    const b = secondFrom[k] as number;
-    if (firstUpTo + b > best.a + best.b) best = { k, a: firstUpTo, b };
+  if (!best || best.left.length < SPLIT_MIN_SIDE || best.right.length < SPLIT_MIN_SIDE) {
+    return undefined;
   }
-  if (best.a < SPLIT_MIN_SIDE || best.b < SPLIT_MIN_SIDE) return undefined;
-  if (best.a + best.b < SPLIT_MIN_SHARE * refs.length) return undefined;
-  const left = first.slice(0, best.k).flatMap((m) => (m ? [m] : []));
-  const right = second.slice(best.k).flatMap((m) => (m ? [m] : []));
-  const lastLeft = left[left.length - 1] as LineMatch;
-  const firstRight = right[0] as LineMatch;
-  if (firstRight.startMs <= lastLeft.startMs) return undefined;
+  const { left, right } = best;
+  if (left.length + right.length < SPLIT_MIN_SHARE * refs.length) return undefined;
+  const lastLeft = left.reduce((p, q) => (q.startMs > p.startMs ? q : p));
+  const firstRight = right.reduce((p, q) => (q.startMs < p.startMs ? q : p));
   return [
     {
       offsetMs: Math.round(median(left.map((m) => m.diff))),

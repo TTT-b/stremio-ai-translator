@@ -158,6 +158,33 @@ describe('alignSplit', () => {
     const piece = between(real, jumpAt + 60_000, jumpAt + 180_000);
     expect(alignSplit(sub, piece, 1000, 9000)).toBeUndefined();
   });
+
+  // In fast dialogue a line often sits, by chance, at the other shift from some other line too.
+  // That must not hide the jump or move it (found on 2026-11-11: about a third of the places failed).
+  it('finds the jump on the exact line in fast dialogue, wherever it is', () => {
+    const rand = rng(5);
+    const fast: Cue[] = [];
+    for (let t = 20_000; t < 60 * 60_000;) {
+      const len = 1200 + rand() * 2000;
+      fast.push({
+        index: fast.length + 1,
+        startMs: Math.round(t),
+        endMs: Math.round(t + len),
+        text: 'x',
+      });
+      t += len + 200 + rand() * 1500;
+    }
+    const missed: number[] = [];
+    for (let i = 60; i < fast.length - 60; i += 7) {
+      const at = fast[i]!.startMs;
+      const video = shift(fast, (c) => (c.startMs < at ? 1000 : 9000));
+      // a one-minute piece of the video's track with the jump somewhere inside it
+      const from = at + 1000 - 15_000 - ((i * 37) % 30) * 1000;
+      const split = alignSplit(fast, between(video, from, from + 60_000), 1000, 9000);
+      if (split?.[0].atMs !== fast[i - 1]!.startMs || split[1].atMs !== at) missed.push(i);
+    }
+    expect(missed).toEqual([]);
+  });
 });
 
 describe('buildCueFit with the lines of the subtitle', () => {

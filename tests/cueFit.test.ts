@@ -289,6 +289,28 @@ describe('fitSubtitleToEmbeddedCues on a film (frame rate and jumps)', () => {
     expect(fit).toBeUndefined();
   });
 
+  // Seen with the real ffmpeg (scripts/research/ffmpeg-check.ts): a piece also holds the lines of
+  // the seconds before it, and a piece with a jump inside can still match one side clearly.
+  it.each([0.33, 0.4, 0.47, 0.55, 0.62])(
+    'places a jump at %f of the film on the exact line, whatever side of a piece it falls in',
+    async (share) => {
+      const jumpAt = film[Math.floor(film.length * share)]!.startMs;
+      const real = film.map((c) => {
+        const off = c.startMs < jumpAt ? 1000 : 9000;
+        return { ...c, startMs: c.startMs + off, endMs: c.endMs + off };
+      });
+      const fit = await fitSubtitleToEmbeddedCues({
+        ...base,
+        cues: film,
+        signal,
+        exec,
+        readPiece: async ({ fromSec, toSec }) =>
+          toSrt(real.filter((c) => c.startMs >= (fromSec - 12) * 1000 && c.startMs < toSec * 1000)),
+      });
+      expect(exactShare(applyFit(film, fit!), real)).toBe(1);
+    },
+  );
+
   it('does not take a jump for a frame-rate stretch', async () => {
     // 3.3 s between the first two pieces is what a 24 / 23.976 stretch would give; here it is a jump
     const jumpAt = film[Math.floor(film.length * 0.5)]!.startMs;

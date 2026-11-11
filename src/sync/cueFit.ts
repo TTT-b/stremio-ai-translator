@@ -50,6 +50,8 @@ const NARROWING_BUDGET_MS = 150_000;
 const STRETCH_MIN_PIECES = 3;
 /** Where a piece that confirms a stretch is read (the next place only when the one before gave nothing). */
 const STRETCH_CHECK_SHARES = [0.5, 0.38, 0.62];
+/** A jump inside a piece is taken over one clear shift only when it explains this many more lines. */
+const SPLIT_MIN_GAIN = 3;
 /** A jump that is known to within this (two pieces already touch) cannot be narrowed by reading. */
 const MIN_GAP_MS = 15_000;
 const MIN_LENGTH_SEC = 300;
@@ -151,6 +153,12 @@ export const readPieceWithFfmpeg: ReadPiece = ({
       else resolve(Buffer.concat(chunks).toString('utf8'));
     });
   });
+
+/** One piece that was read: its lines, and the one shift it gave when it was clear. */
+interface PieceRead {
+  ref: Cue[];
+  hit?: WindowMatch;
+}
 
 interface Stretch {
   scale: number;
@@ -284,9 +292,9 @@ export async function fitSubtitleToEmbeddedCues(
     const taken: { from: number; to: number }[] = [];
     const matches: WindowMatch[] = [];
     const pieces: Cue[][] = [];
-    /** Reads the pieces that start at these seconds; returns the lines of those that gave no shift. */
-    const readAt = async (starts: readonly number[]): Promise<Cue[][]> => {
-      const unsure: Cue[][] = [];
+    /** Reads the pieces that start at these seconds; a clear shift is added to `matches`. */
+    const readAt = async (starts: readonly number[]): Promise<PieceRead[]> => {
+      const done: PieceRead[] = [];
       for (const fromSec of starts) {
         let raw = '';
         const pieceStart = Date.now();
@@ -317,11 +325,11 @@ export async function fitSubtitleToEmbeddedCues(
         });
         if (ref.length > 0) pieces.push(ref);
         if (hit) matches.push(hit);
-        else unsure.push(ref);
+        done.push(hit ? { ref, hit } : { ref });
       }
-      return unsure;
+      return done;
     };
-    const readRound = (shares: readonly number[], reachSec?: number): Promise<Cue[][]> =>
+    const readRound = (shares: readonly number[], reachSec?: number): Promise<PieceRead[]> =>
       readAt(pickWindows(opts.cues, shares, WINDOW_SEC, lengthSec, taken, reachSec));
     /** A frame-rate stretch is looked for only when the pieces do not already agree on one shift. */
     const stretchNow = (): Stretch | undefined =>
@@ -382,13 +390,18 @@ export async function fitSubtitleToEmbeddedCues(
       // The video's own time of the middle of the gap (the track's pieces are cut by video time).
       const midSec = ((a.atMs + b.atMs) / 2 + (a.offsetMs + b.offsetMs) / 2) / 1000;
       progress.needMore(1);
-      const unsure =
+      const got =
         spanSec <= 2 * WINDOW_SEC
           ? await readAt([Math.max(0, midSec - WINDOW_SEC / 2)])
           : await readRound([midSec / lengthSec], (spanSec - WINDOW_SEC) / 4);
-      for (const ref of unsure) {
+      for (const { ref, hit } of got) {
         const split = alignSplit(opts.cues, ref, a.offsetMs, b.offsetMs);
         if (!split) continue;
+        // A piece with the jump inside can still match one side clearly. The two shifts together
+        // must then explain clearly more of its lines than that one shift does.
+        const explained = split[0].matched + split[1].matched;
+        if (hit && explained < hit.matched + SPLIT_MIN_GAIN) continue;
+        if (hit) matches.splice(matches.indexOf(hit), 1);
         opts.log?.({ cue: 'jump', atSec: Math.round(split[1].atMs / 1000) });
         matches.push(...split);
         // The jump is now known to the line: nothing between these two is left to read.
