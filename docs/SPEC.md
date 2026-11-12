@@ -78,8 +78,7 @@ select it again. The "My subtitles" list labels timing as **exact**, **by speech
     only while that result is still in memory);
   - **Install in Stremio** and the add-on address with **Copy**.
 - **My subtitles:** everything translated so far, grouped by series, season and episode. Each
-  shows its source and timing label, all labels in the same fixed size. A **search box** at the top narrows the list by the first letters of the title and drops a list of matching titles below it; picking one shows only that title, with a "show all" button. The user can download the SRT file, delete (one, a season, a
-  series, all; always asks first), or in the desktop app save the video with the subtitle inside
+  shows its source and timing label, all labels in the same fixed size. A **search box** at the top narrows the list by the first letters of the title and drops a list of matching titles below it; picking one shows only that title, with a "show all" button. The user can download the SRT file, delete (one, or via the **Select** button: pick rows, a season or a series, or **Select all**, then the red **Delete (n)**, which appears only while selecting; **Cancel** leaves select mode; picked rows get a gold border and a check mark; always asks first), or in the desktop app save the video with the subtitle inside
   (**MKV** or **MP4**, a copy; the original is never changed).
 - **Settings** (side drawer): Accounts and keys, Translation (model, "ask before
   translating"; the preferred source only when two or more source keys are set, listing just those), General (start with Windows, start minimized), Maintenance (delete saved translations and the library after a confirm dialog, run

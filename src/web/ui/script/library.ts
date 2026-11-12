@@ -29,17 +29,23 @@ const askNoStream = () => new Promise((resolve) => {
   modal.onclick = (ev) => { if (ev.target === modal) finish(false); };
   setOpen(true);
 });
+// Select mode: no checkbox squares; a round mark shows on a group only while selecting.
+let selecting = false;
+const PICKED_BORDER = ' !border-warm-ac';
 const checkbox = (checked, indeterminate, label, onChange) => {
-  const c = el('input', 'ttt-check');
-  c.type = 'checkbox'; c.checked = checked; c.indeterminate = indeterminate; c.setAttribute('aria-label', label);
-  c.addEventListener('change', () => onChange(c.checked));
+  if (!selecting) return document.createTextNode('');
+  const c = el('button', 'grid h-5 w-5 shrink-0 cursor-pointer place-items-center rounded-full border text-[12px] font-black leading-none ' + (checked || indeterminate ? 'border-warm-ac bg-warm-ac text-warm-bg' : 'border-warm-ln text-transparent'), indeterminate ? '–' : '✓');
+  c.type = 'button'; c.setAttribute('aria-label', label); c.setAttribute('aria-pressed', String(checked));
+  c.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); onChange(!checked); });
   return c;
 };
+const setSelecting = (on) => { selecting = on; if (!on) picked.clear(); drawLib(); };
 const setPicked = (ids, on) => { for (const id of ids) { if (on) picked.add(id); else picked.delete(id); } drawLib(); };
 const groupState = (ids) => { const n = ids.filter(id => picked.has(id)).length; return {checked: n > 0 && n === ids.length, partial: n > 0 && n < ids.length}; };
 const episodeRow = (e) => {
-  const row = el('div', 'flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-2 py-1.5 text-sm transition hover:bg-warm-bg' + (picked.has(e.id) ? ' bg-warm-ac/[0.07]' : ''));
-  const pick = el('label', 'flex min-w-[8rem] flex-1 cursor-pointer items-center gap-3');
+  const row = el('div', 'flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-transparent px-2 py-1.5 text-sm transition hover:bg-warm-bg' + (selecting ? ' cursor-pointer' : '') + (picked.has(e.id) ? ' bg-warm-ac/[0.07]' + PICKED_BORDER : ''));
+  row.addEventListener('click', (ev) => { if (selecting && !ev.target.closest('a,button')) setPicked([e.id], !picked.has(e.id)); });
+  const pick = el('div', 'flex min-w-[8rem] flex-1 items-center gap-3');
   pick.append(checkbox(picked.has(e.id), false, e.title, (on) => setPicked([e.id], on)));
   const name = e.kind === 'series' ? f(T.libEpisode, {n: e.episode ?? '?'}) : (e.label || T.libSubtitle);
   pick.append(el('span', 'min-w-0 flex-1 truncate font-medium text-warm-tx', name));
@@ -240,11 +246,11 @@ const makeAvatar = (title, colorIndex) => {
   return a;
 };
 const section = (key, title, count, items, body, colorIndex) => {
-  const d = el('details', 'group rounded-2xl border border-warm-ln bg-warm-sf');
+  const ids = items.map(e => e.id), st = groupState(ids);
+  const d = el('details', 'group rounded-2xl border bg-warm-sf ' + (st.checked ? 'border-warm-ac' : 'border-warm-ln'));
   d.open = openGroups.has(key);
   d.addEventListener('toggle', () => { if (d.open) openGroups.add(key); else openGroups.delete(key); });
   const s = el('summary', 'flex cursor-pointer list-none items-center gap-3 rounded-2xl p-3.5 transition hover:bg-warm-bg/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac [&::-webkit-details-marker]:hidden');
-  const ids = items.map(e => e.id), st = groupState(ids);
   s.append(checkbox(st.checked, st.partial, title, (on) => setPicked(ids, on)));
   const name = el('b', 'block truncate text-sm font-bold text-warm-tx', title);
   name.dir = 'ltr'; name.style.textAlign = UI === 'he' ? 'right' : 'left';
@@ -279,13 +285,13 @@ const seasonBlock = (key, s, eps) => {
 const seriesGroup = (key, g, colorIndex) => {
   const bySeason = new Map();
   for (const e of g.items) { const s = e.season ?? 1; if (!bySeason.has(s)) bySeason.set(s, []); bySeason.get(s).push(e); }
-  const d = el('details', 'rounded-2xl border border-warm-ln bg-warm-sf');
+  const ids = g.items.map(e => e.id), st = groupState(ids);
+  const d = el('details', 'rounded-2xl border bg-warm-sf ' + (st.checked ? 'border-warm-ac' : 'border-warm-ln'));
   d.open = openGroups.has(key);
   const chev = chevron('inline-block text-warm-ac transition-transform duration-200');
   const turn = () => { chev.style.transform = d.open ? 'rotate(180deg)' : ''; };
   d.addEventListener('toggle', () => { if (d.open) openGroups.add(key); else openGroups.delete(key); turn(); });
   turn();
-  const ids = g.items.map(e => e.id), st = groupState(ids);
   const s = el('summary', 'flex cursor-pointer list-none items-center gap-3 rounded-2xl p-3.5 transition hover:bg-warm-bg/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac [&::-webkit-details-marker]:hidden');
   const avatar = makeAvatar(g.title, colorIndex);
   const name = el('b', 'block truncate text-sm font-bold text-warm-tx', g.title);
@@ -392,12 +398,13 @@ const drawLib = () => {
   $('lib-total').textContent = libItems.length ? f(T.libTotal, {n: libItems.length}) : '';
   $('lib-size').textContent = libItems.length ? f(T.libSize, {size: sizeText(total)}) : '';
   const everyPicked = libItems.length > 0 && libItems.every(e => picked.has(e.id));
+  // Buttons: "Select" normally; while selecting: Cancel, Select all, and a red Delete (n) once something is picked.
+  $('lib-select').hidden = selecting || libItems.length === 0;
+  $('lib-cancel').hidden = !selecting;
+  $('lib-all').hidden = !selecting;
   $('lib-all').textContent = everyPicked ? T.libSelectNone : T.libSelectAll;
-  $('lib-all').hidden = libItems.length === 0;
-  // One delete button at the bottom: "delete all", or "delete selected (n)" with a "clear" button.
-  $('lib-del-all').textContent = picked.size ? f(T.libDeleteSel, {n: picked.size}) : T.libDeleteAll;
-  $('lib-del-all').disabled = libItems.length === 0;
-  $('lib-none').classList.toggle('hidden', picked.size === 0);
+  $('lib-del').hidden = !selecting || picked.size === 0;
+  $('lib-del').textContent = f(T.libDeleteSel, {n: picked.size});
 };
 const loadLib = async () => {
   try {
@@ -418,13 +425,14 @@ $('lib-q').addEventListener('keydown', (ev) => {
 $('lib-q-clear').addEventListener('click', clearSearch);
 $('lib-only-all').addEventListener('click', clearSearch);
 document.addEventListener('click', (ev) => { if (!$('lib-search').contains(ev.target)) $('lib-sug').hidden = true; });
-$('open-library').addEventListener('click', () => { openGroups.clear(); closedSeasons.clear(); clearSearch(); setView('lib'); });
+$('open-library').addEventListener('click', () => { openGroups.clear(); closedSeasons.clear(); selecting = false; picked.clear(); clearSearch(); setView('lib'); });
 $('lib-back').addEventListener('click', () => setView('dash'));
 $('lib-all').addEventListener('click', () => {
   const every = libItems.length > 0 && libItems.every(e => picked.has(e.id));
   setPicked(libItems.map(e => e.id), !every);
 });
-$('lib-none').addEventListener('click', () => setPicked([...picked], false));
+$('lib-select').addEventListener('click', () => setSelecting(true));
+$('lib-cancel').addEventListener('click', () => setSelecting(false));
 const delModal = $('del-modal');
 let pendingDelete = null;
 const setDelModal = (open) => { delModal.classList.toggle('hidden', !open); delModal.classList.toggle('flex', open); };
@@ -434,7 +442,7 @@ const askDelete = (all, ids) => {
   $('del-title').textContent = all ? T.libConfirmAll : list.length === 1 ? T.libConfirmOne : f(T.libConfirmSel, {n: list.length});
   setDelModal(true);
 };
-$('lib-del-all').addEventListener('click', () => askDelete(picked.size === 0));
+$('lib-del').addEventListener('click', () => { if (picked.size) askDelete(false); });
 $('del-no').addEventListener('click', () => setDelModal(false));
 delModal.addEventListener('click', (e) => { if (e.target === delModal) setDelModal(false); });
 $('del-yes').addEventListener('click', async () => {
@@ -450,6 +458,7 @@ $('del-yes').addEventListener('click', async () => {
     }
     toast(true, f(T.libDeleted, {n: removed}));
   } catch { toast(false, T.libDeleteFail); }
+  selecting = false; picked.clear();
   loadLib();
 });`;
 }
