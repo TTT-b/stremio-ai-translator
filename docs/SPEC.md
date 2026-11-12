@@ -26,6 +26,9 @@
    install), and click **Install in Stremio**.
 2. **Every time:** keep TTT Sub running (it can sit in the tray near the clock).
 3. Play a movie or episode in Stremio, open the subtitles menu, pick the **TTT Sub** entry.
+   Stremio asks the add-on for subtitles every time an episode is opened, before any pick, so the
+   app already starts working in the background and the main screen can show that job (progress or
+   "done") without any click. This is intended: it is what makes the subtitle ready at play.
 4. The subtitle opens in one of these ways:
    - **Ready at once** if this video was translated before, or a ready subtitle in the user's
      language exists.
@@ -83,7 +86,7 @@ select it again. The "My subtitles" list labels timing as **exact**, **by speech
 - **My subtitles:** everything translated so far, grouped by series, season and episode. Each
   shows its source and timing label, all labels in the same fixed size. A **search box** at the top narrows the list by the first letters of the title and drops a list of matching titles below it; picking one shows only that title, with a "show all" button. The user can download the SRT file, delete (one, or via the **Select** button: pick rows, a season or a series, or **Select all**, then the red **Delete (n)**, which appears only while selecting; **Cancel** leaves select mode; picked rows get a gold border and a check mark; always asks first), or in the desktop app save the video with the subtitle inside
   (**MKV** or **MP4**, a copy; the original is never changed).
-- **Settings** (side drawer): Accounts and keys, Translation (model, "ask before
+- **Settings** (side drawer, 470 px wide so the three AI link buttons fit in one row): Accounts and keys, Translation (model, "ask before
   translating"; the preferred source only when two or more source keys are set, listing just those), General (start with Windows, start minimized), Maintenance (delete saved translations and the library after a confirm dialog, run
   setup again), About (version, check for updates, developer settings hidden by default).
 - **News bell:** release notes of every version (newest open; older ones behind a button). No messages from the author.
