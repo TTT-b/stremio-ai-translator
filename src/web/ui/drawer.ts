@@ -92,7 +92,7 @@ ${toggle('d-test', d.testMode === true, 'testOn')}
     note = '',
     keyField = '',
   ) =>
-    `<details data-svc="${svc}" class="group rounded-2xl border border-warm-ln bg-warm-bg/40"><summary${ok && keyField ? ' data-key-row' : ''} class="flex min-h-14 cursor-pointer flex-wrap list-none items-center gap-3 rounded-2xl px-3.5 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac [&::-webkit-details-marker]:hidden"><div class="min-w-0 flex-1"><div class="flex items-center gap-2 text-sm font-bold text-warm-tx">${dotOf(dotCls)}<span>${name}</span></div>${detail ? `<div class="mt-0.5 break-all text-sm font-semibold text-warm-tx" dir="auto">${detail}</div>` : ''}${note ? `<div class="mt-0.5 text-[11px] text-warm-mu">${note}</div>` : ''}</div>${
+    `<details data-svc="${svc}" class="group rounded-2xl border border-warm-ln bg-warm-bg/40"><summary${ok && keyField ? ' data-key-row' : ''} class="flex min-h-14 cursor-pointer flex-wrap list-none items-center gap-3 rounded-2xl px-3.5 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac [&::-webkit-details-marker]:hidden"><div class="min-w-0 flex-1"><div class="flex items-center gap-2 text-sm font-bold text-warm-tx">${dotOf(dotCls)}<span>${name}</span></div>${detail ? `<div class="mt-0.5 break-all ps-[18px] text-[13px] font-semibold text-warm-tx" dir="auto">${detail}</div>` : ''}${note ? `<div class="mt-0.5 ps-[18px] text-[11px] text-warm-mu">${note}</div>` : ''}</div>${
       ok
         ? keyField
           ? keyChip(keyField, status, 'basis-full order-last border-t border-warm-ln pt-2')
@@ -121,7 +121,7 @@ ${toggle('d-test', d.testMode === true, 'testOn')}
     d.aiConfigured,
     d.aiConfigured ? tt('configured') : tt('setNotSet'),
     `<input class="${field}" id="d-ai" type="password" autocomplete="off" aria-label="${tt('aiKeyLabel')}" placeholder="${keyPh(d.aiConfigured)}">
-<div class="flex flex-wrap gap-2">${keyLink('https://aistudio.google.com/apikey', t(lang, 'getGemini'))}${keyLink('https://platform.claude.com/settings/keys', t(lang, 'getClaude'))}${keyLink('https://platform.openai.com/api-keys', t(lang, 'getOpenAI'))}</div>`,
+<div class="flex flex-wrap items-center gap-2"><span class="text-xs font-bold text-warm-mu">${tt('linksLabel')}</span>${keyLink('https://aistudio.google.com/apikey', 'Gemini')}${keyLink('https://platform.claude.com/settings/keys', 'Claude')}${keyLink('https://platform.openai.com/api-keys', 'OpenAI')}</div>`,
     d.aiConfigured ? tt('setKeySaved') : '',
     'aiApiKey',
   );
@@ -148,7 +148,7 @@ ${keyRow('openSubtitlesLogin', `${tt('rowOsLogin')}${d.openSubtitlesUsername ? `
   );
   const subdlRow = serviceRow(
     'subdl',
-    'bg-amber-400',
+    'bg-violet-400',
     'SubDL',
     tt('setSubdlDetail'),
     d.subdlKeyConfigured ?? false,
@@ -160,7 +160,7 @@ ${keyRow('openSubtitlesLogin', `${tt('rowOsLogin')}${d.openSubtitlesUsername ? `
   );
   const jimakuRow = serviceRow(
     'jimaku',
-    'bg-rose-400',
+    'bg-pink-400',
     'Jimaku',
     tt('setJimakuDetail'),
     d.jimakuKeyConfigured ?? false,

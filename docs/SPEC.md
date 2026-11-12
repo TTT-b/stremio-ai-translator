@@ -16,6 +16,9 @@
   [PLAN.md](../PLAN.md).)
 - The user brings their own keys: an AI key (Gemini, Claude or OpenAI) and a free OpenSubtitles
   account. SubDL and Jimaku keys are optional.
+- Settings, "Accounts and keys": each service has one fixed colour dot, the same in Settings and on
+  the connection checks (AI gold, OpenSubtitles blue, SubDL violet, Jimaku pink). The AI card has a
+  "Links:" row with three small buttons (Gemini, Claude, OpenAI) under the key box.
 
 ## 2. What the user sees and does, step by step
 

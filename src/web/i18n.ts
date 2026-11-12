@@ -110,6 +110,7 @@ const S = {
     en: 'The key is stored on this computer only and is never shown again. When you continue, the app checks which provider accepts it.',
   },
   savedProvider: { he: 'שמור: {p}.', en: 'Saved: {p}.' },
+  linksLabel: { he: 'קישורים:', en: 'Links:' },
   getGemini: { he: 'קבל מפתח Gemini', en: 'Get a Gemini key' },
   getClaude: { he: 'קבל מפתח Claude', en: 'Get a Claude key' },
   getOpenAI: { he: 'קבל מפתח OpenAI', en: 'Get an OpenAI key' },
