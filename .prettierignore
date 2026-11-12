@@ -7,3 +7,4 @@ src/web/tailwind.generated.css
 
 dist-electron/
 release/
+.claude/worktrees/
