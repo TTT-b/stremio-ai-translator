@@ -179,7 +179,7 @@ ${jimakuRow}</div></details>`,
   );
 
   return `<div id="drawer" class="${d.desktop ? 'top-9' : 'top-0'} fixed inset-x-0 bottom-0 z-40 hidden justify-start bg-black/45" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
-<div class="flex h-full w-[420px] max-w-full flex-col gap-[18px] overflow-auto border-e border-warm-ln bg-warm-bg p-[26px] shadow-2xl shadow-black/60">
+<div class="flex h-full w-[470px] max-w-full flex-col gap-[18px] overflow-auto border-e border-warm-ln bg-warm-bg p-[26px] shadow-2xl shadow-black/60">
 <div class="flex items-center justify-between"><h2 id="drawer-title" class="text-xl font-bold">${tt('settingsTitle')}</h2><button type="button" id="close-settings" class="rounded-lg px-2 text-lg text-warm-mu transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac" aria-label="${tt('closeSettings')}">&#10005;</button></div>
 <div class="flex flex-col gap-3" id="groups">
 ${keysSection}
