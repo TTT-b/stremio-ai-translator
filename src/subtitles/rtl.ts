@@ -3,6 +3,33 @@
 /** Closing tags and whitespace at the end of a line (e.g. `</i>`, `</font>`). */
 const TRAILING_TAGS = /((?:<\/[a-z][a-z0-9]*>|\s)*)$/i;
 
+const HEBREW_OR_ARABIC = /[֐-ۿ]/;
+/** A run of English words (letters, digits, inner ' . -) joined by single spaces. */
+const LATIN_RUN = /[A-Za-z][A-Za-z0-9'’.-]*(?: [A-Za-z0-9][A-Za-z0-9'’.-]*)*/g;
+
+/**
+ * In a Hebrew/Arabic line, puts an RLM on both sides of every English run (outside tags), so the
+ * punctuation and numbers next to an English term resolve as right-to-left and stay where they
+ * belong ("50 HP," not "HP, 50"). A line with no Hebrew/Arabic, and the tags themselves, are left alone.
+ */
+function markLatinRuns(line: string): string {
+  if (!HEBREW_OR_ARABIC.test(line)) return line;
+  return line
+    .split(/(<[^>]*>)/)
+    .map((part) =>
+      part.startsWith('<')
+        ? part
+        : part.replace(LATIN_RUN, (run, offset: number, whole: string) => {
+            const trimmed = run.replace(/[.'’-]+$/, '');
+            const rest = run.slice(trimmed.length);
+            const before = offset > 0 && whole[offset - 1] === RLM ? '' : RLM;
+            const after = whole[offset + run.length] === RLM ? '' : RLM;
+            return `${before}${trimmed}${after}${rest}`;
+          }),
+    )
+    .join('');
+}
+
 /**
  * Optional RTL punctuation fix (config RTL_FIX), applied to every non-empty line separately.
  *
@@ -18,7 +45,7 @@ const TRAILING_TAGS = /((?:<\/[a-z][a-z0-9]*>|\s)*)$/i;
  */
 function fixLine(line: string): string {
   if (line.trim() === '') return line;
-  let out = line;
+  let out = markLatinRuns(line);
   if (!out.startsWith(RLM)) out = RLM + out;
   const tail = TRAILING_TAGS.exec(out);
   const tagStart = tail ? out.length - tail[0].length : out.length;

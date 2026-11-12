@@ -275,6 +275,22 @@ describe('rtl fix', () => {
   it('leaves empty lines alone', () => {
     expect(applyRtlFix('א\n\nב')).toBe(`${RLM}א${RLM}\n\n${RLM}ב${RLM}`);
   });
+
+  it('wraps an English term inside a Hebrew line so punctuation next to it stays in place', () => {
+    const out = applyRtlFix('נשארו לי 50 HP, ו-MP נגמר.');
+    expect(out).toBe(`${RLM}נשארו לי 50 ${RLM}HP${RLM}, ו-${RLM}MP${RLM} נגמר.${RLM}`);
+    expect(applyRtlFix(out)).toBe(out);
+  });
+
+  it('keeps a multi-word English phrase together and does not touch tags', () => {
+    expect(applyRtlFix('<i>הוא אמר Hello World.</i>')).toBe(
+      `${RLM}<i>הוא אמר ${RLM}Hello World${RLM}.${RLM}</i>`,
+    );
+  });
+
+  it('does not mark English in a line with no Hebrew', () => {
+    expect(applyRtlFix('Hello there.')).toBe(`${RLM}Hello there.${RLM}`);
+  });
 });
 
 describe('music notes', () => {
