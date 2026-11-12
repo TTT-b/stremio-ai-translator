@@ -571,7 +571,8 @@ describe('subtitle request flow', () => {
     current = await start({});
     const res = await current.get('/subtitles/movie/tt0111161.json');
     const body = (await res.json()) as SubsResponse;
-    expect(body.subtitles).toHaveLength(1);
+    // TEMPORARY: 2 while the ASS overlap experiment entry exists (see src/stremio/assTest.ts).
+    expect(body.subtitles).toHaveLength(2);
     const sub = body.subtitles[0]!;
     expect(sub.lang).toBe('heb');
     expect(sub.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/sub\/[0-9a-f]{32}\.srt$/);

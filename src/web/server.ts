@@ -58,6 +58,7 @@ import { verifyAiKey, type VerifyResult } from '../translation/verify';
 import type { TranslationProvider } from '../translation/provider';
 import { translateSubtitle } from '../translation/pipeline';
 import { renderStatusPage, type StatusPageData } from './html';
+import { ASS_TEST_PATH, assTestContent } from '../stremio/assTest';
 
 export interface ServerDeps {
   /** Config from the environment (before settings.json overrides). */
@@ -1157,6 +1158,9 @@ export function createApp(deps: ServerDeps): express.Express {
   );
 
   // Serve a job's subtitle. Waits briefly for a running translation, then falls back to a placeholder.
+  app.get(ASS_TEST_PATH, (_req, res) => {
+    res.type('text/x-ssa; charset=utf-8').send(assTestContent());
+  });
   app.get('/sub/:file', async (req, res) => {
     const log = (res.locals.log as Logger).child({ stage: 'DELIVERY' });
     const started = Date.now();

@@ -6,6 +6,7 @@ import type { JobManager } from '../jobs/manager';
 import type { Logger } from '../logging/logger';
 import { stripControlChars } from '../sources/titles';
 import { parseVideoId } from '../sources/types';
+import { ASS_TEST_PATH } from './assTest';
 
 export const MANIFEST: Manifest = {
   id: 'community.ai-subtitle-translator.local',
@@ -72,6 +73,12 @@ export function createStremioRouter(deps: {
             id: `ai-${job.id}`,
             url: `http://127.0.0.1:${cfg.port}/sub/${job.id}.srt`,
             lang: lang.iso3,
+          },
+          // TEMPORARY experiment: ASS with overlapping cues (see assTest.ts).
+          {
+            id: 'ttt-ass-test',
+            url: `http://127.0.0.1:${cfg.port}${ASS_TEST_PATH}`,
+            lang: 'ass',
           },
         ],
         cacheMaxAge: 30,
