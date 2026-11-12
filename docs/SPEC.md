@@ -59,13 +59,15 @@ Against the video's own track it corrects one shift, a subtitle made for another
 jumps (a scene or a break the subtitle does not have); against the sound, one shift or a frame rate.
 Translation does not wait for this check; if the subtitle is moved later, the user is told to
 select it again. The "My subtitles" list labels timing as **exact**, **by speech** or
-**estimated**.
+**estimated**. When the sound check finds the subtitle already in step, the label becomes **by speech** (it was checked), never "estimated".
 
 ## 4. Screens and buttons, in plain words
 
 - **Setup wizard** (first run, or while a key is missing), 5 steps: AI key; OpenSubtitles;
   language (and optional two-line subtitles: original above, translation below); test
-  connections; install in Stremio. **Back / Continue** move between steps.
+  connections; install in Stremio. **Back / Continue** move between steps. A small underlined
+  "Skip the wizard" link under the buttons asks to confirm (without the wizard the add-on does not
+  work; it can be run again from Settings → "Run the wizard again"), then opens the main screen.
 - **Main screen:**
   - what is translating now, with progress, lines and time left, and who is next in line;
   - **Skip** (gives up the current slow step and goes on) and **Cancel** (stops everything for
@@ -76,13 +78,13 @@ select it again. The "My subtitles" list labels timing as **exact**, **by speech
     only while that result is still in memory);
   - **Install in Stremio** and the add-on address with **Copy**.
 - **My subtitles:** everything translated so far, grouped by series, season and episode. Each
-  shows its source and timing label. The user can download the SRT file, delete (one, a season, a
+  shows its source and timing label, all labels in the same fixed size. A **search box** at the top narrows the list by the first letters of the title and drops a list of matching titles below it; picking one shows only that title, with a "show all" button. The user can download the SRT file, delete (one, a season, a
   series, all; always asks first), or in the desktop app save the video with the subtitle inside
   (**MKV** or **MP4**, a copy; the original is never changed).
-- **Settings** (side drawer): Accounts and keys, Translation (model, first source, "ask before
-  translating"), General (start with Windows, start minimized), Maintenance (clear cache, run
+- **Settings** (side drawer): Accounts and keys, Translation (model, "ask before
+  translating"; the preferred source only when two or more source keys are set, listing just those), General (start with Windows, start minimized), Maintenance (delete saved translations and the library after a confirm dialog, run
   setup again), About (version, check for updates, developer settings hidden by default).
-- **News bell:** messages from the author and release notes.
+- **News bell:** release notes of every version (newest open; older ones behind a button). No messages from the author.
 - **Tray menu:** Open, Pause / Resume translation, time left, Start with Windows, Quit.
   The **X** on the window asks: minimize to tray (keeps working) or quit.
 - Language of the screens: Hebrew (default) or English, switched in Settings.

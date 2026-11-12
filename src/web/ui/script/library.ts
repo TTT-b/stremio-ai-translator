@@ -30,7 +30,7 @@ const askNoStream = () => new Promise((resolve) => {
   setOpen(true);
 });
 const checkbox = (checked, indeterminate, label, onChange) => {
-  const c = el('input', 'h-4 w-4 shrink-0 cursor-pointer accent-warm-ac');
+  const c = el('input', 'ttt-check');
   c.type = 'checkbox'; c.checked = checked; c.indeterminate = indeterminate; c.setAttribute('aria-label', label);
   c.addEventListener('change', () => onChange(c.checked));
   return c;
@@ -45,7 +45,10 @@ const episodeRow = (e) => {
   pick.append(el('span', 'min-w-0 flex-1 truncate font-medium text-warm-tx', name));
   row.append(pick);
   const meta = el('span', 'flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1 text-xs text-warm-mu');
-  const ltr = (text) => { const s = el('span', '', text); s.dir = 'ltr'; return s; };
+  // Every bubble and cell has one fixed size, so the rows line up like a table.
+  const ltr = (text, cls) => { const s = el('span', cls || '', text); s.dir = 'ltr'; return s; };
+  const gap = (cls) => { const s = el('span', cls); s.setAttribute('aria-hidden', 'true'); return s; };
+  if (!e.timing) meta.append(gap('h-6 w-[8.5rem] shrink-0'));
   if (e.timing) {
     const TIMING = {
       exact: {color: '76,195,138', hex: '#4cc38a', paths: '<path d="M5 12l5 5L20 7"/>', text: T.libExact},
@@ -53,7 +56,7 @@ const episodeRow = (e) => {
       estimated: {color: '240,138,75', hex: '#f08a4b', paths: '<path d="M3 12c3-6 6 6 9 0s6 6 9 0"/>', text: T.libEstimated},
     };
     const kind = TIMING[e.timing];
-    const badge = el('span', 'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold');
+    const badge = el('span', 'inline-flex h-6 w-[8.5rem] shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border text-[11px] font-semibold');
     badge.style.cssText = 'color:' + kind.hex + ';border-color:' + kind.hex + ';background:rgba(' + kind.color + ',.1)';
     const tIcon = el('span', 'inline-flex');
     tIcon.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + kind.paths + '</svg>';
@@ -64,13 +67,13 @@ const episodeRow = (e) => {
   if (e.source) {
     const SRC_NAME = {subdl: 'SubDL', opensubtitles: 'OpenSubtitles', jimaku: 'Jimaku', video: T.libSrcVideo};
     const how = e.source.kind === 'direct' ? T.libSrcDirect : f(T.libSrcTranslated, {l: e.source.language.toUpperCase()});
-    const origin = el('span', 'rounded-full border border-warm-ln px-2 py-0.5 text-[11px] font-semibold text-warm-tx', SRC_NAME[e.source.provider] + ' · ' + how);
+    const origin = el('span', 'inline-flex h-6 w-[13.5rem] shrink-0 cursor-pointer items-center justify-center truncate whitespace-nowrap rounded-full border border-warm-ln px-2 text-[11px] font-semibold text-warm-tx', SRC_NAME[e.source.provider] + ' · ' + how);
     origin.title = T.libSrcTip;
     meta.append(origin);
-  }
-  meta.append(el('span', '', f(T.libLines, {n: e.cues})), ltr(dateText(e.createdAt)), ltr(sizeText(e.bytes)));
+  } else meta.append(gap('h-6 w-[13.5rem] shrink-0'));
+  meta.append(el('span', 'w-[4.5rem] shrink-0 text-center', f(T.libLines, {n: e.cues})), ltr(dateText(e.createdAt), 'w-[5.5rem] shrink-0 text-center'), ltr(sizeText(e.bytes), 'w-[4.5rem] shrink-0 text-center'));
   row.append(meta);
-  const btnCls = 'inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-warm-ln px-2.5 py-1 text-xs font-semibold text-warm-mu transition hover:border-warm-ac/60 hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac';
+  const btnCls = 'inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-warm-ln px-2.5 py-1 text-xs font-semibold text-warm-mu transition hover:border-warm-ac/60 hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac';
   const icon = (paths) => { const s = el('span', 'inline-flex'); s.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>'; return s; };
   const dl = el('a', btnCls);
   dl.append(icon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/>'), el('span', '', T.libSubsBtn));
@@ -304,16 +307,69 @@ const seriesGroup = (key, g, colorIndex) => {
   d.append(s, body);
   return d;
 };
+// Search: the typed letters narrow the list; a suggestion can pin one title.
+let libQuery = '';
+let libPinned = null;
+const normQ = (s) => s.toLocaleLowerCase();
+const titleScore = (title, q) => {
+  const t = normQ(title);
+  if (t.indexOf(q) === 0) return 3;
+  if (t.split(/[^\\p{L}\\p{N}]+/u).some(w => w.indexOf(q) === 0)) return 2;
+  return t.includes(q) ? 1 : 0;
+};
+const libTitles = () => {
+  const m = new Map();
+  for (const e of libItems) if (!m.has(e.titleKey)) m.set(e.titleKey, e.title);
+  return [...m.entries()].map(([key, title]) => ({key, title}));
+};
+const searchTitles = (q) => libTitles()
+  .map(x => ({...x, s: titleScore(x.title, q)}))
+  .filter(x => x.s > 0)
+  .sort((a, b) => b.s - a.s || a.title.localeCompare(b.title));
+const visibleItems = () => {
+  if (libPinned) return libItems.filter(e => e.titleKey === libPinned.key);
+  const q = normQ(libQuery.trim());
+  if (!q) return libItems;
+  const keys = new Set(searchTitles(q).map(x => x.key));
+  return libItems.filter(e => keys.has(e.titleKey));
+};
+const drawSuggestions = () => {
+  const box = $('lib-sug');
+  const q = normQ(libQuery.trim());
+  box.replaceChildren();
+  if (!q || libPinned) { box.hidden = true; return; }
+  const found = searchTitles(q);
+  if (!found.length) { box.append(el('div', 'px-3 py-2 text-sm text-warm-mu', T.libSearchNone)); box.hidden = false; return; }
+  for (const x of found.slice(0, 8)) {
+    const b = el('button', 'flex w-full cursor-pointer items-center rounded-xl px-3 py-2 text-start text-sm text-warm-tx hover:bg-warm-bg/60 focus:bg-warm-bg/60 focus:outline-none');
+    b.type = 'button';
+    const at = normQ(x.title).indexOf(q);
+    const label = el('span', 'truncate');
+    label.dir = 'ltr';
+    if (at >= 0) label.append(x.title.slice(0, at), el('b', 'text-warm-ac', x.title.slice(at, at + q.length)), x.title.slice(at + q.length));
+    else label.textContent = x.title;
+    b.append(label);
+    b.addEventListener('click', () => { libPinned = x; libQuery = x.title; $('lib-q').value = x.title; drawLib(); });
+    box.append(b);
+  }
+  box.hidden = false;
+};
 const drawLib = () => {
   const list = $('lib-list');
   list.replaceChildren();
+  $('lib-q-clear').hidden = !libQuery;
+  $('lib-only').classList.toggle('hidden', !libPinned);
+  $('lib-only').classList.toggle('flex', !!libPinned);
+  if (libPinned) $('lib-only-t').textContent = f(T.libSearchOnly, {t: libPinned.title});
+  drawSuggestions();
+  const shown = visibleItems();
   const films = new Map();
-  for (const e of libItems.filter(e => e.kind === 'movie')) {
+  for (const e of shown.filter(e => e.kind === 'movie')) {
     if (!films.has(e.titleKey)) films.set(e.titleKey, {title: e.title, items: []});
     films.get(e.titleKey).items.push(e);
   }
   const shows = new Map();
-  for (const e of libItems.filter(e => e.kind === 'series')) {
+  for (const e of shown.filter(e => e.kind === 'series')) {
     if (!shows.has(e.titleKey)) shows.set(e.titleKey, {title: e.title, items: []});
     shows.get(e.titleKey).items.push(e);
   }
@@ -353,7 +409,16 @@ const loadLib = async () => {
   drawLib();
 };
 // Every series starts closed each time the screen is opened; the user opens the one they want.
-$('open-library').addEventListener('click', () => { openGroups.clear(); closedSeasons.clear(); setView('lib'); });
+const clearSearch = () => { libQuery = ''; libPinned = null; $('lib-q').value = ''; drawLib(); };
+$('lib-q').addEventListener('input', (ev) => { libQuery = ev.target.value; libPinned = null; drawLib(); });
+$('lib-q').addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape') clearSearch();
+  if (ev.key === 'Enter') { const first = searchTitles(normQ(libQuery.trim()))[0]; if (first && !libPinned) { libPinned = first; libQuery = first.title; $('lib-q').value = first.title; drawLib(); } }
+});
+$('lib-q-clear').addEventListener('click', clearSearch);
+$('lib-only-all').addEventListener('click', clearSearch);
+document.addEventListener('click', (ev) => { if (!$('lib-search').contains(ev.target)) $('lib-sug').hidden = true; });
+$('open-library').addEventListener('click', () => { openGroups.clear(); closedSeasons.clear(); clearSearch(); setView('lib'); });
 $('lib-back').addEventListener('click', () => setView('dash'));
 $('lib-all').addEventListener('click', () => {
   const every = libItems.length > 0 && libItems.every(e => picked.has(e.id));

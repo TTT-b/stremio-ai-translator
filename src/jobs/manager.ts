@@ -133,6 +133,9 @@ export class JobManager {
   private readonly skipped = new Map<string, Set<'local' | 'sync'>>();
   private quotaCheckedAt = 0;
   private quotaChecking = false;
+  /** When the number above was really read (0 = never), and whether the latest read failed. */
+  private quotaReadAt = 0;
+  private quotaReadFailed = false;
   /** The latest background upgrade, for the notice on the main screen. */
   private lastUpgrade: {
     title: string;
@@ -627,6 +630,8 @@ export class JobManager {
       syncPercent: stage === 'sync' ? (latest?.syncPercent ?? 0) : null,
       lastError: state === 'error' ? this.lastErrorCode : null,
       quota: this.quota ? { ...this.quota } : null,
+      quotaReadAt: this.quotaReadAt || null,
+      quotaReadFailed: this.quotaReadFailed,
       resumable: this.resumable(),
       autoRetryInSec: this.autoRetryInSec(),
       upgrade:
@@ -669,9 +674,14 @@ export class JobManager {
       if (found) {
         this.quota = found;
         this.downloadsLeft = found.left;
+        this.quotaReadAt = nowMs;
+        this.quotaReadFailed = false;
+      } else {
+        this.quotaReadFailed = true;
       }
     } catch {
-      // the meter is optional
+      // the meter is optional, but the screen says the number may be old
+      this.quotaReadFailed = true;
     } finally {
       this.quotaChecking = false;
     }
@@ -1136,7 +1146,9 @@ export class JobManager {
     if (!moved && !job.syncStopped) void this.noteSync(job, 'kept');
     if (!moved || !before || !this.canUpgrade(job)) return;
     if (isNoShift(moved.fit)) {
-      // Already on the speech: nothing changed, so there is nothing to reselect and no notice.
+      // Already on the speech: the lines stay, so there is nothing to reselect and no notice, but
+      // the library must say it was checked against the sound (it was listed as a guess before).
+      this.markCheckedOnSpeech(job, before, log);
       void this.noteSync(job, 'inSync');
       return;
     }
@@ -1172,6 +1184,23 @@ export class JobManager {
         'could not move the subtitle after the sound check; it stays as it was',
       );
     }
+  }
+
+  /**
+   * The sound check found the subtitle already on the speech. The lines do not change, only what
+   * is known about them: a guessed timing becomes "checked by sound" (here and in the library).
+   * A timing that is already exact or checked is left alone.
+   */
+  private markCheckedOnSpeech(job: Job, before: JobResult, log: Logger): void {
+    if (before.timing === 'exact' || before.timing === 'speech') return;
+    const result: JobResult = { ...before, timing: 'speech' };
+    job.result = result;
+    for (const other of this.siblings(job.id)) {
+      if (other === job || other.status !== 'done' || !other.result) continue;
+      if (other.result.content !== before.content) continue;
+      other.result = { ...other.result, timing: 'speech' };
+    }
+    void this.record(job, result, log);
   }
 
   /**
@@ -1230,6 +1259,9 @@ export class JobManager {
       .then(async (moved) => {
         if (!moved) return job.syncStopped ? undefined : this.noteSync(job, 'kept');
         if (isNoShift(moved.fit)) {
+          if (this.jobs.get(job.id) === job && job.result === before) {
+            this.markCheckedOnSpeech(job, before, log);
+          }
           return this.noteSync(job, 'inSync');
         }
         const cues = parseSubtitle(before.content).cues;

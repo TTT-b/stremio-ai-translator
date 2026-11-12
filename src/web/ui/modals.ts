@@ -24,6 +24,24 @@ export function renderConfirmModals(c: UiCtx): string {
 <button type="button" id="nostream-cancel" class="px-4 py-2 text-sm text-warm-mu transition hover:text-warm-tx focus:outline-none">${tt('cancel')}</button>
 </div></div></div>
 
+<div id="skip-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="skip-title">
+<div class="w-full max-w-sm rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
+<h2 id="skip-title" class="text-lg font-bold text-warm-tx">${tt('skipTitle')}</h2>
+<p class="mt-1 text-sm text-warm-mu">${tt('skipBody')}</p>
+<div class="mt-5 grid gap-2">
+<button type="button" id="skip-yes" class="${btnPrimary}">${tt('skipYes')}</button>
+<button type="button" id="skip-no" class="${btn}">${tt('cancel')}</button>
+</div></div></div>
+
+<div id="clear-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="clear-title">
+<div class="w-full max-w-sm rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
+<h2 id="clear-title" class="text-lg font-bold text-warm-tx">${tt('clearConfirmTitle')}</h2>
+<p class="mt-1 text-sm text-warm-mu">${tt('clearConfirmBody')}</p>
+<div class="mt-5 grid gap-2">
+<button type="button" id="clear-no" class="${btnPrimary}">${tt('cancel')}</button>
+<button type="button" id="clear-yes" class="${btnDanger}">${tt('clearConfirmYes')}</button>
+</div></div></div>
+
 <div id="unsaved-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="unsaved-title">
 <div class="w-full max-w-sm rounded-[22px] border border-warm-ln bg-warm-sf p-6 shadow-2xl shadow-black/60">
 <h2 id="unsaved-title" class="text-lg font-bold text-warm-tx">${tt('unsavedTitle')}</h2>

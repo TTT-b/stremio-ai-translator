@@ -233,6 +233,10 @@ const refreshStatus = async () => {
       $('st-quota-text').textContent = used + ' / ' + q.limit;
       $('st-quota-bar').style.width = share + '%';
       $('st-quota-bar').className = 'h-full rounded-full transition-[width] duration-500 ' + (share >= 90 ? 'bg-rose-400' : share >= 70 ? 'bg-amber-400' : 'bg-warm-ok');
+      const age = $('st-quota-age');
+      const mins = r.quotaReadAt ? Math.max(0, Math.floor((Date.now() - r.quotaReadAt) / 60000)) : -1;
+      age.textContent = r.quotaReadFailed ? T.stQuotaReadFailed : mins < 0 ? '' : mins === 0 ? T.stQuotaReadNow : f(T.stQuotaReadAgo, {n: mins});
+      age.className = 'mt-1 text-[11px] ' + (r.quotaReadFailed ? 'text-amber-300' : 'text-warm-mu');
       const hint = $('st-quota-hint');
       const level0 = q.left === 0 ? 'out' : q.left < 10 ? 'low' : '';
       // The warning shows once per app start; the OK button hides it until the level changes.

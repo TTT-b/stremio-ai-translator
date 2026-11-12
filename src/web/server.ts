@@ -381,10 +381,7 @@ export function createApp(deps: ServerDeps): express.Express {
         stremioReady: true,
         rtlFix: c.rtlFix,
         testMode: testMode(),
-        subtitleSource:
-          sourceOrderFrom(readSettings(deps.settingsPath))[0] === 'opensubtitles'
-            ? 'opensubtitles'
-            : 'subdl',
+        subtitleSource: sourceOrderFrom(readSettings(deps.settingsPath))[0],
         uiLang: readSettings(deps.settingsPath).uiLanguage ?? 'he',
       }),
     );

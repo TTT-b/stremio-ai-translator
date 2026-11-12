@@ -85,7 +85,8 @@ ${checks('r-', 'sample', 'sample-out')}
 ${d.desktop ? `<div data-pane="6" class="hidden flex-col gap-3">${toggle('w-startup', true, 'startupLabel', 'startupHint')}${toggle('w-minimized', true, 'minimizedLabelWizard', 'minimizedHint')}</div>` : ''}
 
 <div class="mt-auto"><span class="${result} mb-2 text-center" id="w-result"></span>
-<div class="grid grid-cols-2 gap-3"><button type="button" id="w-back" class="invisible h-12 w-full whitespace-nowrap rounded-2xl border border-warm-ln px-4 text-center text-sm font-semibold text-warm-tx transition hover:border-warm-mu hover:bg-warm-sf focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${tt('back')}</button><button type="button" id="w-next" class="${btnPrimary} h-12 w-full whitespace-nowrap !px-4 text-center">${tt('next')} ${arrow}</button></div></div>
+<div class="grid grid-cols-2 gap-3"><button type="button" id="w-back" class="invisible h-12 w-full whitespace-nowrap rounded-2xl border border-warm-ln px-4 text-center text-sm font-semibold text-warm-tx transition hover:border-warm-mu hover:bg-warm-sf focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${tt('back')}</button><button type="button" id="w-next" class="${btnPrimary} h-12 w-full whitespace-nowrap !px-4 text-center">${tt('next')} ${arrow}</button></div>
+<div class="mt-3 text-center"><button type="button" id="w-skip" class="cursor-pointer px-2 py-1 text-[13px] text-warm-mu underline transition hover:text-warm-tx focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac">${tt('skipWizard')}</button></div></div>
 </section>
 </div>`;
 }

@@ -44,6 +44,9 @@ export interface JobStats {
   lastError: string | null;
   /** OpenSubtitles daily downloads: allowed and left, or null when not known (yet). */
   quota: { limit: number; left: number } | null;
+  /** When the quota was last read from OpenSubtitles (epoch ms), and whether the latest read failed. */
+  quotaReadAt: number | null;
+  quotaReadFailed: boolean;
   exactComing: ExactComingView;
   /** Set while the AI moved from the chosen model to another one because it was overloaded. */
   modelSwitch: { from: string; to: string } | null;

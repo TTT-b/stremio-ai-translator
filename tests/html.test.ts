@@ -152,6 +152,51 @@ describe('main screen layout', () => {
     expect(html).not.toContain('id="st-upgrade"');
   });
 
+  it('shows the source preference only with two or more keyed sources, and never says recommended', () => {
+    const one = renderStatusPage({
+      ...base,
+      subdlKeyConfigured: false,
+      jimakuKeyConfigured: false,
+    });
+    expect(one).not.toContain('id="d-src"');
+    const two = renderStatusPage({ ...base, subdlKeyConfigured: true, jimakuKeyConfigured: false });
+    expect(two).toContain('id="d-src"');
+    const select = (h: string) => /id="d-src"[\s\S]*?<\/select>/.exec(h)?.[0] ?? '';
+    expect(select(two)).not.toContain('value="jimaku"');
+    const all = renderStatusPage({ ...base, subdlKeyConfigured: true, jimakuKeyConfigured: true });
+    for (const v of ['opensubtitles', 'subdl', 'jimaku']) {
+      expect(select(all)).toContain(`value="${v}"`);
+    }
+    expect(select(all)).not.toContain('מומלץ');
+  });
+
+  it('links to where to get a Gemini, Claude and OpenAI key', () => {
+    const html = renderStatusPage(base);
+    for (const url of [
+      'https://aistudio.google.com/apikey',
+      'https://platform.claude.com/settings/keys',
+      'https://platform.openai.com/api-keys',
+    ]) {
+      expect(html).toContain(url);
+    }
+  });
+
+  it('asks before deleting all saved translations, with Cancel as the safe main button', () => {
+    const html = renderStatusPage(base);
+    expect(html).toContain('id="clear-modal"');
+    expect(html).toContain('למחוק את כל התרגומים השמורים?');
+    expect(html).toContain('כן, מחק הכול');
+    expect(html).toContain('id="clear-yes"');
+  });
+
+  it('lets the user skip the wizard after a confirm that says how to bring it back', () => {
+    const html = renderStatusPage(base);
+    expect(html).toContain('id="w-skip"');
+    expect(html).toContain('id="skip-modal"');
+    expect(html).toContain('לדלג על האשף?');
+    expect(html).toContain('הרץ את האשף מחדש');
+  });
+
   it('says no key was entered when there is no SubDL key, and counts when there is', () => {
     const without = renderStatusPage({ ...base, subdlKeyConfigured: false });
     expect(without).toContain('לא הוזן מפתח');

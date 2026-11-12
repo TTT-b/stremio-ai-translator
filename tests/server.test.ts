@@ -169,6 +169,10 @@ describe('local web server', () => {
   it('Test OpenSubtitles goes through the source provider', async () => {
     const res = await post('/api/test/opensubtitles', {});
     expect(await res.json()).toMatchObject({ ok: true, provider: 'fake-source' });
+    // The check reads the quota too, so the status says when it was read (or that the read failed).
+    const st = (await (await get('/api/status')).json()) as Record<string, unknown>;
+    expect(st).toHaveProperty('quotaReadAt');
+    expect(st).toHaveProperty('quotaReadFailed');
   });
 
   it('Test Jimaku says the key is missing, without calling out', async () => {

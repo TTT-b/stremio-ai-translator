@@ -2,8 +2,11 @@
 
 export type NotesLang = 'he' | 'en';
 
-/** A plain line, or a short title with an explanation that opens on click. */
-export type ReleaseNote = string | { title: string; text: string };
+/**
+ * A plain line, a short title with an explanation that opens on click, or the one-sentence
+ * summary of the whole release (shown first, above the cards).
+ */
+export type ReleaseNote = string | { title: string; text: string } | { summary: string };
 
 export interface WhatsNew {
   version: string;
@@ -14,6 +17,10 @@ export interface WhatsNew {
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
   '2.1.0': {
     en: [
+      {
+        summary:
+          'This version makes the app smarter and cheaper to run: you can swap a subtitle that does not fit, you see the status from the tray, and fewer downloads are wasted from your quota.',
+      },
       {
         title: 'Try another subtitle',
         text: 'When the sound check shows the subtitle comes from another version of the video, a button offers the next best subtitle. After it finishes, select the subtitle again in Stremio.',
@@ -26,9 +33,16 @@ export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
         title: 'Faster and cheaper',
         text: 'Stremio asks twice for each video and plays only the first answer. The second request now joins the first job, so a subtitle is downloaded once and your daily quota is not wasted. The wait for a subtitle file is shortened to 8 seconds, before Stremio gives up. Switching to another source stops the old one from listening to its video.',
       },
-      'Names of characters are kept consistent across episodes (a glossary), old data is cleaned after 90 days, and English subtitles are tried before Japanese ones.',
+      {
+        title: 'More small improvements',
+        text: 'Names of characters are kept consistent across episodes (a glossary), old data is cleaned after 90 days, and English subtitles are tried before Japanese ones.',
+      },
     ],
     he: [
+      {
+        summary:
+          'הגרסה הזו הופכת את התוכנה לחכמה וחסכונית יותר: אפשר להחליף כתובית שלא מתאימה, רואים את המצב מהמגש, ופחות הורדות מתבזבזות מהמכסה.',
+      },
       {
         title: 'נסה כתובית אחרת',
         text: 'כשבדיקת הצליל מראה שהכתובית היא מגרסה אחרת של הסרט, כפתור מציע את הכתובית הבאה בתור. אחרי שהיא מוכנה, בוחרים את הכתובית שוב בסטרימיו.',
@@ -41,7 +55,10 @@ export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
         title: 'מהיר וחסכוני יותר',
         text: 'סטרימיו מבקש פעמיים לכל סרטון ומנגן רק את התשובה הראשונה. הבקשה השנייה מצטרפת עכשיו לעבודה הראשונה, כך שכתובית יורדת פעם אחת והמכסה היומית לא מתבזבזת. ההמתנה לקובץ הכתובית קוצרה ל-8 שניות, לפני שסטרימיו מוותר. מעבר למקור אחר מפסיק את ההאזנה לסרטון הישן.',
       },
-      'שמות הדמויות נשמרים עקביים בין פרקים (מילון שמות), נתונים ישנים מנוקים אחרי 90 יום, וכתוביות באנגלית נבדקות לפני יפנית.',
+      {
+        title: 'עוד שיפורים קטנים',
+        text: 'שמות הדמויות נשמרים עקביים בין פרקים (מילון שמות), נתונים ישנים מנוקים אחרי 90 יום, וכתוביות באנגלית נבדקות לפני יפנית.',
+      },
     ],
   },
   '2.0.2': {

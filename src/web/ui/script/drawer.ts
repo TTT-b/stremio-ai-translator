@@ -233,8 +233,10 @@ document.querySelectorAll('[data-sample]').forEach(b => b.addEventListener('clic
 }));
 $('d-src').addEventListener('change', async () => {
   try {
-    // Choosing the first source here replaces any custom order set under Developers.
-    const r = await post('/api/settings', {subtitleSource: $('d-src').value, sourceOrder: []});
+    // The chosen source goes first; the other listed ones keep their order behind it.
+    const chosen = $('d-src').value;
+    const rest = [...$('d-src').options].map((o) => o.value).filter((v) => v !== chosen);
+    const r = await post('/api/settings', {sourceOrder: [chosen, ...rest]});
     if (r.ok) document.querySelectorAll('[data-src-badge]').forEach((b) => { const first = b.dataset.srcBadge === $('d-src').value; b.textContent = first ? T.srcInUse : T.srcBackup; b.className = 'rounded-full px-2 py-0.5 text-[11px] font-bold ' + (first ? 'bg-warm-ac/15 text-warm-ac' : 'bg-warm-ln text-warm-mu'); });
     toast(r.ok, r.ok ? T.settingsSaved : FAILED);
   } catch { toast(false, FAILED); }
@@ -318,11 +320,20 @@ $('copy-diag').addEventListener('click', async () => {
     toast(true, T.diagCopied);
   } catch { toast(false, FAILED); }
 });
+const askClear = () => new Promise((resolve) => {
+  const modal = $('clear-modal');
+  const finish = (yes) => { modal.classList.add('hidden'); modal.classList.remove('flex'); resolve(yes); };
+  $('clear-yes').onclick = () => finish(true);
+  $('clear-no').onclick = () => finish(false);
+  modal.onclick = (ev) => { if (ev.target === modal) finish(false); };
+  modal.classList.remove('hidden'); modal.classList.add('flex');
+});
 $('clear-cache').addEventListener('click', async () => {
+  if (!(await askClear())) return;
   try {
     const r = await post('/api/cache/clear');
     const size = r.ok && /\\(([^)]+)\\)/.exec(r.message || '');
-    const msg = r.ok ? T.clearOk + (size ? ' (' + size[1] + ')' : '') : T.clearFail;
+    const msg = r.ok ? (r.removed === 0 ? T.clearEmpty : T.clearOk + (size ? ' (' + size[1] + ')' : '')) : T.clearFail;
     show('clear-result', r.ok, msg);
     toast(r.ok, msg);
   } catch { show('clear-result', false, FAILED); toast(false, FAILED); }

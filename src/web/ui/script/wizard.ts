@@ -70,6 +70,15 @@ next.addEventListener('click', async () => {
   finally { next.disabled = false; }
 });
 render();
+// "Skip the wizard": asks first, then goes to the main screen (the wizard can be run again from Settings).
+$('w-skip').addEventListener('click', () => {
+  const modal = $('skip-modal');
+  const close = () => { modal.classList.add('hidden'); modal.classList.remove('flex'); };
+  $('skip-yes').onclick = () => { close(); setView('dash'); };
+  $('skip-no').onclick = close;
+  modal.onclick = (ev) => { if (ev.target === modal) close(); };
+  modal.classList.remove('hidden'); modal.classList.add('flex');
+});
 
 // Start with Windows (desktop app only). The second switch only works while the first is on.
 const startupApi = window.desktop && window.desktop.startup;

@@ -69,7 +69,7 @@ export function createUiCtx(d: StatusPageData) {
     }</span></label>`;
   /** Marks which source is asked first ("in use") and which is the backup. */
   const srcBadge = (src: 'opensubtitles' | 'subdl') => {
-    const first = (d.subtitleSource === 'subdl' ? 'subdl' : 'opensubtitles') === src;
+    const first = (d.subtitleSource ?? 'opensubtitles') === src;
     return `<span data-src-badge="${src}" class="rounded-full px-2 py-0.5 text-[11px] font-bold ${first ? 'bg-warm-ac/15 text-warm-ac' : 'bg-warm-ln text-warm-mu'}">${tt(first ? 'srcInUse' : 'srcBackup')}</span>`;
   };
   /** A settings category: closed until the user opens it (opening one closes the others). */

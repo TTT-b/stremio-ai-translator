@@ -100,6 +100,19 @@ ${toggle('d-test', d.testMode === true, 'testOn')}
         : `<span class="text-xs font-semibold text-warm-mu">${status}</span>`
     }<span aria-hidden="true" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-warm-ln text-warm-mu transition group-hover:border-warm-ac/60 group-hover:text-warm-ac group-open:rotate-180 group-open:border-warm-ac/60 group-open:text-warm-ac"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary><div class="flex flex-col gap-3.5 border-t border-warm-ln p-3.5">${body}</div></details>`;
   const osOk = d.openSubtitlesKeyConfigured && d.openSubtitlesLoginConfigured;
+  // The preference only matters with two or more keyed sources, and lists only those.
+  const keyedSources = [
+    { id: 'opensubtitles', on: d.openSubtitlesKeyConfigured === true, label: tt('srcOs') },
+    { id: 'subdl', on: d.subdlKeyConfigured === true, label: tt('srcSubdl') },
+    { id: 'jimaku', on: d.jimakuKeyConfigured === true, label: tt('srcJimaku') },
+  ].filter((s) => s.on);
+  const firstSource = keyedSources.some((s) => s.id === d.subtitleSource)
+    ? d.subtitleSource
+    : keyedSources[0]?.id;
+  const srcPicker =
+    keyedSources.length >= 2
+      ? `<div><label class="${labelCls}" for="d-src">${tt('srcLabel')}</label>${selectField('d-src', keyedSources.map((s) => `<option value="${s.id}"${s.id === firstSource ? ' selected' : ''}>${s.label}</option>`).join(''))}<p class="mt-1 text-xs text-warm-mu">${tt('srcHint')}</p></div>`
+      : '';
   const aiRow = serviceRow(
     'ai',
     'bg-warm-ac',
@@ -107,7 +120,8 @@ ${toggle('d-test', d.testMode === true, 'testOn')}
     escapeHtml(d.aiProviderLabel) || tt('rowAi'),
     d.aiConfigured,
     d.aiConfigured ? tt('configured') : tt('setNotSet'),
-    `<input class="${field}" id="d-ai" type="password" autocomplete="off" aria-label="${tt('aiKeyLabel')}" placeholder="${keyPh(d.aiConfigured)}">`,
+    `<input class="${field}" id="d-ai" type="password" autocomplete="off" aria-label="${tt('aiKeyLabel')}" placeholder="${keyPh(d.aiConfigured)}">
+<div class="flex flex-wrap gap-2">${keyLink('https://aistudio.google.com/apikey', t(lang, 'getGemini'))}${keyLink('https://platform.claude.com/settings/keys', t(lang, 'getClaude'))}${keyLink('https://platform.openai.com/api-keys', t(lang, 'getOpenAI'))}</div>`,
     d.aiConfigured ? tt('setKeySaved') : '',
     'aiApiKey',
   );
@@ -176,7 +190,7 @@ ${group(
 ${toggle('d-emb', d.embeddedSubtitles ?? true, 'embLabel', 'embHint', true)}
 ${toggle('d-clean', d.cleanSubtitles ?? true, 'cleanLabel', 'cleanHint', true)}
 ${toggle('d-ask', d.translationMode === 'ask', 'askLabel', 'askHint', true)}</div>
-<div><label class="${labelCls}" for="d-src">${tt('srcLabel')}</label>${selectField('d-src', `<option value="opensubtitles"${d.subtitleSource === 'subdl' ? '' : ' selected'}>${tt('srcOs')}</option><option value="subdl"${d.subtitleSource === 'subdl' ? ' selected' : ''}>${tt('srcSubdl')}</option>`)}<p class="mt-1 text-xs text-warm-mu">${tt('srcHint')}</p></div>`,
+${srcPicker}`,
 )}
 ${d.aiConfigured && d.aiProvider ? renderModelPicker(c) : ''}
 ${

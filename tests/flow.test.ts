@@ -1529,6 +1529,13 @@ describe('timing from the sound of the video', () => {
     }
     expect(last?.outcome).toBe('inSync');
     expect(upgraded).toHaveLength(0);
+    // The library tells the same truth: checked against the sound and in step = "speech", not "estimated".
+    let lib: { items: { timing?: string }[] } = { items: [] };
+    for (let i = 0; i < 40 && lib.items[0]?.timing !== 'speech'; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      lib = (await (await current.get('/api/library')).json()) as typeof lib;
+    }
+    expect(lib.items[0]?.timing).toBe('speech');
   });
 
   it('waits for the video to start playing in Stremio, then listens to it', async () => {
@@ -2439,6 +2446,10 @@ ${tag}
     offsetMs = 20;
     expect((await post(current, '/api/sync-now', {})).status).toBe(200);
     expect(await waitFor(async () => (await status()).lastSync?.outcome === 'inSync')).toBe(true);
+    const libAfter = async () =>
+      ((await (await current!.get('/api/library')).json()) as { items: { timing?: string }[] })
+        .items[0]?.timing;
+    expect(await waitFor(async () => (await libAfter()) === 'speech')).toBe(true);
 
     found = false;
     expect((await post(current, '/api/sync-now', {})).status).toBe(200);

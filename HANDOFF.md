@@ -39,3 +39,9 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 - Windows Smart App Control blocks unsigned installers on the laptop (off on the desktop): the user installs by double-click. After every `npm run dist`, silent-install and start the app on the desktop.
 - Dev server: `node tsx src/index.ts` from `%APPDATA%\stremio-ai-subtitle-translator`, port 7000 (no hot reload). `fit.test` / `videoFit.test` can time out when the PC is busy.
 - Refactor of `manager.ts` / `html.ts` is mostly done (UI split into `src/web/ui/*`); M3 (sync/upgrade) and M4 (runJob) were left on purpose: high risk, optional.
+
+## 2026-11-12 library cleanup
+
+- Done (worktree claude/research-sync-d9e0a8, not committed): in-sync check sets library timing to speech; quota read time/failed line in status; library search box + dropdown; fixed-size chips and pointer cursors; tests, SPEC, DECISIONS updated. npm run check passes (775 tests).
+- Built v2.1.0 installer and installed, but Windows Application Control (Smart App Control) blocked starting the app twice. Owner must turn it off or allow the file.
+- Next: owner tests the library screen; then commit, merge to main with approval; release only on explicit OK.

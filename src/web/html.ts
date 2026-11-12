@@ -33,7 +33,7 @@ export interface StatusPageData {
   /** auto: translate right away. ask: wait for the user's OK first. */
   translationMode?: 'auto' | 'ask';
   /** Which subtitle source is asked first. */
-  subtitleSource?: 'opensubtitles' | 'subdl';
+  subtitleSource?: 'opensubtitles' | 'subdl' | 'jimaku';
   /** Developer test mode is on (made-up subtitles, pretend AI). */
   testMode?: boolean;
   jimakuKeyConfigured?: boolean;
@@ -76,7 +76,12 @@ const CSS = (
 
 /** Everything that can be clicked shows the hand cursor (a disabled control shows the arrow). */
 const POINTER_CSS =
-  'select,button,summary,[role=button],[role=option],label[for],input[type=checkbox],input[type=range]{cursor:pointer}button:disabled,input:disabled,select:disabled{cursor:default}';
+  'select,button,summary,[role=button],[role=option],label[for],input[type=checkbox],input[type=range]{cursor:pointer}button:disabled,input:disabled,select:disabled{cursor:default}' +
+  // Dark, app-styled checkbox: amber when ticked, a dash when only some are ticked.
+  '.ttt-check{appearance:none;-webkit-appearance:none;width:18px;height:18px;flex:none;border:1.5px solid #6b5f4e;border-radius:5px;background:#0b0a07 center/12px no-repeat}' +
+  ".ttt-check:checked{background-color:#e0a82e;border-color:#e0a82e;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230b0a07' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5L20 7'/%3E%3C/svg%3E\")}" +
+  ".ttt-check:indeterminate{background-color:#e0a82e;border-color:#e0a82e;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230b0a07' stroke-width='4' stroke-linecap='round'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E\")}" +
+  '.ttt-check:focus-visible{outline:2px solid #e0a82e;outline-offset:2px}';
 
 /** Hebrew text for the API error codes (kept for callers and tests; see i18n.ts for both languages). */
 export const ERROR_MESSAGES_HE = ERROR_MESSAGES.he;

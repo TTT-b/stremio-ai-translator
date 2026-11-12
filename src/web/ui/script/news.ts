@@ -4,14 +4,14 @@ import type { UiCtx } from '../context';
 /** News and updates, copy buttons. */
 export function scriptNews(c: UiCtx): string {
   const { lang } = c;
-  return `// News and updates (the bell): messages from the author and the release notes of every version.
+  return `// News and updates (the bell): the release notes of every version.
 const newsPanel = $('news-panel');
 const setNews = (open) => { newsPanel.classList.toggle('hidden', !open); newsPanel.classList.toggle('flex', open); };
 let newsData = null;
 const unseenIds = () => {
   if (!newsData) return [];
   const seen = new Set(newsData.seen);
-  const ids = newsData.items.map(i => i.id).filter(id => !seen.has(id));
+  const ids = [];
   const latest = newsData.releases[0];
   if (latest && !seen.has('release-' + latest.version)) ids.push('release-' + latest.version);
   return ids;
@@ -26,6 +26,11 @@ const loadNews = async () => {
 };
 // A release note: a plain bullet, or a short title card that opens to show its explanation.
 const noteNode = (n) => {
+  if (n.summary) {
+    const s = el('li', 'list-none space-y-2');
+    s.append(el('p', 'text-sm leading-relaxed text-warm-tx', n.summary), el('p', 'text-xs text-warm-mu', T.newsMore));
+    return s;
+  }
   const li = el('li', typeof n === 'string' ? 'flex gap-2.5' : 'list-none');
   if (typeof n === 'string') {
     li.append(el('span', 'mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-warm-ac'), el('span', '', n));
@@ -44,25 +49,6 @@ const drawNews = () => {
   body.replaceChildren();
   if (!newsData) { body.append(el('p', 'text-sm text-warm-mu', T.newsOffline)); return; }
   const seen = new Set(newsData.seen);
-  if (!newsData.online) body.append(el('p', 'rounded-xl border border-warm-ln px-3 py-2 text-xs text-warm-mu', T.newsOffline));
-  if (newsData.items.length) body.append(el('h3', 'text-xs font-bold uppercase tracking-wide text-warm-ac', T.newsFromCreator));
-  for (const i of newsData.items) {
-    const card = el('div', 'rounded-2xl border border-warm-ln bg-warm-bg p-3.5');
-    const head = el('div', 'flex items-start justify-between gap-3');
-    head.append(el('div', 'text-sm font-bold text-warm-tx', i.title[UI]));
-    const meta = el('div', 'flex shrink-0 items-center gap-2 text-xs text-warm-mu');
-    if (!seen.has(i.id)) meta.append(tag());
-    const day = el('span', '', i.date); day.dir = 'ltr'; meta.append(day);
-    head.append(meta);
-    card.append(head, el('p', 'mt-1.5 whitespace-pre-line text-sm text-warm-tx/90', i.body[UI]));
-    if (i.link) {
-      const a = el('a', 'mt-2 inline-block text-xs font-semibold text-warm-ac hover:underline', T.newsLink);
-      a.href = i.link; a.target = '_blank'; a.rel = 'noopener noreferrer';
-      card.append(a);
-    }
-    body.append(card);
-  }
-  body.append(el('h3', 'mt-2 text-xs font-bold uppercase tracking-wide text-warm-ac', T.newsWhatsNew));
   // The newest three versions are listed; older ones stay behind a button so the list stays short.
   const VISIBLE = 3;
   const older = el('div', 'hidden flex-col gap-2.5');

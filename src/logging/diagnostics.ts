@@ -314,7 +314,7 @@ export function describeStats(s: JobStats, now: number): string[] {
   const out = [
     `state: ${s.state}${s.paused ? ' (paused)' : ''}, running: ${s.running}, waiting in queue: ${s.queue.length}${s.stage ? `, stage: ${s.stage}` : ''}`,
     `this session: ${s.linesTranslated} lines (${s.bytesTranslated} bytes) translated, SubDL downloads: ${s.subdlDownloads}`,
-    `OpenSubtitles downloads left today: ${s.quota ? `${s.quota.left} of ${s.quota.limit}` : 'not known'}`,
+    `OpenSubtitles downloads left today: ${s.quota ? `${s.quota.left} of ${s.quota.limit}` : 'not known'}${s.quotaReadFailed ? ' (latest read failed, number may be old)' : ''}`,
   ];
   if (s.progress) {
     out.push(`progress: ${s.progress.done}/${s.progress.total} lines (${s.progress.percent}%)`);
