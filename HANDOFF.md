@@ -36,7 +36,13 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 - No notice for users of the old name "AI Subtitle Translator" (decided: not needed).
 - Do NOT build: subtitle signature, remember-per-episode, cue-only check.
 
-## Next update (v2.1.2 or 2.2)
+## v2.1.2 IN PROGRESS (working tree, NOT committed, NOT built, NOT released)
+
+- Done in code: installer icon with download-arrow badge (build/installer-icon.ico, chosen option A, set as nsis.installerIcon), downgrade guard (build/installer.nsh), version 2.1.2 + RELEASE_NOTES 2.1.2; npm run check passes (782).
+- Blocked: npm run dist fails with spawn UNKNOWN (Smart App Control blocks a helper exe, state=1). Usually a small change to the build then makes it pass; try after a restart. Do not turn Smart App Control off without the user.
+- To do after it builds: silent-install 2.1.2, then run release-keep/TTT-Sub-Setup-2.1.1.exe (older, has the guard) and confirm it refuses; then release 2.1.2 (GH_TOKEN from gh auth token; watch for double drafts); delete release-keep.
+
+## Next update (older notes)
 
 - Installer icon with a download-arrow badge (mockup in Chrome + OK first) and an NSIS downgrade guard (must not block auto-update). Ask the tester to install TTT-Sub-Setup-2.1.1.exe by hand and send the log if the window buttons still fail (look for "preload failed"); native titleBarOverlay is the fallback (needs UI OK).
 - Release gotcha: `npm run publish` needs GH_TOKEN (use `gh auth token`, never print it) and can create TWO draft releases; fix by keeping one, uploading all 3 files, publishing. If you rebuild after publishing, re-upload exe+blockmap+latest.yml together (checksums).
