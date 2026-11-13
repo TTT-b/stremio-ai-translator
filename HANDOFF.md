@@ -11,6 +11,12 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 - Never push without the user's OK (a release request counts as OK). Commit by file names, no attribution lines.
 - Helper (sub) sessions may be archived once their task is done and verified; the main chat is never archived. Use /clear after updating this file.
 
+## 2026-11-13 (done in the working tree, NOT committed, NOT released)
+
+- Installed name is now "TTT Sub" (`TTT Sub.exe`, shortcut, installer `TTT-Sub-Setup-<version>.exe`); data folder pinned to the old `%APPDATA%\stremio-ai-subtitle-translator`. Version in Settings > About is written by the server; "Check for updates" reacts at once; if `window.desktop` is missing it says so; `preload-error` is logged.
+- Tester report (laptop): window max/close dead, no version, update button silent = all need `window.desktop` (preload). Works on the desktop PC; cause on the laptop unknown (FortiClient is visible in his screenshot). Ask him to send the log if it repeats (look for "preload failed").
+- Tester hit a request quota: that is his own Gemini key's limit (free keys have a low daily/per-minute cap), not the app.
+
 ## v2.1.0 (PUBLISHED 2026-11-12; version 2.1.0 in package.json; v2.0.2 was never published, its changes ship inside 2.1.0)
 
 - Shipped in 2.1.0: floating notice + tray dot/tooltip (`trayDot.ts`), "try another subtitle" button (`src/jobs/tryAnother.ts`, `POST /api/try-another`; works only for results still in memory), names glossary, 90-day cleanup, English before Japanese, no pointless "better subtitle" notice after a 0.0 s fit (`isNoShift`).

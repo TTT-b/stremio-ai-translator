@@ -4,7 +4,7 @@ Reference material moved out of the main README. For the short guide, see [READM
 
 ## Desktop app (Windows installer, no console window)
 
-1. Run `Stremio-AI-Subtitle-Translator-Setup-<version>.exe` and wait; the app opens by itself.
+1. Run `TTT-Sub-Setup-<version>.exe` and wait; the app opens by itself.
 2. Paste your keys into the **API keys** card in the window and press Save. Success looks like
    a "Saved" message; the keys are never shown again.
 3. The window has its own title bar. The **X** asks "Close the Translator?": **Minimize to System

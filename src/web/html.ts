@@ -61,6 +61,8 @@ export interface StatusPageData {
   rtlFix: boolean;
   /** True inside the Electron desktop window: renders the custom title bar. */
   desktop?: boolean;
+  /** The installed app's version (digits and dots only), shown in Settings > About. */
+  appVersion?: string;
   /** Show Settings > About > Developer settings (off for everyone but the author: SHOW_DEV_SETTINGS=1). */
   devSettings?: boolean;
   /** Language of the screens. Hebrew (right-to-left) unless set to English. */

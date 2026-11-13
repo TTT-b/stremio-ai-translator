@@ -1,6 +1,6 @@
 {
   "name": "stremio-ai-subtitle-translator",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "private": true,
   "license": "MIT",
   "description": "Local Stremio add-on that translates subtitles with Gemini",
@@ -72,7 +72,7 @@
   "author": "Stremio AI Subtitle Translator",
   "build": {
     "appId": "local.stremio-ai-subtitle-translator",
-    "productName": "Stremio AI Subtitle Translator",
+    "productName": "TTT Sub",
     "directories": {
       "output": "release"
     },
@@ -89,7 +89,7 @@
           ]
         }
       ],
-      "artifactName": "Stremio-AI-Subtitle-Translator-Setup-${version}.${ext}",
+      "artifactName": "TTT-Sub-Setup-${version}.${ext}",
       "icon": "build/icon.ico"
     },
     "nsis": {

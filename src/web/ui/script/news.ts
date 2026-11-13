@@ -167,7 +167,12 @@ if (window.desktop) {
   updDismiss.addEventListener('click', () => { clearTimeout(updErrTimer); setShown(updBar, false, 'flex'); });
   window.desktop.updater.state().then(applyBar);
   window.desktop.updater.onState(applyUpdate);
-  checkBtn.addEventListener('click', () => window.desktop.updater.check().then(applyUpdate));
+  // The button reacts at once (the check itself can take a few seconds).
+  checkBtn.addEventListener('click', () => {
+    checkBtn.disabled = true;
+    show('update-result', true, T.updChecking);
+    window.desktop.updater.check().then(applyUpdate).catch(() => { checkBtn.disabled = false; show('update-result', false, T.updError); });
+  });
   window.desktop.version().then((v) => { $('app-version').textContent = v; });
 
   // What's New: shown once, on the first launch after an update, in the screen's language.
@@ -182,6 +187,9 @@ if (window.desktop) {
     news.classList.add('flex');
   });
   $('news-close').addEventListener('click', closeNews);
+} else if ($('check-update')) {
+  // The desktop link did not load: say so instead of a button that does nothing.
+  $('check-update').addEventListener('click', () => show('update-result', false, T.updNoBridge));
 }
 for (const [btnId, fieldId] of [['copy', 'manifest'], ['copy-d', 'manifest-d']]) {
   const copyBtn = $(btnId);

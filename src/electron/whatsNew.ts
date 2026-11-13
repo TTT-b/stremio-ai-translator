@@ -15,6 +15,44 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '2.1.1': {
+    en: [
+      {
+        summary:
+          'A small fix release: the app is now called TTT Sub, and the Settings screen is clearer about the version and the update check.',
+      },
+      {
+        title: 'New name: TTT Sub',
+        text: 'The installed app, its shortcuts and the installer file are now called TTT Sub. Your settings and data stay exactly where they were.',
+      },
+      {
+        title: 'Version always shown',
+        text: 'Settings > About always shows the installed version.',
+      },
+      {
+        title: 'Check for updates reacts at once',
+        text: 'The button shows that it is checking right away. If the link to the window is missing, a message explains what to do instead of staying silent.',
+      },
+    ],
+    he: [
+      {
+        summary:
+          'גרסת תיקון קטנה: התוכנה נקראת עכשיו TTT Sub, ומסך ההגדרות ברור יותר לגבי הגרסה ובדיקת העדכונים.',
+      },
+      {
+        title: 'שם חדש: TTT Sub',
+        text: 'התוכנה המותקנת, הקיצורים וקובץ ההתקנה נקראים עכשיו TTT Sub. ההגדרות והנתונים שלך נשארים בדיוק במקום שהיו.',
+      },
+      {
+        title: 'הגרסה תמיד מוצגת',
+        text: 'בהגדרות > אודות תמיד מופיעה הגרסה המותקנת.',
+      },
+      {
+        title: 'בדיקת עדכונים מגיבה מיד',
+        text: 'הכפתור מראה מיד שהוא בודק. אם החיבור לחלון חסר, מופיעה הודעה שמסבירה מה לעשות במקום שתיקה.',
+      },
+    ],
+  },
   '2.1.0': {
     en: [
       {

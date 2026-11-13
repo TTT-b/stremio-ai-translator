@@ -84,3 +84,5 @@ file in this repo (`HANDOFF.md`, `PLAN.md`, `CLAUDE.md`, `README.md`, `docs/DETA
 
 - Home server mode (serving the Stremio endpoints to the home network): saved 2026-10-20, not started (`PLAN.md`).
 - Anthropic/OpenAI providers were never tried live; sound-check "no data" on anime; subtitle ~1 s early; constant lead/lag setting; per-file remembered offset: open items in `HANDOFF.md`, no decision taken.
+
+- 2026-11-13: The installed app, its shortcuts and the installer file are named "TTT Sub" (`TTT-Sub-Setup-<version>.exe`). The data folder stays `%APPDATA%stremio-ai-subtitle-translator` (pinned in main.ts) so updates keep settings and keys. The version in Settings > About is written by the server, so it shows even if the window link fails.

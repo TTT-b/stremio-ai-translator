@@ -36,7 +36,7 @@ are instant.
 
 ## Install
 
-1. Run `Stremio-AI-Subtitle-Translator-Setup-<version>.exe` and wait; the app opens by itself.
+1. Run `TTT-Sub-Setup-<version>.exe` and wait; the app opens by itself.
    Windows SmartScreen may warn about an unsigned app: choose **More info -> Run anyway**.
 2. Follow the setup wizard: paste your AI key, your OpenSubtitles details, pick your language,
    and test the connections.

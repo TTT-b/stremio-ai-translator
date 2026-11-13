@@ -20,7 +20,7 @@ export function renderDrawer(c: UiCtx): string {
     keyPh,
   } = c;
   /** Settings drawer footer (desktop only): app version and a manual update check, result on its own line below. */
-  const updatesRow = `<div class="flex flex-col gap-3"><div class="flex items-center justify-between gap-3"><div><div class="text-xs text-warm-mu">${tt('version')}</div><div id="app-version" dir="ltr" class="font-mono text-base font-bold text-warm-tx"></div></div><button type="button" id="check-update" class="${btn} flex items-center gap-2 !px-5"><span aria-hidden="true">&#8635;</span>${tt('checkUpdates')}</button></div><span class="${result} rounded-2xl border border-warm-ln bg-warm-sf px-3.5 py-2.5 transition-opacity duration-300 empty:hidden" data-autohide id="update-result"></span></div>`;
+  const updatesRow = `<div class="flex flex-col gap-3"><div class="flex items-center justify-between gap-3"><div><div class="text-xs text-warm-mu">${tt('version')}</div><div id="app-version" dir="ltr" class="font-mono text-base font-bold text-warm-tx">${d.appVersion ?? ''}</div></div><button type="button" id="check-update" class="${btn} flex items-center gap-2 !px-5"><span aria-hidden="true">&#8635;</span>${tt('checkUpdates')}</button></div><span class="${result} rounded-2xl border border-warm-ln bg-warm-sf px-3.5 py-2.5 transition-opacity duration-300 empty:hidden" data-autohide id="update-result"></span></div>`;
   // Settings > Developers
   const dev = d.dev ?? {
     soundCheck: 'background' as const,

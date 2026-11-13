@@ -346,6 +346,10 @@ const S = {
     he: 'לא ניתן לבדוק עדכונים. נסה שוב מאוחר יותר.',
     en: 'Could not check for updates. Try again later.',
   },
+  updNoBridge: {
+    he: 'החיבור בין החלון לאפליקציה לא נטען, ולכן אי אפשר לבדוק עדכונים. סגור את התוכנה מהמגש (Quit) והפעל אותה מחדש.',
+    en: 'The link between the window and the app did not load, so updates cannot be checked. Quit the app from the tray and start it again.',
+  },
   updDownloading: { he: 'מוריד את גרסה {v}...', en: 'Downloading version {v}...' },
   updReady: {
     he: 'גרסה {v} מוכנה – לחץ על "התקן והפעל מחדש" בסרגל העדכון.',

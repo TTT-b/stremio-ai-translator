@@ -354,6 +354,9 @@ export function createApp(deps: ServerDeps): express.Express {
     res.type('html').send(
       renderStatusPage({
         desktop: (req.get('user-agent') ?? '').includes('Electron/'),
+        appVersion: /^\d+(\.\d+){1,3}$/.test(process.env.TTT_APP_VERSION ?? '')
+          ? process.env.TTT_APP_VERSION
+          : '',
         devSettings: process.env.SHOW_DEV_SETTINGS === '1',
         nonce,
         aiConfigured: c.aiApiKey !== '',

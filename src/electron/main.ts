@@ -45,6 +45,11 @@ let win: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let quitting = false;
 
+// The app is now called "TTT Sub", but settings, keys and cache stay where earlier versions put
+// them, so an update never starts the user from zero.
+app.setPath('userData', join(app.getPath('appData'), 'stremio-ai-subtitle-translator'));
+process.env.TTT_APP_VERSION = app.getVersion();
+
 /** Started by Windows with "start minimized": only the tray icon, no window. */
 const startHidden = launchedHidden(process.argv);
 
@@ -78,6 +83,11 @@ function createWindow(port: number): void {
     },
   });
   win.removeMenu();
+  // If the link between the page and the app fails to load, the window buttons and the update
+  // check cannot work: leave a trace in the log so it can be diagnosed.
+  win.webContents.on('preload-error', (_e, path, error) => {
+    running?.logger.error({ stage: 'CONFIG', path, error: error.message }, 'preload failed');
+  });
   // F11 toggles full screen; Esc leaves it.
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !win) return;
