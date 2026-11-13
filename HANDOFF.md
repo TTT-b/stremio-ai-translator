@@ -5,13 +5,13 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 
 ## State
 
-- ONE folder `D:\TTT Sub`, branch `main`. v2.1.0 is the last PUBLISHED release (tag v2.1.0, published 2026-11-12 with installer, blockmap and latest.yml). When the user asks for a release, publish it without asking again.
+- ONE folder `D:\TTT Sub`, branch `main`. v2.1.1 is the last PUBLISHED release (tag v2.1.1, published 2026-11-13 with installer, blockmap and latest.yml; installed on the desktop). v2.1.0 was 2026-11-12. When the user asks for a release, publish it without asking again.
 - Security check 2026-11-12: 0 open Dependabot alerts, 0 secret-scanning alerts, `npm audit --omit=dev` = 0 vulnerabilities (dev-only leftovers: `tmp` via stremio-addon-sdk, needs a breaking upgrade: leave them). No tracked `.env`/settings/data/logs; the only key-like strings in history are fake test keys. Secret scanning + push protection and Dependabot security updates are on; `main` has no force-push or deletion.
 - GitHub releases: keep at most about the last 10 (delete older ones, never the latest); commits and pushes in any number are fine.
 - Never push without the user's OK (a release request counts as OK). Commit by file names, no attribution lines.
 - Helper (sub) sessions may be archived once their task is done and verified; the main chat is never archived. Use /clear after updating this file.
 
-## 2026-11-13 (done in the working tree, NOT committed, NOT released)
+## 2026-11-13 (PUBLISHED as v2.1.1)
 
 - Installed name is now "TTT Sub" (`TTT Sub.exe`, shortcut, installer `TTT-Sub-Setup-<version>.exe`); data folder pinned to the old `%APPDATA%\stremio-ai-subtitle-translator`. Version in Settings > About is written by the server; "Check for updates" reacts at once; if `window.desktop` is missing it says so; `preload-error` is logged.
 - Tester report (laptop): window max/close dead, no version, update button silent = all need `window.desktop` (preload). Works on the desktop PC; cause on the laptop unknown (FortiClient is visible in his screenshot). Ask him to send the log if it repeats (look for "preload failed").
@@ -35,6 +35,11 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 - Sound-check "no data" on anime; subtitle appears ~1 s early even with exact timing (not investigated); constant lead/lag setting; per-file remembered offset.
 - No notice for users of the old name "AI Subtitle Translator" (decided: not needed).
 - Do NOT build: subtitle signature, remember-per-episode, cue-only check.
+
+## Next update (v2.1.2 or 2.2)
+
+- Installer icon with a download-arrow badge (mockup in Chrome + OK first) and an NSIS downgrade guard (must not block auto-update). Ask the tester to install TTT-Sub-Setup-2.1.1.exe by hand and send the log if the window buttons still fail (look for "preload failed"); native titleBarOverlay is the fallback (needs UI OK).
+- Release gotcha: `npm run publish` needs GH_TOKEN (use `gh auth token`, never print it) and can create TWO draft releases; fix by keeping one, uploading all 3 files, publishing. If you rebuild after publishing, re-upload exe+blockmap+latest.yml together (checksums).
 
 ## User tasks
 
