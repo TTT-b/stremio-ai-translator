@@ -15,8 +15,7 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 
 ## 2026-11-18 (v2.1.2, built locally)
 
-- Added (not rebuilt into an installer, not committed): "הראה לי מה חדש" tour in the news bell (`src/web/ui/script/news.ts`, `src/web/newsTargets.ts`, `show` key in `whatsNew.ts`); 2.1.2 notes trimmed to 4 cards. Fixed a page-script crash on `d-src` (needs 2+ keyed sources) that killed the bell. Checked in a browser on a dev server (port 7100). Next: rebuild + install, then Shai.
-- Added: local self-test row "תוסף TTT Sub" (`POST /api/test/selftest`), neutral Stremio wait state, per-problem banner lines with X. Tests green; checked in a browser. NOT yet rebuilt into an installer, not committed.
+- Added (not rebuilt into an installer, not committed): "הראה לי מה חדש" tour in the news bell (`src/web/ui/script/news.ts`, `src/web/newsTargets.ts`, `show` key in `whatsNew.ts`); 2.1.2 notes trimmed to 4 cards. Fixed a page-script crash on `d-src` (needs 2+ keyed sources) that killed the bell. Checked in a browser on a dev server (port 7100).- Added: local self-test row "תוסף TTT Sub" (`POST /api/test/selftest`), neutral Stremio wait state, per-problem banner lines with X. Tests green; checked in a browser. NOT yet rebuilt into an installer, not committed.
 
 - NEXT TASK (user asked 2026-11-18): continue the translation-quality research (second-episode gender/cast problems). Open proposals, nothing in the repo yet and nothing may enter code before it passes a Gemini test: `buildCast` fix in `src/subtitles/cast.ts`; bad glossary entries in `data/glossary.json` (`Ainz`, `Ooal`, `Effulgent`/`Beryl`). Needs the user's OK per item.
 
@@ -66,7 +65,7 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 ## User tasks
 
 - Done 2026-11-17: `D:\TTT-design-mockups` deleted.
-- Optional precaution only: replace the Gemini key from the second Google account used in experiments (reason was not recorded; skip it if the key is not used and was never shown). Enter the new OpenSubtitles account in settings.
+- Enter the new OpenSubtitles account in settings. (Gemini key replacement task was dropped by the user 2026-11-19.)
 
 ## Knowledge worth keeping
 
