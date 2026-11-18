@@ -11,6 +11,9 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 - Never push without the user's OK (a release request counts as OK). Commit by file names, no attribution lines.
 - Helper (sub) sessions may be archived once their task is done and verified; the main chat is never archived. Use /clear after updating this file.
 
+## TO CHECK after the user's next PC restart
+- A one-time Windows RunOnce entry (HKCU, `TTTCleanOldBuilds`) deletes `release-old`, `release-old2`, `release-old3` in `D:\TTT Sub` (they were locked by an unknown process: `app.asar` in use). Check they are gone. If they remain, find the locking process; the folders are untracked and harmless. Nothing else is pending for 2.1.2 (published, downgrade guard verified).
+
 ## 2026-11-19: v2.1.2 committed + published (user asked; check 792 tests, 0 alerts, installed OK). Old notes below.
 
 ## 2026-11-18 (v2.1.2, built locally)
@@ -65,7 +68,7 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 ## User tasks
 
 - Done 2026-11-17: `D:\TTT-design-mockups` deleted.
-- Enter the new OpenSubtitles account in settings. (Gemini key replacement task was dropped by the user 2026-11-19.)
+- None. (User dropped the Gemini key and OpenSubtitles account tasks 2026-11-19: everything works.)
 
 ## Knowledge worth keeping
 
