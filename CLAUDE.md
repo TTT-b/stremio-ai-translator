@@ -35,3 +35,5 @@
 - All failures are `AppError` with a code from `src/errors.ts`.
 - Logs use stage tags (`CONFIG`, `STREMIO`, `SOURCE`, `DOWNLOAD`, `PARSER`, `CACHE`, `CHUNK`,
   `API`, `VALIDATION`, `ASSEMBLY`, `DELIVERY`) and never contain dialogue by default.
+- Every release: if the app's screens visibly change, update `README.md` and its screenshot in the
+  same change; write GitHub release notes as a few plain, human bullets (not AI-sounding, not long).
