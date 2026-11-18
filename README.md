@@ -1,86 +1,64 @@
-# TTT Sub: AI Subtitle Translator for Stremio
+# TTT Sub: AI subtitles for Stremio
 
-TTT Sub is a Windows app that adds subtitles in your language (Hebrew by default) to
-[Stremio](https://www.stremio.com/). When you play a movie or episode it offers a subtitle in your
-language. If a ready one exists it is used as it is; otherwise a source subtitle is found,
-translated by AI (Gemini, Claude or OpenAI), checked, saved and given to the player. Later plays
-are instant.
+TTT Sub is a Windows app that gives you subtitles in your own language (Hebrew by default) in
+[Stremio](https://www.stremio.com/). Play something, pick the TTT Sub subtitle, and it finds a
+subtitle, translates it with AI and hands it to the player. Next time it is instant.
 
-> It runs only on your own computer (`127.0.0.1`) and is made for Stremio desktop.
+![The TTT Sub main screen](docs/images/dashboard.png)
 
-> Not affiliated with Stremio. License, third-party code and the Windows "blue window" warning:
-> see [LEGAL.md](LEGAL.md).
+> Runs only on your own computer. Not affiliated with Stremio. Licence, credits and the Windows
+> "blue window" warning: [LEGAL.md](LEGAL.md).
 
-## Key features
+## What you get
 
-- Translates while you watch; subtitles you already translated open instantly.
-- Finds the best source subtitle for the exact video, including anime, and picks the right season
-  and episode.
-- Uses the subtitle that is inside the video when there is one (exact timing; works when the video
-  plays through Stremio's own streaming server, such as torrents), and checks a downloaded
-  subtitle's timing against the video's sound, moving it only when sure.
-- If a subtitle is off, "Try another subtitle" on the main screen switches to a different source
-  and builds the result from that one instead.
-- Correct punctuation for Hebrew, Arabic and Persian; speaker names and sound notes are removed.
-- Simple setup wizard and a dashboard with a queue, progress and "My subtitles" library.
-- Can save a video with the translated subtitle inside (MKV or MP4; desktop app only).
-- Updates itself and can start with Windows (tray icon).
+- **Translation while you watch.** A full episode takes about 1-5 minutes the first time.
+- **The right subtitle.** It looks for the one that fits your exact video (anime included), uses
+  the subtitle inside the video when there is one, and fixes the timing when it is sure.
+- **A second chance.** If a subtitle is off, press **Try another subtitle** and it builds a new one
+  from a different source.
+- **Clean Hebrew, Arabic and Persian** (punctuation fixed, speaker names and sound notes removed).
+- **Easy to run.** Setup wizard, a dashboard with progress, a **My subtitles** library, tray icon,
+  starts with Windows, updates itself.
+- A **"Show me what's new"** tour in the bell (top right) after every update.
 
-## Requirements
+## What you need
 
-- Windows and Stremio desktop
-- An AI API key: [Google Gemini](https://aistudio.google.com/apikey) (free tier available),
-  Anthropic Claude or OpenAI. The app finds out which one it is when you save the key.
-- A free [OpenSubtitles.com](https://www.opensubtitles.com) account and an API consumer key
-  (create one at https://www.opensubtitles.com/en/consumers)
+- Windows and the Stremio desktop app.
+- An AI key: [Google Gemini](https://aistudio.google.com/apikey) (a free tier exists), Claude or
+  OpenAI. The app recognises which one you pasted.
+- A free [OpenSubtitles.com](https://www.opensubtitles.com) account and API key
+  ([create one here](https://www.opensubtitles.com/en/consumers)).
 
 ## Install
 
-1. Run `TTT-Sub-Setup-<version>.exe` and wait; the app opens by itself.
-   Windows SmartScreen may warn about an unsigned app: choose **More info -> Run anyway**.
-2. Follow the setup wizard: paste your AI key, your OpenSubtitles details, pick your language,
-   and test the connections.
-3. On the last step (or at the bottom of the main screen) click **Install in Stremio**. It opens
-   Stremio Web: sign in to the same Stremio account, allow the browser's one-time "access this
-   computer" prompt (Chrome) and click Install. Tested in Chrome only.
-4. Manual alternative: in Stremio go to Add-ons and paste `http://127.0.0.1:7000/manifest.json`.
+1. Download `TTT-Sub-Setup-<version>.exe` from the
+   [latest release](https://github.com/TTT-b/stremio-ai-translator/releases/latest) and run it.
+   If Windows warns about an unsigned app, choose **More info, then Run anyway**.
+2. Follow the setup wizard: paste your keys, pick your language, test the connections.
+3. Click **Install in Stremio**, sign in to the same Stremio account in the browser and press
+   Install. (Chrome is the tested browser.) Manual way: in Stremio open Add-ons and paste
+   `http://127.0.0.1:7000/manifest.json`.
 
 ![Install card](docs/images/install-card.png)
 
-More about the installer, tray icon, updates and where your data is kept:
-[docs/DETAILS.md](docs/DETAILS.md).
+## Use it
 
-## Quick start
-
-1. Keep TTT Sub running (it can sit in the tray near the clock).
+1. Keep TTT Sub running (it can sit in the tray by the clock).
 2. Play a movie or episode in Stremio and open the subtitles menu.
-3. Pick the entry labelled by this add-on.
-4. If it says "TTT Sub: Translating... when it is done, select the subtitle again", wait and
-   select it again. A full episode usually takes 1-5 minutes the first time.
-5. If something fails, the player says so and the reason is shown in the app.
-   See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+3. Pick the TTT Sub entry. If it says it is translating, wait and pick it again.
+
+Something not working? See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ## Privacy
 
-- Subtitle dialogue is sent only to the AI provider that matches your key (Google Gemini,
-  Anthropic or OpenAI); subtitle searches go to OpenSubtitles. Quotas, billing and free-tier data-use terms are controlled by those
-  providers, not by this add-on.
-- Your keys stay on your computer, are never shown again after saving, and are never written to
-  logs or put in URLs. Never share your `.env` file or your keys.
-- The server listens on `127.0.0.1` only, so the add-on address works on this computer only.
-  Logs never contain dialogue by default.
-
-## License
-
-[MIT](LICENSE)
+- Subtitle text goes only to the AI provider that matches your key, and searches go to
+  OpenSubtitles. Their quotas and terms apply, not ours.
+- Your keys stay on your computer and are never shown again, logged or put in URLs.
+- The add-on listens on `127.0.0.1` only. Logs contain no dialogue by default.
 
 ## More
 
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - when something does not work.
-- [docs/DETAILS.md](docs/DETAILS.md) - desktop app, installing in Stremio, the screens and
-  settings, saving a video, choosing the model.
-- [docs/SOURCES-AND-TIMING.md](docs/SOURCES-AND-TIMING.md) - subtitle sources (SubDL, Jimaku,
-  the video's own subtitle), source order, timing and sound sync, developer settings.
-- [docs/DEVELOPERS.md](docs/DEVELOPERS.md) - running from source, commands, security notes,
-  adding a provider, roadmap, posting news, technical feature notes.
-- [LEGAL.md](LEGAL.md) - legal notes and credits.
+- [docs/DETAILS.md](docs/DETAILS.md): the app, screens, settings, saving a video, choosing a model.
+- [docs/SOURCES-AND-TIMING.md](docs/SOURCES-AND-TIMING.md): subtitle sources, timing and sound sync.
+- [docs/DEVELOPERS.md](docs/DEVELOPERS.md): running from source, commands, adding a provider.
+- [LEGAL.md](LEGAL.md) and [MIT licence](LICENSE).
