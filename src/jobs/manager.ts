@@ -146,6 +146,14 @@ export class JobManager {
   /** The latest desktop notice (finished or upgraded), so one episode is announced once. */
   private lastToldAbout: { title: string; season?: number; episode?: number; at: number } | null =
     null;
+  /** The latest request from Stremio for an episode (the title fills in a moment later). */
+  private lastRequest: {
+    key: string;
+    title: string;
+    season?: number;
+    episode?: number;
+    at: number;
+  } | null = null;
   /** The subtitle Stremio took last (shown on the main screen for a while). */
   private lastDelivered: {
     title: string;
@@ -199,6 +207,7 @@ export class JobManager {
   /** Start (or join) the job for this request. Returns immediately. */
   ensure(spec: JobSpec, restored = false, force = false): Job {
     const cfg = this.deps.config();
+    if (!restored && !spec.prefetch) this.noteRequest(spec);
     // Stremio asks again, seconds later, with the file hash added, but plays the subtitle of its
     // first answer. The second request joins that job instead of spending another download.
     if (spec.movieHash && !restored && !force && !spec.onlyProvider && !spec.fresh) {
@@ -274,6 +283,9 @@ export class JobManager {
     this.jobs.set(id, job);
     void this.titleFor(job).then((t) => {
       job.title = t;
+      if (this.lastRequest && this.lastRequest.key === videoKey(spec) && !this.lastRequest.title) {
+        this.lastRequest = { ...this.lastRequest, title: t };
+      }
       // One notification per episode, and none for a request dropped meanwhile.
       if (job.status !== 'pending' || this.jobs.get(job.id) !== job || !firstOfEpisode) return;
       const v = job.spec.video;
@@ -284,6 +296,19 @@ export class JobManager {
       });
     });
     return job;
+  }
+
+  /** Remember that Stremio just asked the add-on for this episode (the "Stremio" check row). */
+  private noteRequest(spec: JobSpec): void {
+    const key = videoKey(spec);
+    const known = [...this.jobs.values()].find((j) => videoKey(j.spec) === key && j.title);
+    this.lastRequest = {
+      key,
+      title: known?.title ?? '',
+      ...(spec.video.season !== undefined ? { season: spec.video.season } : {}),
+      ...(spec.video.episode !== undefined ? { episode: spec.video.episode } : {}),
+      at: this.now(),
+    };
   }
 
   /**
@@ -651,6 +676,16 @@ export class JobManager {
           ? { ...this.lastSync }
           : null,
       tryAnother: this.tryAnotherJob(),
+      lastRequest: this.lastRequest
+        ? {
+            title: this.lastRequest.title,
+            ...(this.lastRequest.season !== undefined ? { season: this.lastRequest.season } : {}),
+            ...(this.lastRequest.episode !== undefined
+              ? { episode: this.lastRequest.episode }
+              : {}),
+            at: this.lastRequest.at,
+          }
+        : null,
       queue: this.queue(),
     };
   }

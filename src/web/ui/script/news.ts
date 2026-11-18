@@ -1,5 +1,6 @@
 import { t } from '../../i18n';
 import type { UiCtx } from '../context';
+import { NEWS_TARGETS } from '../../newsTargets';
 
 /** News and updates, copy buttons. */
 export function scriptNews(c: UiCtx): string {
@@ -43,6 +44,99 @@ const noteNode = (n) => {
   li.append(d);
   return li;
 };
+// The "show me what is new" tour: a bubble in the app's colours that walks from change to change and points at the real element.
+const NEWS_TARGETS = ${JSON.stringify(NEWS_TARGETS)};
+const TOUR_MAX = 5;
+const EYE = '<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 10S5 4 10 4s8.5 6 8.5 6-3.5 6-8.5 6S1.5 10 1.5 10z"/><circle cx="10" cy="10" r="2.5"/></svg>';
+let tourGuards = [], tourRestore = [], tourToken = 0;
+const tourClear = () => {
+  tourToken++;
+  tourLive = null;
+  document.querySelectorAll('.tour-spot').forEach(e => e.classList.remove('tour-spot'));
+  const b = $('tour-bubble'); if (b) b.remove();
+  tourGuards.forEach(o => o.disconnect()); tourGuards = [];
+  tourRestore.forEach(fn => fn()); tourRestore = [];
+};
+// The screen hides some elements again on every refresh, so a revealed one is kept visible while its step is open.
+const tourPin = (target) => {
+  for (let n = target; n && n !== document.body; n = n.parentElement) {
+    const x = n;
+    if (x.classList.contains('hidden')) { x.classList.remove('hidden'); tourRestore.push(() => x.classList.add('hidden')); }
+    const o = new MutationObserver(() => { if (x.classList.contains('hidden')) x.classList.remove('hidden'); });
+    o.observe(x, {attributes: true, attributeFilter: ['class']}); tourGuards.push(o);
+  }
+};
+const tourColour = (cls, prop) => { const d = el('div', cls); d.style.display = 'none'; document.body.append(d); const v = getComputedStyle(d)[prop]; d.remove(); return v; };
+const tourStyle = () => {
+  if ($('tour-style')) return;
+  const acc = tourColour('bg-warm-ac', 'backgroundColor');
+  const st = el('style'); st.id = 'tour-style';
+  // The page's content policy only allows styles that carry its nonce.
+  const owner = document.querySelector('style[nonce], script[nonce]'); if (owner) st.nonce = owner.nonce;
+  st.textContent = '.tour-spot{position:relative;z-index:50!important;outline:3px solid ' + acc + ';outline-offset:3px;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.6)}'
+    + '#tour-bubble{position:absolute;z-index:70;width:300px;max-width:calc(100vw - 16px);padding:14px;box-shadow:0 10px 30px #000a;border:1px solid ' + acc + '}'
+    + '#tour-arrow{position:absolute;width:14px;height:14px;transform:rotate(45deg);border:1px solid ' + acc + '}';
+  document.head.append(st);
+};
+const tourButton = (cls, label, fn) => { const b = el('button', 'rounded-xl px-4 py-1.5 text-xs font-bold transition hover:opacity-90 ' + cls, label); b.type = 'button'; b.addEventListener('click', fn); return b; };
+const tourFind = (n) => { const tg = NEWS_TARGETS[n.show]; const node = tg && document.querySelector(tg.selector); return node ? {node, reveal: !!tg.reveal} : null; };
+// Puts the bubble next to the highlighted element; runs again when the window size changes.
+let tourLive = null, tourResizeTimer = 0;
+const tourPlace = () => {
+  if (!tourLive) return;
+  const {node, bub, arrow} = tourLive, r = node.getBoundingClientRect();
+  const w = Math.min(300, window.innerWidth - 16);
+  bub.style.width = w + 'px';
+  const bh = bub.offsetHeight, below = r.bottom + 14 + bh < window.innerHeight;
+  const left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
+  bub.style.top = Math.max(window.scrollY + 8, (below ? r.bottom + 14 : r.top - 14 - bh) + window.scrollY) + 'px';
+  bub.style.left = left + 'px';
+  arrow.style.left = Math.min(w - 28, Math.max(14, r.left + r.width / 2 - left - 7)) + 'px';
+  arrow.style.top = below ? '-8px' : 'auto'; arrow.style.bottom = below ? 'auto' : '-8px';
+  arrow.style.borderWidth = below ? '1px 0 0 1px' : '0 1px 1px 0';
+};
+window.addEventListener('resize', () => {
+  if (!tourLive) return;
+  clearTimeout(tourResizeTimer);
+  tourResizeTimer = setTimeout(() => { if (tourLive) { tourLive.node.scrollIntoView({block: 'center'}); tourPlace(); } }, 120);
+});
+const tourStep = (steps, i) => {
+  tourClear();
+  const n = steps[i], hit = tourFind(n);
+  if (!hit) return;
+  tourStyle();
+  if (hit.reveal) tourPin(hit.node);
+  hit.node.scrollIntoView({block: 'center', behavior: 'smooth'});
+  hit.node.classList.add('tour-spot');
+  const token = tourToken;
+  setTimeout(() => {
+    if (token !== tourToken) return;
+    const bub = el('div', 'rounded-2xl bg-warm-sf text-warm-tx'); bub.id = 'tour-bubble'; bub.setAttribute('role', 'dialog');
+    const arrow = el('span', 'bg-warm-sf'); arrow.id = 'tour-arrow';
+    const x = el('button', 'text-warm-mu', '✕'); x.type = 'button'; x.setAttribute('aria-label', T.newsClose);
+    x.style.cssText = 'position:absolute;top:8px;inset-inline-end:12px'; x.addEventListener('click', tourClear);
+    const last = i === steps.length - 1;
+    const nav = el('div', 'mt-3 flex items-center justify-between gap-2');
+    const btns = el('div', 'flex gap-2');
+    if (i > 0) btns.append(tourButton('border border-warm-ln text-warm-tx', T.tourPrev, () => tourStep(steps, i - 1)));
+    btns.append(tourButton('bg-warm-ac text-warm-on', last ? T.tourDone : T.tourNext, () => last ? tourClear() : tourStep(steps, i + 1)));
+    const count = el('span', 'text-warm-mu', f(T.tourOf, {i: i + 1, n: steps.length})); count.style.fontSize = '11px';
+    nav.append(count, btns);
+    bub.append(el('div', 'mb-1 pe-5 text-sm font-bold text-warm-ac', n.title), el('div', 'text-sm leading-relaxed text-warm-tx/90', n.text), nav, x, arrow);
+    document.body.append(bub);
+    tourLive = {node: hit.node, bub, arrow};
+    tourPlace();
+  }, 450);
+  setTimeout(() => { if (token === tourToken) tourPlace(); }, 1100);
+};
+const startTour = (notes) => {
+  const steps = notes.filter(n => n && n.show && tourFind(n)).slice(0, TOUR_MAX);
+  if (!steps.length) { toast(false, T.tourMissing); return; }
+  setNews(false);
+  const token = tourToken;
+  setTimeout(() => { if (token === tourToken) tourStep(steps, 0); }, 150);
+};
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') tourClear(); });
 const tag = () => el('span', 'rounded-full bg-warm-ac px-2 py-0.5 text-[10px] font-bold text-warm-on', T.newsNew);
 const drawNews = () => {
   const body = $('news-body');
@@ -59,7 +153,16 @@ const drawNews = () => {
     s.append(el('span', '', f(T.newsVersion, {v: r.version})));
     if (idx === 0 && !seen.has('release-' + r.version)) s.append(tag());
     const ul = el('ul', 'space-y-1.5 px-3.5 pb-3.5 text-sm text-warm-tx/90');
-    for (const n of (r.notes[UI] || r.notes.en)) ul.append(noteNode(n));
+    const notes = r.notes[UI] || r.notes.en;
+    for (const n of notes) ul.append(noteNode(n));
+    // Only the newest two releases get the tour: older ones point at screens that may have changed.
+    if (idx < 2 && notes.some(n => n && n.show && NEWS_TARGETS[n.show])) {
+      const li = el('li', 'list-none flex justify-end px-1 pt-2');
+      const b = el('button', 'inline-flex items-center gap-2 rounded-xl bg-warm-ac px-4 py-2 text-xs font-bold text-warm-on transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-ac');
+      b.type = 'button'; b.insertAdjacentHTML('afterbegin', EYE); b.append(el('span', '', T.tourBtn));
+      b.addEventListener('click', () => startTour(notes));
+      li.append(b); ul.append(li);
+    }
     d.append(s, ul);
     (idx < VISIBLE ? body : older).append(d);
   });

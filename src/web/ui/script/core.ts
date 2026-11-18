@@ -27,6 +27,10 @@ const post = (url, body) => fetch(url, {method:'POST',headers:{'Content-Type':'a
 const $ = (id) => document.getElementById(id);
 const UI = ${JSON.stringify(lang)};
 const T = ${JSON.stringify(clientTexts(lang))};
+// "N seconds / minutes / hours ago"; after this many seconds Stremio is asked to be opened again.
+const agoText = (at) => { const s = Math.max(0, Math.round((Date.now() - at) / 1000)); return s < 60 ? f(T.agoSec, {n: s}) : s < 3600 ? f(T.agoMin, {n: Math.floor(s / 60)}) : f(T.agoHour, {n: Math.floor(s / 3600)}); };
+const STREMIO_STALE_S = 300;
+const stremioStale = (at) => (Date.now() - at) / 1000 > STREMIO_STALE_S;
 const f = (s, v) => s.replace(/\\{(\\w+)\\}/g, (m, k) => (k in v ? v[k] : m));
 const ERRORS = ${JSON.stringify(ERROR_MESSAGES[lang])};
 const FAILED = T.failed;
@@ -73,6 +77,7 @@ const toast = (ok, msg) => {
 // Connection-check rows on the main screen: a state (icon and text) per row, an overall chip and a last-checked line.
 const CK_PATHS = {ok:'<path d="M5 12.5l4.5 4.5L19 7.5"/>', fail:'<path d="M7 7l10 10M17 7 7 17"/>', warn:'<path d="M12 6.5v7"/><path d="M12 17.5h.01"/>', idle:'<circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/>', nokey:'<path d="M7 12h10"/>'};
 CK_PATHS.out = CK_PATHS.warn;
+CK_PATHS.wait = CK_PATHS.idle;
 const ckIcon = (s) => s === 'checking'
   ? '<span class="inline-block h-[11px] w-[11px] animate-spin rounded-full border-[1.5px] border-current border-e-transparent" aria-hidden="true"></span>'
   : '<svg viewBox="0 0 24 24" class="h-3 w-3 flex-none" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + CK_PATHS[s] + '</svg>';
@@ -83,7 +88,9 @@ const CK = {
   fail: [T.checksFailed, 'text-rose-300'],
   warn: [T.checksQuotaLow, 'text-amber-300'],
   out: [T.checksQuotaOut, 'text-rose-300'],
-  nokey: [T.checksNotSetUp, 'text-warm-mu']
+  nokey: [T.checksNotSetUp, 'text-warm-mu'],
+  // Neutral: Stremio has not contacted the add-on yet. Not a fault.
+  wait: [T.checksWaiting, 'text-warm-mu']
 };
 const CK_PILL = {
   idle: 'border-warm-ln text-warm-mu',
@@ -108,22 +115,65 @@ const paintLast = () => {
   const m = Math.floor((Date.now() - ckAt) / 60000);
   box.textContent = !ckAt ? T.checksNever : m < 1 ? T.checksJustNow : f(T.checksMinAgo, {n: m});
 };
-let pillTimer = 0, pillHidden = false;
+let pillHidden = false;
+// Real problems: failed checks and a used-up quota. A row waiting for Stremio is never a problem.
+const problems = () => ckRows().filter((r) => { const s = ckState(r); return s === 'fail' || s === 'out'; });
+// Closes the given problems only: a failed row goes back to idle, a used-up quota is acknowledged.
+const dismiss = (ids) => {
+  ids.forEach((id) => {
+    const r = document.querySelector('[data-check-row="' + id + '"][data-base]');
+    if (!r) return;
+    if (r.dataset.base === 'fail') { r.dataset.base = 'idle'; r.querySelector('[data-msg]').textContent = ''; }
+    if (r.dataset.quota === 'out') r.dataset.quotaAck = r.dataset.quota;
+    paintRow(r);
+  });
+};
+let banKey = '', banClosed = false, banT = 0;
+// One line per problem, each with its own X; hides by itself after 60 s.
+const paintBanner = () => {
+  const banner = $('problem-banner');
+  if (!banner) return;
+  const bad = problems();
+  const key = bad.map((r) => r.dataset.checkRow).join(',');
+  if (key !== banKey) {
+    banKey = key; banClosed = false; clearTimeout(banT);
+    if (key) banT = setTimeout(() => { banClosed = true; paintBanner(); }, 60000);
+    const box = $('problem-lines');
+    box.textContent = '';
+    bad.forEach((r) => {
+      const line = document.createElement('div');
+      line.className = 'flex items-center justify-between gap-3 text-sm';
+      const name = document.createElement('span');
+      const b = document.createElement('b');
+      b.textContent = r.querySelector('.text-sm.font-bold').textContent;
+      name.append(b, ' - ' + T.problemLine);
+      const x = document.createElement('button');
+      x.type = 'button'; x.setAttribute('data-bx', r.dataset.checkRow);
+      x.title = T.problemClose; x.setAttribute('aria-label', T.problemClose);
+      x.className = 'inline-grid h-6 w-6 flex-none place-items-center rounded-md border border-warm-ln text-warm-mu hover:text-warm-tx';
+      x.innerHTML = ckIcon('fail');
+      x.addEventListener('click', () => dismiss([r.dataset.checkRow]));
+      line.append(name, x);
+      box.appendChild(line);
+    });
+  }
+  const on = bad.length > 0 && !banClosed;
+  banner.classList.toggle('hidden', !on); banner.classList.toggle('flex', on);
+};
 const paintChecks = () => {
   const pill = $('checks-pill');
   if (!pill) return;
-  const es = ckRows().filter((r) => r.dataset.base !== 'nokey').map(ckState);
+  const es = ckRows().filter((r) => r.dataset.base !== 'nokey' && r.dataset.base !== 'wait').map(ckState);
   const bad = es.filter((e) => e === 'fail' || e === 'out').length;
   const a = es.includes('checking') ? 'checking' : es.includes('fail') ? 'fail' : es.includes('out') ? 'out' : es.includes('idle') ? 'idle' : es.includes('warn') ? 'warn' : 'ok';
   const label = a === 'ok' ? T.checksAllOk : a === 'fail' ? (bad === 1 ? T.checksOneProblem : f(T.checksProblems, {n: bad})) : CK[a][0];
   pill.className = 'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-px text-xs font-bold ' + CK_PILL[a];
   pill.innerHTML = ckIcon(a) + '<span></span>';
   pill.lastChild.textContent = label;
-  // The all-OK pill goes away 10 s after it appears, like the messages in the rows.
-  if (a === 'ok') {
-    if (!pillTimer) pillTimer = setTimeout(() => { pillHidden = true; paintChecks(); }, 10000);
-    if (pillHidden) pill.classList.add('hidden');
-  } else { clearTimeout(pillTimer); pillTimer = 0; pillHidden = false; }
+  // The problem banner (with the copy-report button) shows only while a real problem exists.
+  paintBanner();
+  // The all-OK pill goes away together with the messages in the rows (see settle).
+  if (a === 'ok') { if (pillHidden) pill.classList.add('hidden'); } else pillHidden = false;
   paintLast();
 };
 const paintRow = (row) => {
@@ -131,8 +181,19 @@ const paintRow = (row) => {
   row.dataset.state = s;
   const st = row.querySelector('[data-st]');
   st.className = 'inline-flex items-center gap-1 whitespace-nowrap text-xs font-bold ' + CK[s][1];
-  st.innerHTML = ckIcon(s) + '<span></span>';
-  st.lastChild.textContent = CK[s][0];
+  // A passed check shows "OK" for 10 s, then the label goes away (failures stay).
+  if (s === 'ok' && row.dataset.fade === '1') st.innerHTML = '';
+  else { st.innerHTML = ckIcon(s) + '<span></span>'; st.lastChild.textContent = CK[s][0]; }
+  // A failed row has its own small X: it closes only this failure.
+  if (s === 'fail') {
+    const x = document.createElement('button');
+    x.type = 'button'; x.setAttribute('data-rowx', '');
+    x.title = T.problemClose; x.setAttribute('aria-label', T.problemClose);
+    x.className = 'ms-1 inline-grid h-5 w-5 place-items-center rounded border border-warm-ln text-warm-mu hover:text-warm-tx';
+    x.innerHTML = ckIcon('fail');
+    x.addEventListener('click', () => dismiss([row.dataset.checkRow]));
+    st.appendChild(x);
+  }
   row.querySelector('[data-msg]').classList.toggle('hidden', s === 'checking');
   paintChecks();
 };
@@ -146,7 +207,37 @@ const ckKeyAdded = (name) => {
 };
 document.querySelectorAll('[data-open-settings]').forEach((b) => b.addEventListener('click', () => $('open-settings').click()));
 setInterval(paintLast, 30000);
-const msgTimers = new Map();
+// All checks settle together: 10 s after the LAST check finished, every passed row (and the pill)
+// clears at once; 60 s after it, failed rows clear too. A row waiting for Stremio stays as it is.
+let okT = 0, failT = 0;
+const settle = () => {
+  clearTimeout(okT); clearTimeout(failT);
+  if (ckRows().some((r) => r.dataset.base === 'checking')) return;
+  okT = setTimeout(() => {
+    ckRows().filter((r) => r.dataset.base === 'ok').forEach((r) => {
+      r.querySelector('[data-msg]').textContent = '';
+      r.dataset.fade = '1';
+      paintRow(r);
+    });
+    pillHidden = true; paintChecks();
+  }, 10000);
+  failT = setTimeout(() => {
+    ckRows().filter((r) => r.dataset.base === 'fail').forEach((r) => {
+      r.querySelector('[data-msg]').textContent = '';
+      r.dataset.base = 'idle';
+      paintRow(r);
+    });
+  }, 60000);
+};
+// Stremio never contacted the add-on: a neutral wait, not a failure.
+const ckWait = (row, msg) => {
+  if (row.dataset.base === 'wait' && row.querySelector('[data-msg]').textContent === msg) return;
+  delete row.dataset.fade;
+  row.dataset.base = 'wait';
+  row.querySelector('[data-msg]').textContent = msg;
+  paintRow(row);
+  settle();
+};
 const show =(id, ok, msg) => {
   const el = $(id);
   const base = el.className.split(' ').filter(c => !Object.values(TONE).includes(c)).join(' ');
@@ -162,16 +253,14 @@ const show =(id, ok, msg) => {
   }
   const row = el.closest('[data-check-row][data-base]');
   if (row && msg) {
+    delete row.dataset.fade;
+    pillHidden = false;
     row.dataset.base = ok === null ? (msg === T.testing ? 'checking' : 'nokey') : ok ? 'ok' : 'fail';
     if (ok !== null) ckAt = Date.now();
     paintRow(row);
     // A success message goes away after a few seconds; the state and the "checked" line stay.
     // A failure message stays, because it says what to fix.
-    clearTimeout(msgTimers.get(el));
-    if (ok === true) {
-      const text = el.textContent;
-      msgTimers.set(el, setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 10000));
-    }
+    if (ok !== null) settle();
   }
 };
 ckRows().forEach(paintRow);

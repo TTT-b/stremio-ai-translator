@@ -92,11 +92,11 @@ $('unsaved-discard').addEventListener('click', () => {
   showUnsaved(false); setDrawer(false);
 });
 const quickSave = async () => {
-  const lang = $('q-lang').value, dual = $('q-dual').checked;
+  const lang = $('q-lang').value, ask = $('q-ask').checked;
   try {
-    const r = await saveSettings(lang, dual);
+    const r = await saveSettings(lang, $('d-dual').checked, undefined, undefined, undefined, ask);
     toast(r.ok, r.message);
-    if (r.ok) { $('d-lang').value = lang; $('d-dual').checked = dual; }
+    if (r.ok) { $('d-lang').value = lang; $('d-ask').checked = ask; }
   } catch { toast(false, FAILED); }
 };
 const openStremioBtn = $('open-stremio');
@@ -122,7 +122,9 @@ $('sync-now-btn').addEventListener('click', async () => {
   refreshStatus();
 });
 $('q-lang').addEventListener('change', quickSave);
-$('q-dual').addEventListener('change', quickSave);
+$('q-ask').addEventListener('change', quickSave);
+// The "new" badge shows on the first open only.
+try { if (!localStorage.getItem('tttAskSeen')) { $('q-ask-new').classList.remove('hidden'); localStorage.setItem('tttAskSeen', '1'); } } catch { /* storage may be blocked */ }
 // Model chooser (only on the page when an AI key is saved): the list comes from the provider itself.
 const modelSel = $('d-model');
 const modelRes = $('d-model-result');
@@ -185,6 +187,23 @@ document.querySelectorAll('[data-test]').forEach(b => b.addEventListener('click'
   const name = b.dataset.test, id = b.dataset.rp + name;
   if (name === 'subdl' && !subdlOn) { show(id, null, T.testNoKeySubdl); return; }
   if (name === 'jimaku' && !jimakuOn) { show(id, null, T.testNoKeyJimaku); return; }
+  if (name === 'selftest') {
+    show(id, null, T.testing);
+    try { const r = await post('/api/test/selftest'); show(id, r.ok, r.ok ? T.testOkSelftest : T.selftestFail); }
+    catch { show(id, false, T.selftestFail); }
+    return;
+  }
+  if (name === 'stremio') {
+    show(id, null, T.testing);
+    try {
+      const lr = (await (await fetch('/api/status')).json()).lastRequest;
+      // Never contacted: a neutral wait, not a failure.
+      if (lr && !stremioStale(lr.at)) show(id, true, f(T.stremioOk, {ago: agoText(lr.at)}));
+      else if (lr) ckWait(document.querySelector('[data-check-row="stremio"][data-base]'), T.stremioStale);
+      else ckWait(document.querySelector('[data-check-row="stremio"][data-base]'), T.stremioWait);
+    } catch { show(id, false, FAILED); }
+    return;
+  }
   show(id, null, T.testing);
   try { const r = await post('/api/test/' + name); show(id, r.ok, r.ok ? TEST_OK[name] : errText(r, FAILED)); }
   catch { show(id, false, FAILED); }
@@ -231,7 +250,7 @@ document.querySelectorAll('[data-sample]').forEach(b => b.addEventListener('clic
     if (r.ok) { out.textContent = r.preview; out.hidden = false; } else { out.hidden = true; }
   } catch { show(id, false, FAILED); out.hidden = true; }
 }));
-$('d-src').addEventListener('change', async () => {
+$('d-src')?.addEventListener('change', async () => {
   try {
     // The chosen source goes first; the other listed ones keep their order behind it.
     const chosen = $('d-src').value;
@@ -313,13 +332,16 @@ $('dev-redo-btn').addEventListener('click', async () => {
     if (r.ok) refreshStatus();
   } catch { show('dev-redo-result', false, FAILED); }
 });
-$('copy-diag').addEventListener('click', async () => {
+const copyReport = async () => {
   try {
     const text = await (await fetch('/api/diagnostics')).text();
     await navigator.clipboard.writeText(text);
     toast(true, T.diagCopied);
   } catch { toast(false, FAILED); }
-});
+};
+$('copy-diag').addEventListener('click', copyReport);
+// Copying the report closes every problem (banner, failed rows and the pill).
+$('problem-copy').addEventListener('click', async () => { await copyReport(); dismiss(problems().map((r) => r.dataset.checkRow)); });
 const askClear = () => new Promise((resolve) => {
   const modal = $('clear-modal');
   const finish = (yes) => { modal.classList.add('hidden'); modal.classList.remove('flex'); resolve(yes); };

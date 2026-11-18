@@ -74,6 +74,8 @@ export interface JobStats {
     /** The job it was about; the "try another subtitle" button acts on it. */
     jobId?: string;
   } | null;
+  /** The latest request Stremio made to the add-on this session, else null (never called). */
+  lastRequest: { title: string; season?: number; episode?: number; at: number } | null;
   /** The job whose subtitle the "try another" button can replace right now, else null. */
   tryAnother: string | null;
   /** Downloads from SubDL this session. */

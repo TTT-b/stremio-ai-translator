@@ -188,7 +188,7 @@ const refreshStatus = async () => {
     const ICON_LANG = SVG('<path d="M4 5h7M9 3v2c0 4-2 7-5 8M5 9c1 2 3 4 6 5M12 20l4-9 4 9M13.5 17h5"/>');
     const SRC_CHIPS = {
       opensubtitles: [T.chipSrcOs, 'border-sky-400/40 text-sky-300'],
-      subdl: [T.chipSrcSubdl, 'border-violet-400/40 text-violet-300'],
+      subdl: [T.chipSrcSubdl, 'border-green-400/40 text-green-300'],
       jimaku: [T.chipSrcJimaku, 'border-pink-400/40 text-pink-300'],
       video: [T.chipSrcVideo, 'border-teal-400/40 text-teal-300'],
     };
@@ -250,6 +250,13 @@ const refreshStatus = async () => {
       if (osRow && osRow.dataset.quota !== level) { osRow.dataset.quota = level; osRow.dataset.quotaAck = ''; if (level !== quotaAcked) quotaAcked = ''; paintRow(osRow); }
       paintQuotaTag(osRow);
     }
+    // The Stremio row: when Stremio last asked the add-on, and which episode.
+    const lr = r.lastRequest;
+    $('stremio-last').textContent = lr && lr.title ? f(T.stremioLast, {name: nameOf(lr), ago: agoText(lr.at)}) : '';
+    const stRow = document.querySelector('[data-check-row="stremio"][data-base]');
+    if (stRow && lr && stremioStale(lr.at) && (stRow.dataset.base === 'idle' || stRow.dataset.base === 'wait')) ckWait(stRow, T.stremioStale);
+    else if (stRow && lr && (stRow.dataset.base === 'idle' || stRow.dataset.base === 'wait')) show('dr-stremio', true, f(T.stremioOk, {ago: agoText(lr.at)}));
+    else if (stRow && !lr && (stRow.dataset.base === 'idle' || stRow.dataset.base === 'wait')) ckWait(stRow, T.stremioWait);
     if (subdlOn) $('st-subdl-text').textContent = f(T.stSubdlCount, {n: r.subdlDownloads || 0});
     renderQueue(r.queue || []);
     renderStop(r.queue || [], r.exactComing, bs);

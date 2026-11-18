@@ -9,7 +9,7 @@ import { describeStats, recentLogLines, videoTable } from '../logging/diagnostic
 import { findStream, locateTools } from '../sources/embedded';
 import { compareVersionsDesc, NEWS_URL, NewsFeed } from '../news/news';
 import { isJobId, JobManager, type JobManagerDeps } from '../jobs/manager';
-import { createStremioRouter } from '../stremio/addon';
+import { createStremioRouter, MANIFEST } from '../stremio/addon';
 import {
   CANCELLED_MESSAGE,
   pendingMessage,
@@ -877,6 +877,25 @@ export function createApp(deps: ServerDeps): express.Express {
     res.json({ ok: true });
   });
 
+  // Local self-test of the add-on: asks our own /manifest.json over loopback the way Stremio does.
+  // No job, no download, no quota; nothing leaves this machine. It cannot know whether the add-on is
+  // installed inside Stremio (only Stremio knows), so that is a separate, neutral row.
+  app.post('/api/test/selftest', async (_req, res) => {
+    const c = current();
+    try {
+      const r = await fetch(`http://127.0.0.1:${c.port}/manifest.json`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      const m = (await r.json()) as { id?: unknown; resources?: unknown };
+      const ok = r.ok && m.id === MANIFEST.id && Array.isArray(m.resources);
+      logger.info({ stage: 'STREMIO', ok, status: r.status }, 'addon self-test');
+      res.json(ok ? { ok: true } : { ok: false, code: 'STREMIO_REQUEST_INVALID' });
+    } catch {
+      logger.warn({ stage: 'STREMIO' }, 'addon self-test failed');
+      res.json({ ok: false, code: 'STREMIO_REQUEST_INVALID' });
+    }
+  });
+
   app.post('/api/test/opensubtitles', async (_req, res) => {
     const c = current();
     const { details, ...result } = await makeSource(c, logger).testConnection();
@@ -1187,6 +1206,8 @@ export function createApp(deps: ServerDeps): express.Express {
       );
       return;
     }
+    // Choosing the subtitle in Stremio is the user's yes: a request waiting for approval starts now.
+    if (job.status === 'pending') jobs.approve(job.id);
     await jobs.waitFor(job, current().subWaitMs);
     const uiLang = readSettings(deps.settingsPath).uiLanguage ?? 'he';
     if (job.status === 'done' && job.result) {

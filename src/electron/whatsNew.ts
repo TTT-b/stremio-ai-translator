@@ -5,8 +5,11 @@ export type NotesLang = 'he' | 'en';
 /**
  * A plain line, a short title with an explanation that opens on click, or the one-sentence
  * summary of the whole release (shown first, above the cards).
+ * `show` (optional, latest two releases only, at most 5 per release) names a screen element in
+ * `NEWS_TARGETS` (src/web/newsTargets.ts) that the "show me what is new" tour points at.
  */
-export type ReleaseNote = string | { title: string; text: string } | { summary: string };
+export type ReleaseNote =
+  string | { title: string; text: string; show?: string } | { summary: string };
 
 export interface WhatsNew {
   version: string;
@@ -15,6 +18,58 @@ export interface WhatsNew {
 
 /** Bundled with the app so the popup works offline. Add an entry (both languages) for every release. */
 export const RELEASE_NOTES: Record<string, Record<NotesLang, ReleaseNote[]>> = {
+  '2.1.2': {
+    en: [
+      {
+        summary:
+          'Connection checks are smarter: the app tests its own add-on, and Stremio shows as "waiting" instead of a fault. There is also a new switch to translate only after you pick the subtitle.',
+      },
+      {
+        title: 'TTT Sub add-on check',
+        text: 'A new row in the connection checks: the app tests by itself that its add-on works. It uses no quota and sends nothing out.',
+        show: 'selftest',
+      },
+      {
+        title: 'Stremio waiting is not a fault',
+        text: 'Until the add-on is picked in Stremio, the row is grey and "waiting". That is not a fault, so there is no red alert.',
+        show: 'stremio',
+      },
+      {
+        title: 'Translate only after you pick',
+        text: 'A new switch (in Settings and on the main screen): translation starts only when Stremio really asks for the subtitle. Off by default.',
+        show: 'askToggle',
+      },
+      {
+        title: 'Better installer',
+        text: 'The setup file has its own icon, and an old installer refuses to install over a newer version. Updates inside the app work as before.',
+      },
+    ],
+    he: [
+      {
+        summary:
+          'בדיקות החיבור חכמות יותר: יש בדיקה לתוסף של התוכנה עצמה, ו-Stremio מוצג כ"ממתין" ולא כתקלה. יש גם מתג חדש לתרגום רק אחרי בחירה.',
+      },
+      {
+        title: 'בדיקת חיבור לתוסף TTT Sub',
+        text: 'שורה חדשה בבדיקות החיבור: התוכנה בודקת בעצמה שהתוסף שלה עובד. הבדיקה לא משתמשת במכסה ולא שולחת כלום החוצה.',
+        show: 'selftest',
+      },
+      {
+        title: 'Stremio ממתין, לא תקלה',
+        text: 'כשהתוסף עוד לא נבחר ב-Stremio, השורה אפורה ו"ממתינה". זה לא נחשב תקלה: אין התראה אדומה.',
+        show: 'stremio',
+      },
+      {
+        title: 'לתרגם רק אחרי שבוחרים TTT Sub',
+        text: 'מתג חדש (בהגדרות ובמסך הראשי): התרגום מתחיל רק כש-Stremio באמת מבקש את הכתובית. כבוי כברירת מחדל.',
+        show: 'askToggle',
+      },
+      {
+        title: 'קובץ התקנה משופר',
+        text: 'לקובץ ההתקנה יש אייקון משלו, ומתקין ישן מסרב להתקין מעל גרסה חדשה. עדכונים מתוך התוכנה עובדים כמו קודם.',
+      },
+    ],
+  },
   '2.1.1': {
     en: [
       {

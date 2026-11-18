@@ -1,5 +1,6 @@
 import { Script } from 'node:vm';
 import { describe, expect, it } from 'vitest';
+import { NEWS_TARGETS } from '../src/web/newsTargets';
 import { ERROR_META } from '../src/errors';
 import { ERROR_MESSAGES_HE, renderStatusPage, prettyModel, providerLine } from '../src/web/html';
 
@@ -141,9 +142,17 @@ describe('main screen layout', () => {
   it('keeps the main screen in one centered column, with every section in it', () => {
     const html = renderStatusPage(base);
     expect(html).toContain('id="dash" class="flex w-full max-w-[560px] flex-col');
-    for (const id of ['st-queue', 'st-quota', 'st-subdl', 'checks-all', 'q-lang', 'q-dual']) {
+    for (const id of ['st-queue', 'st-quota', 'st-subdl', 'checks-all', 'q-lang', 'q-ask']) {
       expect(html).toContain(`id="${id}"`);
     }
+  });
+
+  it('has a local add-on check, and Stremio waits neutrally until it calls', () => {
+    const html = renderStatusPage(base);
+    expect(html).toContain('data-check-row="selftest"');
+    expect(html).toMatch(/data-check-row="stremio" data-base="wait"/);
+    expect(html).toContain('id="problem-lines"');
+    expect(html).toContain('data-rowx');
   });
 
   it('has no Continue button and no floating better-subtitle card', () => {
@@ -414,6 +423,39 @@ describe('start with Windows, key-gated checks and the progress bar', () => {
     expect(keyed.match(/data-check-row="subdl"/g)).toHaveLength(2);
   });
 
+  it('shows the SubDL and Jimaku check rows on the main screen only once a key exists', () => {
+    const none = renderStatusPage(base);
+    expect(none).toMatch(/data-check-row="subdl" class="hidden /);
+    expect(none).toMatch(/data-check-row="jimaku" class="hidden /);
+    const keyed = renderStatusPage({
+      ...base,
+      subdlKeyConfigured: true,
+      jimakuKeyConfigured: true,
+    });
+    expect(keyed).not.toMatch(/data-check-row="(subdl|jimaku)" class="hidden /);
+  });
+
+  it('has a violet Stremio row, one problem banner with a copy button, and the merged ask toggle', () => {
+    const html = renderStatusPage(base);
+    expect(html).toContain('data-check-row="stremio"');
+    expect(html).toContain('bg-violet-400');
+    expect(html).toContain('id="stremio-last"');
+    expect(html).toContain('id="problem-banner"');
+    expect(html).toContain('id="problem-copy"');
+    expect(html).toContain('id="q-ask"');
+    expect(html).toContain('id="q-ask-new"');
+    expect(html).not.toContain('id="q-dual"');
+  });
+
+  it('paints SubDL green and never violet', () => {
+    const html = renderStatusPage({ ...base, subdlKeyConfigured: true });
+    expect(html).toContain('bg-green-400');
+    const rows = [...html.matchAll(/data-check-row="subdl"[\s\S]{0,900}/g)].map((m) => m[0]);
+    const subdlRow = rows.find((r) => r.includes('bg-green-400')) ?? '';
+    expect(subdlRow).toContain('bg-green-400');
+    expect(subdlRow).not.toContain('violet');
+  });
+
   it('moves the progress bars without a width animation, so they do not wobble', () => {
     const bar = /id="st-progress" class="([^"]*)"/.exec(page)?.[1] ?? '';
     const sync = /id="st-sync-fill" class="([^"]*)"/.exec(page)?.[1] ?? '';
@@ -596,5 +638,20 @@ describe('model chooser', () => {
     const html = renderStatusPage({ ...data, uiLang: 'en' });
     const script = /<script nonce="abc">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? '';
     expect(() => new Script(script)).not.toThrow();
+  });
+
+  it('has the screen element of every news tour target', () => {
+    for (const [key, tg] of Object.entries(NEWS_TARGETS)) {
+      const sel = tg.selector;
+      const needle = sel.startsWith('#') ? 'id="' + sel.slice(1) + '"' : sel.slice(1, -1);
+      expect(page, key).toContain(needle);
+    }
+  });
+
+  it('writes the Stremio time in minutes and hours and asks to reopen the episode when stale', () => {
+    expect(page).toContain('const agoText');
+    expect(page).toContain('STREMIO_STALE_S = 300');
+    expect(page).toContain('סטרימיו פנה לתוסף');
+    expect(page).toContain('פתח שוב את הפרק');
   });
 });

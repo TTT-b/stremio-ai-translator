@@ -17,8 +17,16 @@
 - The user brings their own keys: an AI key (Gemini, Claude or OpenAI) and a free OpenSubtitles
   account. SubDL and Jimaku keys are optional.
 - Settings, "Accounts and keys": each service has one fixed colour dot, the same in Settings and on
-  the connection checks (AI gold, OpenSubtitles blue, SubDL violet, Jimaku pink). The AI card has a
+  the connection checks (AI gold, OpenSubtitles blue, SubDL green, Jimaku pink, Stremio violet). The AI card has a
   "Links:" row with three small buttons (Gemini, Claude, OpenAI) under the key box.
+- Connection checks (main screen) include a Stremio row. "Stremio asked the add-on N ago" counts in seconds, minutes, then hours; after 5 minutes the row turns neutral and says to open the episode in Stremio again. Statuses use one wording ("OK"/"failed");
+  all checks settle together: 10 seconds after the LAST check finished every passed row (message, OK label and the "everything connected" pill) clears at once; failed rows clear after one minute. A local "TTT Sub add-on" row asks the app's own add-on for its manifest over loopback (no job, no download, no quota, nothing leaves the machine); passing = OK, failing = a real fault. Only Stremio knows whether the add-on is installed in it, so the Stremio row is neutral grey "waiting for Stremio" (not a fault: no banner, no report, the pill stays "all connected") until Stremio really contacts the add-on, then OK with "Last translation". The problem banner (real faults only) has one line per problem, each with its own X; with one problem the X closes everything, with two or more it closes only that problem (its row too, and the pill count drops); "copy problem report" closes all; failed rows also have their own X; the banner hides itself after about a minute. The SubDL and
+  Jimaku rows appear only once a key is saved. The last request line reads "Last translation:
+  <name> · X ago". One problem banner with a "copy report" button appears only on a fault.
+- Setting "Translate only after I choose TTT Sub in Stremio" (Settings > Translation, OFF by
+  default; also a quick toggle on the main screen, replacing the old dual-subtitles toggle):
+  when on, Stremio fetching the subtitle starts the translation and shows a short "translating...
+  choose again" subtitle. The "new" badge on the toggle shows on the first open only.
 
 ## 2. What the user sees and does, step by step
 
@@ -89,7 +97,7 @@ select it again. The "My subtitles" list labels timing as **exact**, **by speech
 - **Settings** (side drawer, 470 px wide so the three AI link buttons fit in one row): Accounts and keys, Translation (model, "ask before
   translating"; the preferred source only when two or more source keys are set, listing just those), General (start with Windows, start minimized), Maintenance (delete saved translations and the library after a confirm dialog, run
   setup again), About (version, check for updates, developer settings hidden by default).
-- **News bell:** release notes of every version (newest open; older ones behind a button). No messages from the author.
+- **News bell:** release notes of every version (newest open; older ones behind a button). No messages from the author. The newest two releases show an eye-icon button "הראה לי מה חדש" (bottom of the card) when some of their notes carry a `show` key: it closes the panel and walks a bubble tour (next/back, "N of M", X, Esc, max 5 steps) that highlights the real element on the main screen and explains the change; missing elements are skipped, and if none exist a short message appears. Targets are listed in `src/web/newsTargets.ts`.
 - **Tray menu:** Open, Pause / Resume translation, time left, Start with Windows, Quit.
   The **X** on the window asks: minimize to tray (keeps working) or quit.
 - Language of the screens: Hebrew (default) or English, switched in Settings.

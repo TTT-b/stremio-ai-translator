@@ -148,7 +148,7 @@ ${keyRow('openSubtitlesLogin', `${tt('rowOsLogin')}${d.openSubtitlesUsername ? `
   );
   const subdlRow = serviceRow(
     'subdl',
-    'bg-violet-400',
+    'bg-green-400',
     'SubDL',
     tt('setSubdlDetail'),
     d.subdlKeyConfigured ?? false,

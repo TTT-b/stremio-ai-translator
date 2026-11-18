@@ -216,6 +216,20 @@ describe('Stremio manifest', () => {
   });
 });
 
+describe('add-on self-test', () => {
+  it('answers ok from its own manifest, without creating a job', async () => {
+    current = await start({});
+    const res = await fetch(current.base + '/api/test/selftest', {
+      method: 'POST',
+      headers: { Host: current.host, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    expect(await res.json()).toEqual({ ok: true });
+    const st = (await (await current.get('/api/status')).json()) as { queue: unknown[] };
+    expect(st.queue).toHaveLength(0);
+  });
+});
+
 describe('the Continue button', () => {
   type St = { resumable: boolean; queue: unknown[] };
   const status = async (h: Harness) => (await (await h.get('/api/status')).json()) as St;
@@ -1729,12 +1743,13 @@ describe('ask mode (translate only after the user says yes)', () => {
     const url = await request(current, 'tt0944947:1:1');
     const path = new URL(url).pathname;
     expect(await queueOf(current)).toMatchObject([{ state: 'pending', episode: 1 }]);
-    expect(await (await current.get(path)).text()).toContain('התקבל'); // Hebrew by default
     expect(current.translator.calls).toBe(0);
-    expect(current.searches).toBe(0); // nothing is downloaded before the user agrees
+    expect(current.searches).toBe(0); // nothing is downloaded before the user picks the subtitle
 
-    const id = (await queueOf(current))[0]!.id;
-    expect((await post(current, `/api/jobs/${id}/approve`, {})).ok).toBe(true);
+    // Picking the subtitle in Stremio (the /sub request) is the yes: it starts and says so.
+    await current.get(path);
+    await until(async () => current!.translator.calls > 0);
+    expect(current.translator.calls).toBeGreaterThan(0);
     let text = '';
     await until(async () => {
       text = await (await current!.get(path)).text();
@@ -1742,6 +1757,25 @@ describe('ask mode (translate only after the user says yes)', () => {
     });
     expect(text).toContain('HE:Hello there.');
     expect(await queueOf(current)).toEqual([]);
+  });
+
+  it('the status tells when Stremio last asked, and for which episode', async () => {
+    current = await start({ settings: { translationMode: 'ask' }, subWaitMs: 50 });
+    const before = (await (await current.get('/api/status')).json()) as {
+      lastRequest: unknown;
+    };
+    expect(before.lastRequest).toBeNull();
+    await request(current, 'tt0944947:1:5');
+    await until(async () => {
+      const s = (await (await current!.get('/api/status')).json()) as {
+        lastRequest: { title: string } | null;
+      };
+      return s.lastRequest?.title === 'Test Show';
+    });
+    const after = (await (await current.get('/api/status')).json()) as {
+      lastRequest: { title: string; season: number; episode: number; at: number };
+    };
+    expect(after.lastRequest).toMatchObject({ title: 'Test Show', season: 1, episode: 5 });
   });
 
   describe('the queue line follows what the user is waiting for', () => {

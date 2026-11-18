@@ -11,6 +11,15 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 - Never push without the user's OK (a release request counts as OK). Commit by file names, no attribution lines.
 - Helper (sub) sessions may be archived once their task is done and verified; the main chat is never archived. Use /clear after updating this file.
 
+## 2026-11-19: v2.1.2 committed + published (user asked; check 792 tests, 0 alerts, installed OK). Old notes below.
+
+## 2026-11-18 (v2.1.2, built locally)
+
+- Added (not rebuilt into an installer, not committed): "הראה לי מה חדש" tour in the news bell (`src/web/ui/script/news.ts`, `src/web/newsTargets.ts`, `show` key in `whatsNew.ts`); 2.1.2 notes trimmed to 4 cards. Fixed a page-script crash on `d-src` (needs 2+ keyed sources) that killed the bell. Checked in a browser on a dev server (port 7100). Next: rebuild + install, then Shai.
+- Added: local self-test row "תוסף TTT Sub" (`POST /api/test/selftest`), neutral Stremio wait state, per-problem banner lines with X. Tests green; checked in a browser. NOT yet rebuilt into an installer, not committed.
+
+- NEXT TASK (user asked 2026-11-18): continue the translation-quality research (second-episode gender/cast problems). Open proposals, nothing in the repo yet and nothing may enter code before it passes a Gemini test: `buildCast` fix in `src/subtitles/cast.ts`; bad glossary entries in `data/glossary.json` (`Ainz`, `Ooal`, `Effulgent`/`Beryl`). Needs the user's OK per item.
+
 ## 2026-11-13 (PUBLISHED as v2.1.1)
 
 - Installed name is now "TTT Sub" (`TTT Sub.exe`, shortcut, installer `TTT-Sub-Setup-<version>.exe`); data folder pinned to the old `%APPDATA%\stremio-ai-subtitle-translator`. Version in Settings > About is written by the server; "Check for updates" reacts at once; if `window.desktop` is missing it says so; `preload-error` is logged.
@@ -39,7 +48,7 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 ## v2.1.2 IN PROGRESS (working tree, NOT committed, NOT built, NOT released)
 
 - Done in code: installer icon with download-arrow badge (build/installer-icon.ico, chosen option A, set as nsis.installerIcon), downgrade guard (build/installer.nsh), version 2.1.2 + RELEASE_NOTES 2.1.2; npm run check passes (782).
-- Blocked: npm run dist fails with spawn UNKNOWN (Smart App Control blocks a helper exe, state=1). Usually a small change to the build then makes it pass; try after a restart. Do not turn Smart App Control off without the user.
+- Blocked: npm run dist fails with spawn UNKNOWN. Diagnosed 2026-11-17 from the Code Integrity event log (events 3077/3033): Smart App Control (state=1) blocks node.exe from running the freshly built unsigned `release\TTT-Sub-Setup-2.1.2.exe` (the NSIS step that makes the uninstaller). Tested: the same failure happens WITHOUT `build/installer.nsh`, so our code and the downgrade guard are not the cause; no code change fixes it. The same block hit earlier builds on 11-09 and 11-13; some builds pass (2.1.0, 2.1.1), so it is the file's reputation, not a setting. Options: retry (2 or 3 more tries at most), build on a machine without Smart App Control, code signing (planned for the end), or turn Smart App Control off (IRREVERSIBLE without reinstalling Windows; only with the user's explicit OK).
 - To do after it builds: silent-install 2.1.2, then run release-keep/TTT-Sub-Setup-2.1.1.exe (older, has the guard) and confirm it refuses; then release 2.1.2 (GH_TOKEN from gh auth token; watch for double drafts); delete release-keep.
 
 ## Next update (older notes)
@@ -47,9 +56,17 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 - Installer icon with a download-arrow badge (mockup in Chrome + OK first) and an NSIS downgrade guard (must not block auto-update). Ask the tester to install TTT-Sub-Setup-2.1.1.exe by hand and send the log if the window buttons still fail (look for "preload failed"); native titleBarOverlay is the fallback (needs UI OK).
 - Release gotcha: `npm run publish` needs GH_TOKEN (use `gh auth token`, never print it) and can create TWO draft releases; fix by keeping one, uploading all 3 files, publishing. If you rebuild after publishing, re-upload exe+blockmap+latest.yml together (checksums).
 
+## Next update AFTER 2.1.2 is closed: page-script structure (consultation only, do NOT start before 2.1.2 ships)
+
+- Problem: the page script (`src/web/ui/script/index.ts`) is ONE inline script made of 6 parts run in order (core, wizard, drawer, status, library, news). One throw in the middle stops everything after it. Tester (2026-11-17, after reinstall): Settings opens, but the bell and "My subtitles" do nothing and an open episode shows no activity = fits an early throw in the script. Cause not found by reading the code; needs his log (`%APPDATA%\stremio-ai-subtitle-translator\logs\app-<date>.log`, look for "preload failed") or the F12 Console at `http://127.0.0.1:7000` in Chrome. If it works in Chrome but not in the app, the cause is Electron-specific.
+- Plan (keep ONE script, the CSP allows only the nonce inline script): small protected core (`$`, `post`, `T`, `toast`) outside isolation; each part (wizard, drawer, status, library, news) an init function run by `runModule(name, fn)` that catches the error, logs which module failed (new renderer-error log line in `src/electron/main.ts`, e.g. `console-message` / `render-process-gone`) and shows a small notice; the rest keeps working. Do not wrap every line, do not hide errors silently.
+- Trap: a `const` inside `try` is not visible outside it. Today drawer calls `refreshStatus` (defined in status) and status uses `subdlOn`/`paintRow` (core), so each module must publish what others need before wrapping. Add a test where one module throws on purpose and the others still wire up.
+- Order: commit the finished 2.1.2 items alone first; then this as one small task; then build and release.
+
 ## User tasks
 
-- Rotate the Gemini key from the second Google account used in experiments; enter the new OpenSubtitles account in settings. Also delete `D:\TTT-design-mockups` (4 old mockup html files; the safety check blocked deleting it from here).
+- Done 2026-11-17: `D:\TTT-design-mockups` deleted.
+- Optional precaution only: replace the Gemini key from the second Google account used in experiments (reason was not recorded; skip it if the key is not used and was never shown). Enter the new OpenSubtitles account in settings.
 
 ## Knowledge worth keeping
 
@@ -61,7 +78,7 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 
 ## 2026-11-12 (done, merged to main and released)
 
-- Library screen work and settings drawer polish all shipped in 2.1.0: fixed service colours (AI gold, OpenSubtitles sky, SubDL violet, Jimaku pink), a "links" row with Gemini/Claude/OpenAI under the key input, drawer widened to 470 px.
+- Library screen work and settings drawer polish all shipped in 2.1.0: fixed service colours (AI gold, OpenSubtitles sky, SubDL green from 2.1.2, Jimaku pink), a "links" row with Gemini/Claude/OpenAI under the key input, drawer widened to 470 px.
 - The temporary ASS overlap experiment was removed (the add-on returns one subtitle again). Stremio said "Unsupported file" to a dragged local .ass; overlapping cues as ASS `\an8` stays an unverified idea.
 - Why the main panel shows a job when Stremio only opens an episode: Stremio asks the add-on for subtitles on every episode open and `jobs.ensure` starts translating in the background. By design. A setting "translate only after choosing the TTT subtitle" was offered, not decided.
 - Prettier/ESLint now ignore `.claude/worktrees/` (helper worktrees inside the repo broke `npm run check`).

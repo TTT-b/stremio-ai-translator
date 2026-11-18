@@ -1,6 +1,6 @@
 {
   "name": "stremio-ai-subtitle-translator",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "private": true,
   "license": "MIT",
   "description": "Local Stremio add-on that translates subtitles with Gemini",
@@ -96,7 +96,7 @@
       "oneClick": true,
       "perMachine": false,
       "deleteAppDataOnUninstall": false,
-      "installerIcon": "build/icon.ico",
+      "installerIcon": "build/installer-icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico"
     },
