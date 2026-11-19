@@ -3,7 +3,7 @@
 This file lists the decisions that were already made for TTT Sub, one line each, with the reason.
 It exists so nobody (the owner, Claude, or any other helper) builds something that was already
 rejected, or quietly reverses something that was already chosen. Every line below comes from a
-file in this repo (`HANDOFF.md`, `PLAN.md`, `CLAUDE.md`, `README.md`, `docs/DETAILS.md`,
+file in this repo (`docs/internal/HANDOFF.md`, `docs/internal/PLAN.md`, `CLAUDE.md`, `README.md`, `docs/DETAILS.md`,
 `docs/SOURCES-AND-TIMING.md`). Where a date or a reason is not written there, this file says
 "unknown" and does not guess.
 

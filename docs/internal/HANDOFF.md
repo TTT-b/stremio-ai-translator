@@ -5,6 +5,8 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 
 ## State
 
+- 2026-11-19 UNCOMMITTED, NOT released (user wants more updates first, e.g. the translation prompt, then one release 2.1.3): mux.ts now writes the video to a temp sibling and renames it over the target only on success (a failed save no longer deletes an existing file; tests added); HANDOFF/PLAN/DECISIONS moved to `docs/internal/`; CI Node 24 fix (`.github/workflows/check.yml`) not pushed; local commit `9d54239` (CLAUDE.md rule) not pushed. Push the CI fix soon so GitHub shows green.
+
 - ONE folder `D:\TTT Sub`, branch `main`. v2.1.1 is the last PUBLISHED release (tag v2.1.1, published 2026-11-13 with installer, blockmap and latest.yml; installed on the desktop). v2.1.0 was 2026-11-12. When the user asks for a release, publish it without asking again.
 - Security check 2026-11-12: 0 open Dependabot alerts, 0 secret-scanning alerts, `npm audit --omit=dev` = 0 vulnerabilities (dev-only leftovers: `tmp` via stremio-addon-sdk, needs a breaking upgrade: leave them). No tracked `.env`/settings/data/logs; the only key-like strings in history are fake test keys. Secret scanning + push protection and Dependabot security updates are on; `main` has no force-push or deletion.
 - GitHub releases: keep at most about the last 10 (delete older ones, never the latest); commits and pushes in any number are fine.
@@ -12,6 +14,7 @@ The user is not a developer: answer in Hebrew, give exact PowerShell steps.
 - Helper (sub) sessions may be archived once their task is done and verified; the main chat is never archived. Use /clear after updating this file.
 
 ## TO CHECK after the user's next PC restart
+
 - A one-time Windows RunOnce entry (HKCU, `TTTCleanOldBuilds`) deletes `release-old`, `release-old2`, `release-old3` in `D:\TTT Sub` (they were locked by an unknown process: `app.asar` in use). Check they are gone. If they remain, find the locking process; the folders are untracked and harmless. Nothing else is pending for 2.1.2 (published, downgrade guard verified).
 
 ## 2026-11-19: v2.1.2 committed + published (user asked; check 792 tests, 0 alerts, installed OK). Old notes below.

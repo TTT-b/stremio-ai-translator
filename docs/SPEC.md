@@ -13,7 +13,7 @@
 - Not developers: setup is a wizard, everything is done with buttons.
 - One person, one computer. The app runs only on that computer (`127.0.0.1`); nothing is shared
   on the home network. (Sharing with other devices is only an idea for later, see
-  [PLAN.md](../PLAN.md).)
+  [PLAN.md](internal/PLAN.md).)
 - The user brings their own keys: an AI key (Gemini, Claude or OpenAI) and a free OpenSubtitles
   account. SubDL and Jimaku keys are optional.
 - Settings, "Accounts and keys": each service has one fixed colour dot, the same in Settings and on

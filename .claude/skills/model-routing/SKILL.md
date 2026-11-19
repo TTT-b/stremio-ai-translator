@@ -15,7 +15,7 @@ description: Choose the cheapest model that does the job and keep token use low.
 
 ## Saving tokens without losing quality
 
-1. Read `PLAN.md` first. Then read only the files the task touches. Use Grep/Glob before opening files; read line ranges, not whole files.
+1. Read `docs/internal/PLAN.md` first. Then read only the files the task touches. Use Grep/Glob before opening files; read line ranges, not whole files.
 2. Never read `node_modules`, `dist-electron`, `release`, `logs`, `data`, `package-lock.json`, or `.env`.
 3. Run `npm run check` once at the end, not after every edit. Run a single test file (`npx vitest run tests/<file>`) while iterating.
 4. Pipe long command output through `Select-Object -First 40` / `-Last 40`; do not dump full logs.
@@ -33,7 +33,7 @@ Split only when it saves tokens or time. Otherwise do the task inline.
 2. **No worktree copies by default.** Subagents work in the same folder on separate files and each is told which files are theirs. Use a worktree only when two writers must touch the same files, and say why. Copies cost setup tokens (junction to `node_modules`, a branch to merge).
 3. **Do not teach the project to every agent.** Each prompt is short: the goal, the folders/files to start from, the rules that matter (`CLAUDE.md` is read by the agent itself), what "done" means, and the report format (max ~30 lines, file names + result, no code dumps). The agent explores and experiments on its own.
 4. **Model per job:** Haiku for lookups and log reading, Sonnet for code and tests, Opus only for a hard design. Say `model:` explicitly.
-5. **Every writer agent must** write tests first, run only its own test file while working, run `npm run check` once at the end, and commit by file name. It must not push, tag or touch `HANDOFF.md`.
+5. **Every writer agent must** write tests first, run only its own test file while working, run `npm run check` once at the end, and commit by file name. It must not push, tag or touch `docs/internal/HANDOFF.md`.
 6. **Before merging, verify** each report yourself in one pass: `git diff --stat`, read the changed lines, run `npm run check` on the combined result. A report is a claim, not proof (an agent once said a test was missing when it was there: grep before trusting).
-7. **Collect everything before replying.** Do not end your turn while agents are still running. Update `HANDOFF.md` yourself at the end.
+7. **Collect everything before replying.** Do not end your turn while agents are still running. Update `docs/internal/HANDOFF.md` yourself at the end.
 8. **UI work is never delegated to code before the user has seen a mockup and said OK.** Agents may research or draw the mockup; they do not build the screen.

@@ -1,6 +1,6 @@
 # CLAUDE.md - permanent rules for this repo
 
-- Read the repo (and `PLAN.md`) before editing. Never rewrite from scratch; continue existing work.
+- Read the repo (and `docs/internal/PLAN.md`) before editing. Never rewrite from scratch; continue existing work.
 - Make the smallest safe change. Do not touch unrelated files.
 - Never expose or commit secrets. Secrets live only in `.env` (gitignored). Never print them,
   log them, put them in URLs, caches, HTML or error responses.
@@ -20,11 +20,11 @@
 ## Working rules
 
 - One small task at a time. Do not add features that were not asked for; ask first.
-- Finish a task, then end the conversation: update HANDOFF.md and suggest a fresh session.
+- Finish a task, then end the conversation: update docs/internal/HANDOFF.md and suggest a fresh session.
 - For any UI change, first describe the screen and the user's click path in plain words
   and wait for the user's OK before coding.
-- Keep state in the branch and HANDOFF.md, not in the chat.
-- Before any change, check it against `DECISIONS.md`. If it contradicts a decision, stop and ask
+- Keep state in the branch and docs/internal/HANDOFF.md, not in the chat.
+- Before any change, check it against `docs/internal/DECISIONS.md`. If it contradicts a decision, stop and ask
   the user. Every new decision gets a line there.
 - Any change to what the product does must update `docs/SPEC.md` in the same change.
 
